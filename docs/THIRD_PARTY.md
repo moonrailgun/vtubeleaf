@@ -1,0 +1,61 @@
+# 第三方来源与许可状态
+
+核对日期：2026-09-07。本文用于记录资源来源和尚待完成的发行核实，不替代上游完整许可文件。项目自有代码的开源许可证还未选定；不得将第三方资源重新标成项目许可证。
+
+## Live2D
+
+当前渲染适配使用 `pixi-live2d-display@0.4.0` 的 Cubism 路径，需要单独的 Cubism Core。2026-09-07 已从官方获取 SDK 并复制 Core；仓库不附带 SDK 二进制或示例模型。
+
+本地采用 [Cubism SDK for Web 5 R4 官方压缩包](https://cubism.live2d.com/sdk-web/bin/CubismSdkForWeb-5-r.4.zip)，压缩包 SHA-256 为 `d78904d908bd232b800219e01732e4ea2f0562b5e9f35a2670742a1c16d22942`，Core SHA-256 为 `25ae938cb4fe282ce189b357bcc97e603d1e1f7ec78bf04150d401c23cdc792f`。原始 `LICENSE.md`、`Core/LICENSE.md` 和 `Core/RedistributableFiles.txt` 保留在 `.local/cubism-sdk-5-r.4/`。SDK 自带 Haru 用于本地开发测试，并已复制到本机应用数据目录、设为启动角色；其条款见压缩包许可文件及 [官方示例模型条款](https://www.live2d.com/en/learn/sample/model-terms/)。模型未打进应用包。
+
+- 官方获取：[Cubism SDK for Web](https://www.live2d.com/en/sdk/download/web/)。
+- 扩展性应用条款：[Expandable Applications](https://www.live2d.com/en/sdk/license/expandable/)。本项目允许用户导入自己的 Live2D 模型，需向 Live2D 核实其适用的 SDK 发行条件；不能因应用免费、源码开放就推断免许可或允许公开发行。
+- 该官方页面对免费、无收益的扩展性应用列有特别条件及例外可能性。当前项目**尚未取得适用类别、费用、例外或发行授权的确认**，也没有完成正式许可审查。
+
+发行前必须确认：适用协议与主体、收费或例外条件、可再分发的 Core 文件、必须附带的声明、样例模型是否可随包提供。`manifest.json` 的版本标签和 SHA-256 只记录本地文件，不是授权证明。准备资源后，Vite 会将 `public/runtime/` 内容纳入构建产物，因此 Git 忽略并不免除安装包的许可检查。
+
+## MediaPipe
+
+| 资源                                 | 固定版本/来源                                                                                                                                                 | 当前许可记录                                                                    |
+| ------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------- |
+| `@mediapipe/tasks-vision` 与 WASM/JS | npm `0.10.32`；[MediaPipe 官方仓库](https://github.com/google-ai-edge/mediapipe)                                                                              | 已安装 npm 包声明 Apache-2.0；发行保留适用的许可与声明                          |
+| Face Landmarker `.task`              | [Google 托管模型 `float16/1`](https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task)；3,758,596 字节 | 官方概览列出的三个组成模型，其模型卡均声明 Apache-2.0；发行时保留适用许可与声明 |
+
+Pose Landmarker Lite 使用 [Google 固定 `float16/1` 模型](https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_lite/float16/1/pose_landmarker_lite.task)，5,777,746 字节，SHA-256：`59929e1d1ee95287735ddd833b19cf4ac46d29bc7afddbbf6753c459690d574a`。[官方概览](https://developers.google.com/edge/mediapipe/solutions/vision/pose_landmarker#models)链接的 [BlazePose GHUM 3D 模型卡](https://storage.googleapis.com/mediapipe-assets/Model%20Card%20BlazePose%20GHUM%203D.pdf)第 2 页声明 Apache License, Version 2.0（2026-09-08 核对）；发行时保留适用许可与声明。
+
+Face Landmarker SHA-256：`64184e229b263107bc2b804c6625db1341ff2bb731874b0bcc2fe6544e0bc9ff`。四个运行文件的大小与哈希在 [setup-assets.mjs](../scripts/setup-assets.mjs) 固定。官方集成说明见 [Face Landmarker Web Guide](https://ai.google.dev/edge/mediapipe/solutions/vision/face_landmarker/web_js)。
+
+模型许可依据为[官方概览的模型组成表](https://developers.google.com/edge/mediapipe/solutions/vision/face_landmarker#models)及其直接链接的模型卡：[BlazeFace Short Range](https://storage.googleapis.com/mediapipe-assets/MediaPipe%20BlazeFace%20Model%20Card%20%28Short%20Range%29.pdf)、[Face Mesh V2](https://storage.googleapis.com/mediapipe-assets/Model%20Card%20MediaPipe%20Face%20Mesh%20V2.pdf)、[Blendshape V2](https://storage.googleapis.com/mediapipe-assets/Model%20Card%20Blendshape%20V2.pdf)。三份模型卡的首页均列出 Apache License, Version 2.0；这项记录针对跟踪模型，不延伸至 Cubism Core 或用户角色。
+
+## 可选 OpenSeeFace
+
+来源为 [emilianavt/OpenSeeFace](https://github.com/emilianavt/OpenSeeFace)，安装脚本固定提交 `85aa70fc67582d046e771ea73625182a0d8f7475`，不从第三方镜像或浮动分支下载安装。上游说明其代码与模型采用 BSD-2-Clause；保留 [LICENSE](https://github.com/emilianavt/OpenSeeFace/blob/85aa70fc67582d046e771ea73625182a0d8f7475/LICENSE) 和相关 `Licenses/` 内容。
+
+Python 环境按上游 [pyproject.toml](https://github.com/emilianavt/OpenSeeFace/blob/85aa70fc67582d046e771ea73625182a0d8f7475/pyproject.toml) 的范围安装 NumPy、OpenCV、Pillow、ONNX Runtime。各依赖及其二进制组成部分有各自条款；本项目目前下载到开发者本机的 `.local/`，没有打包 Python 解释器或可分发 sidecar。若以后随安装包提供，需按实际冻结版本补齐依赖清单和声明。
+
+OpenSeeFace 的 BSD 条款不决定 Live2D 渲染端的发布条件，也不证明跟踪效果优于 MediaPipe。
+
+## 当前主要代码依赖
+
+下表来自当前已安装包的 `package.json`，用于定位审查，不是全部传递依赖或最终软件物料清单。确切版本以 [package-lock.json](../package-lock.json) 及 `src-tauri/Cargo.lock` 为准。
+
+| 依赖                      | 版本    | 声明许可                                                             |
+| ------------------------- | ------- | -------------------------------------------------------------------- |
+| `@tauri-apps/api`         | 2.11.1  | Apache-2.0 OR MIT                                                    |
+| `pixi-live2d-display`     | 0.4.0   | MIT；不包含 Cubism Core 的独立授权                                   |
+| `pixi.js`                 | 6.5.10  | MIT                                                                  |
+| `@pixi/unsafe-eval`       | 6.5.10  | MIT；使用官方适配器避免 Pixi 动态生成 JS，保留 CSP 对 JS eval 的限制 |
+| `@mediapipe/tasks-vision` | 0.10.32 | Apache-2.0                                                           |
+| `typescript`（构建工具）  | 5.9.3   | Apache-2.0                                                           |
+| `vite`（构建工具）        | 7.3.6   | MIT                                                                  |
+
+Rust crate、Tauri CLI、传递依赖与打包后的实际文件还需完成版本对应的许可汇总。不要只复制这张表就声明发行审查完成。
+
+## 模型、品牌和外部软件
+
+- **角色模型：** 用户自行提供；使用权、修改权和再分发权分别核实。加载到应用并不表示可公开分发该角色，仓库目前不提供演示模型。
+- **品牌：** 当前 SVG 图形和 VTubeLeaf 几何字标为本项目新绘制路径，没有嵌入第三方字体或图标文件。提案板文字使用系统 sans-serif 渲染；不随包分发字体。尚未做完整名称或商标检索，详见 [BRAND.md](BRAND.md)。
+- **OBS Studio：** 单独安装和使用，不随应用分发。其源码许可为 GPL-2.0-or-later，见 [OBS 官方仓库](https://github.com/obsproject/obs-studio)。虚拟摄像头是接入方式，不是 VTubeLeaf 自有驱动。
+- **飞书及操作系统组件：** 外部运行环境，本项目不再分发，也不据可接入就表示得到厂商背书。
+
+公开发行前的待办仍包括 Live2D 适用许可确认、完整依赖声明、项目许可证选择，以及任何示例模型的再分发确认。
