@@ -1,0 +1,18 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "main",
+  "description": "Studio events and clean output window controls",
+  "windows": ["main"],
+  "permissions": [
+    "core:event:default",
+    "core:webview:allow-create-webview-window",
+    "core:webview:allow-get-all-webviews",
+    "core:window:allow-get-all-windows",
+    "core:window:allow-show",
+    "core:window:allow-set-focus",
+    "core:window:allow-close",
+    "core:window:allow-destroy",
+    "global-shortcut:allow-register",
+    "global-shortcut:allow-unregister"
+  ]
+}

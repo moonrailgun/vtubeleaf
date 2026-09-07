@@ -1,0 +1,7 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "output",
+  "description": "Clean output synchronization only",
+  "windows": ["output"],
+  "permissions": ["core:event:default"]
+}
