@@ -1,0 +1,411 @@
+import { test } from 'node:test';
+import assert from 'node:assert/strict';
+import { defaults, readSettings, FaceMapper, NEUTRAL, fromMediaPipe } from '../src/state.ts';
+import * as state from '../src/state.ts';
+
+test('upper body requires visible shoulders, uses independent limbs and rejects clipped joints', () => {
+  assert.equal(typeof state.fromPose, 'function');
+  const image = Array.from({ length: 33 }, () => ({ x: 0.5, y: 0.5, z: 0, visibility: 0.99 }));
+  const world = structuredClone(image);
+  for (const [id, x, y] of [
+    [11, 0.7, 0.3],
+    [12, 0.3, 0.3],
+    [13, 0.8, 0.3],
+    [14, 0.3, 0.5],
+    [15, 0.8, 0.1],
+    [16, 0.3, 0.7],
+    [23, 0.65, 0.7],
+    [24, 0.35, 0.7],
+  ]) {
+    image[id] = { x, y, z: 0, visibility: 0.99 };
+    world[id] = { ...image[id] };
+  }
+  const body = state.fromPose(image, world);
+  assert.ok(Math.abs(body.bodyYaw) < 1e-6);
+  assert.ok(Math.abs(body.bodyPitch) < 1e-6);
+  assert.ok(Math.abs(body.bodyRoll) < 1e-6);
+  assert.ok(Math.abs(body.armLeft - 0.5) < 1e-6);
+  assert.ok(Math.abs(body.elbowLeft - 0.5) < 1e-6);
+  assert.equal(body.armRight, 0);
+  assert.equal(body.elbowRight, 0);
+  world[11].z = -0.2;
+  assert.ok(state.fromPose(image, world).bodyYaw > 20);
+  image[23].y = 1.1;
+  image[13].visibility = 0.2;
+  const partial = state.fromPose(image, world);
+  assert.equal(partial.bodyPitch, undefined);
+  assert.equal(partial.armLeft, undefined);
+  assert.equal(partial.elbowLeft, undefined);
+  assert.equal(partial.armRight, 0);
+  image[11].y = 1.1;
+  assert.deepEqual(state.fromPose(image, world), {});
+  assert.deepEqual(state.fromPose([], []), {});
+  image[11].y = 0.3;
+  world[11].x = NaN;
+  assert.deepEqual(state.fromPose(image, world), {});
+});
+
+test('body mapping overrides head imitation, calibrates, mirrors and falls back smoothly', () => {
+  const s = readSettings({ motionMirror: false, headSmooth: 0 });
+  const p = [{ id: 'ParamBodyAngleX', min: -30, max: 30, default: 0 }];
+  const mapper = new FaceMapper();
+  assert.equal(state.defaultMapping(p[0], s).source, 'bodyYaw');
+  assert.equal(
+    mapper.map({ ...NEUTRAL, yaw: 30, bodyYaw: -15 }, p, s, 1 / 30).ParamBodyAngleX,
+    -15,
+  );
+  const fallback = mapper.map({ ...NEUTRAL, yaw: 30 }, p, s, 1 / 30).ParamBodyAngleX;
+  assert.ok(fallback > -15 && fallback < 9);
+  let settled;
+  for (let i = 0; i < 90; i++) settled = mapper.map({ ...NEUTRAL, yaw: 30 }, p, s, 1 / 30);
+  assert.ok(Math.abs(settled.ParamBodyAngleX - 9) < 0.001);
+  const calibrated = state.normalizedFace(
+    { ...NEUTRAL, bodyYaw: 25, armLeft: 0.8, armRight: 0.1 },
+    readSettings({
+      motionMirror: true,
+      neutral: { ...NEUTRAL, bodyYaw: 10, armLeft: 0.2, armRight: 0.1 },
+    }),
+  );
+  assert.equal(calibrated.bodyYaw, -0.5);
+  assert.ok(Math.abs(calibrated.armRight - 0.6) < 1e-6);
+  assert.equal(calibrated.armLeft, 0);
+  assert.equal(state.isFace({ ...NEUTRAL, bodyYaw: Infinity }), false);
+  assert.equal(readSettings({ upperBody: false }).upperBody, false);
+  assert.equal(readSettings({}).upperBody, true);
+
+  s.mappings.Arm = {
+    source: 'armLeft',
+    inputMin: 0,
+    inputMax: 1,
+    outputMin: 0,
+    outputMax: 90,
+    smoothing: 0,
+    enabled: true,
+  };
+  const arm = [{ id: 'Arm', min: 0, max: 90, default: 0 }];
+  assert.equal(mapper.map({ ...NEUTRAL, armLeft: 1 }, arm, s, 1 / 30).Arm, 90);
+  const lost = mapper.map(NEUTRAL, arm, s, 1 / 30).Arm;
+  assert.ok(lost > 0 && lost < 90);
+  assert.equal(new FaceMapper().map(NEUTRAL, arm, s, 1 / 30).Arm, undefined);
+});
+
+test('untrusted settings recover and clamp without carrying unknown fields', () => {
+  const s = readSettings({
+    zoom: 100,
+    sensitivity: NaN,
+    engine: 'remote',
+    port: -1,
+    background: 'url(x)',
+    recentModels: [null, { name: 'A', path: '/a' }],
+    neutral: { yaw: Infinity },
+    evil: true,
+  });
+  assert.equal(s.zoom, 2.5);
+  assert.equal(s.port, 1024);
+  assert.equal(s.sensitivity, 1);
+  assert.equal(s.engine, 'mediapipe');
+  assert.equal(s.background, defaults.background);
+  assert.equal(s.neutral, null);
+  assert.equal(s.recentModels.length, 1);
+  assert.equal('evil' in s, false);
+});
+test('mapping respects model limits, missing parameters, calibration and lost face', () => {
+  const mapper = new FaceMapper();
+  const p = [
+    { id: 'ParamAngleX', min: -12, max: 24, default: 2 },
+    { id: 'ParamEyeLOpen', min: 0, max: 1, default: 1 },
+    { id: 'Custom', min: 0, max: 1, default: 0 },
+    { id: 'constructor', min: 0, max: 1, default: 0 },
+  ];
+  const s = {
+    ...defaults,
+    motionMirror: false,
+    headSmooth: 0,
+    eyeSmooth: 0,
+    neutral: { ...NEUTRAL, yaw: 15 },
+  };
+  assert.deepEqual(mapper.map({ ...NEUTRAL, yaw: 15 }, p, s, 1 / 30), {
+    ParamAngleX: 2,
+    ParamEyeLOpen: 1,
+  });
+  const atLimit = mapper.map({ ...NEUTRAL, yaw: 160, eyeLeft: 0 }, p, s, 1 / 30);
+  assert.equal(atLimit.ParamAngleX, 24);
+  assert.equal(atLimit.ParamEyeLOpen, 0);
+  let lost = atLimit;
+  for (let i = 0; i < 90; i++) lost = mapper.map(null, p, s, 1 / 30);
+  assert.ok(Math.abs(lost.ParamAngleX - 2) < 0.001);
+  assert.ok(lost.ParamEyeLOpen > 0.999);
+  assert.equal(
+    mapper.map({ ...NEUTRAL, yaw: 45 }, p, { ...s, motionMirror: true }, 1 / 30).ParamAngleX,
+    -12,
+  );
+});
+test('smoothing is time based and eyes respond independently', () => {
+  const p = [
+    { id: 'ParamAngleX', min: -30, max: 30, default: 0 },
+    { id: 'ParamEyeLOpen', min: 0, max: 1, default: 1 },
+  ];
+  const face = { ...NEUTRAL, yaw: 30, eyeLeft: 0 };
+  const a = new FaceMapper(),
+    b = new FaceMapper();
+  let av = {},
+    bv = {};
+  for (let i = 0; i < 30; i++) av = a.map(face, p, defaults, 1 / 30);
+  for (let i = 0; i < 60; i++) bv = b.map(face, p, defaults, 1 / 60);
+  assert.ok(Math.abs(av.ParamAngleX - bv.ParamAngleX) < 1e-8);
+  const first = new FaceMapper().map(face, p, defaults, 1 / 30);
+  assert.ok(1 - first.ParamEyeLOpen > Math.abs(first.ParamAngleX) / 30);
+});
+test('MediaPipe neutral matrix and blendshapes produce finite common frame', () => {
+  const f = fromMediaPipe(
+    [
+      { categoryName: 'eyeBlinkLeft', score: 1 },
+      { categoryName: 'jawOpen', score: 0.4 },
+    ],
+    [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1],
+  );
+  assert.ok(f);
+  assert.equal(f.eyeLeft, 0);
+  assert.equal(f.eyeRight, 1);
+  assert.equal(f.mouthOpen, 0.4);
+  assert.equal(fromMediaPipe([], []), null);
+});
+
+test('MediaPipe head-up and head-down drive Live2D AngleY in the same direction with either mirror setting', () => {
+  const parameters = [{ id: 'ParamAngleY', min: -30, max: 30, default: 0 }];
+  const c = Math.sqrt(3) / 2;
+  for (const [s, expected] of [
+    [0.5, 30],
+    [-0.5, -30],
+  ]) {
+    // Column-major: rotate the face's +Z forward vector toward +Y to look up.
+    const face = fromMediaPipe([], [1, 0, 0, 0, 0, c, -s, 0, 0, s, c, 0, 0, 0, 0, 1]);
+    assert.ok(face);
+    for (const motionMirror of [false, true]) {
+      const settings = readSettings({ motionMirror, headSmooth: 0 });
+      const output = new FaceMapper().map(face, parameters, settings, 1 / 30);
+      assert.ok(
+        Math.abs(output.ParamAngleY - expected) < 1e-8,
+        `Expected AngleY ${expected}, got ${output.ParamAngleY} (mirror=${motionMirror})`,
+      );
+    }
+  }
+});
+
+test('custom mappings use normalized source endpoints and clamp to the model range', () => {
+  const s = readSettings({
+    motionMirror: false,
+    mappings: {
+      Custom: {
+        source: 'yaw',
+        inputMin: -0.5,
+        inputMax: 0.5,
+        outputMin: 10,
+        outputMax: -10,
+        smoothing: 0,
+        enabled: true,
+      },
+      ParamEyeLOpen: {
+        source: 'eyeLeft',
+        inputMin: 0,
+        inputMax: 1,
+        outputMin: 0,
+        outputMax: 1,
+        smoothing: 0,
+        enabled: false,
+      },
+    },
+  });
+  const p = [
+    { id: 'Custom', min: -8, max: 8, default: 1 },
+    { id: 'ParamEyeLOpen', min: 0, max: 1, default: 1 },
+  ];
+  const mapper = new FaceMapper();
+  assert.deepEqual(mapper.map({ ...NEUTRAL, yaw: 7.5 }, p, s, 1 / 30), { Custom: -5 });
+  assert.equal(mapper.map({ ...NEUTRAL, yaw: 30 }, p, s, 1 / 30).Custom, -8);
+  let lost;
+  for (let i = 0; i < 90; i++) lost = mapper.map(null, p, s, 1 / 30);
+  assert.ok(Math.abs(lost.Custom - 1) < 0.001);
+});
+
+test('custom position ranges retain calibrated movement beyond the default unit interval', () => {
+  const s = readSettings({
+    motionMirror: false,
+    neutral: { ...NEUTRAL, positionX: 0.5 },
+    mappings: {
+      Custom: {
+        source: 'positionX',
+        inputMin: -2,
+        inputMax: 2,
+        outputMin: -20,
+        outputMax: 20,
+        smoothing: 0,
+        enabled: true,
+      },
+    },
+  });
+  const result = new FaceMapper().map(
+    { ...NEUTRAL, positionX: 2 },
+    [{ id: 'Custom', min: -30, max: 30, default: 0 }],
+    s,
+    1 / 30,
+  );
+  assert.equal(result.Custom, 15);
+});
+
+test('optional face channels are validated and remain absent when unavailable', () => {
+  assert.equal(state.isFace(NEUTRAL), true);
+  assert.equal(state.isFace({ ...NEUTRAL, gazeX: Infinity }), false);
+  assert.equal(state.isFace({ ...NEUTRAL, positionY: undefined }), false);
+  assert.equal(state.isFace({ ...NEUTRAL, gazeX: 0.5 }), true);
+  const p = [
+    { id: 'ParamEyeBallX', min: -1, max: 1, default: 0 },
+    { id: 'ParamBrowLY', min: -1, max: 1, default: 0 },
+    { id: 'ParamMouthX', min: -1, max: 1, default: 0 },
+  ];
+  const s = readSettings({ motionMirror: false, headSmooth: 0, eyeSmooth: 0, mouthSmooth: 0 });
+  assert.deepEqual(new FaceMapper().map(NEUTRAL, p, s, 1 / 30), {});
+  assert.deepEqual(new FaceMapper().map(null, p, s, 1 / 30), {});
+  assert.deepEqual(
+    new FaceMapper().map({ ...NEUTRAL, gazeX: 0.5, browLeft: -0.25, mouthX: 0.4 }, p, s, 1 / 30),
+    { ParamEyeBallX: 0.5, ParamBrowLY: -0.25, ParamMouthX: 0.4 },
+  );
+  assert.equal(state.normalizedFace(NEUTRAL, s).gazeX, undefined);
+  assert.equal(
+    state.normalizedFace(
+      { ...NEUTRAL, positionX: 0.75 },
+      { ...s, neutral: { ...NEUTRAL, positionX: 0.25 } },
+    ).positionX,
+    0.5,
+  );
+});
+
+test('auto blink owns lost eyes while live eye tracking still wins', () => {
+  const p = [{ id: 'ParamEyeLOpen', min: 0, max: 1, default: 1 }];
+  const s = readSettings({ autoBlink: true, eyeSmooth: 0 });
+  const mapper = new FaceMapper();
+  assert.deepEqual(mapper.map({ ...NEUTRAL, eyeLeft: 0 }, p, s, 1 / 30), { ParamEyeLOpen: 0 });
+  assert.deepEqual(mapper.map(null, p, s, 1 / 30), {});
+});
+
+test('per-model profiles restore independent calibration, mappings and display without changing globals', () => {
+  let s = readSettings({
+    modelPath: '/a',
+    deviceId: 'camera-a',
+    background: '#112233',
+    neutral: { ...NEUTRAL, yaw: 12 },
+    zoom: 1.8,
+    x: 0.2,
+    autoBlink: true,
+    idleMotion: 'Idle:0',
+    hotkeys: { 'expression:smile': 'Alt+KeyS' },
+    mappings: {
+      Custom: {
+        source: 'gazeX',
+        inputMin: -1,
+        inputMax: 1,
+        outputMin: -2,
+        outputMax: 3,
+        smoothing: 0,
+        enabled: true,
+      },
+    },
+  });
+  assert.equal(typeof state.switchProfile, 'function');
+  assert.equal(state.switchProfile(s, '/a').neutral.yaw, 12);
+  s = state.switchProfile(s, '/b');
+  assert.equal(s.modelPath, '/b');
+  assert.equal(s.neutral, null);
+  assert.equal(s.zoom, 1);
+  assert.deepEqual(s.mappings, {});
+  assert.equal(s.deviceId, 'camera-a');
+  assert.equal(s.background, '#112233');
+  s.zoom = 0.6;
+  s.neutral = { ...NEUTRAL, yaw: -10 };
+  state.rememberProfile(s);
+  s = state.switchProfile(s, '/a');
+  assert.equal(s.zoom, 1.8);
+  assert.equal(s.x, 0.2);
+  assert.equal(s.neutral.yaw, 12);
+  assert.equal(s.autoBlink, true);
+  assert.equal(s.idleMotion, 'Idle:0');
+  assert.equal(s.hotkeys['expression:smile'], 'Alt+KeyS');
+  assert.equal(s.mappings.Custom.source, 'gazeX');
+  s.mappings.Custom.outputMin = -1;
+  assert.equal(s.profiles['/a'].mappings.Custom.outputMin, -2);
+  s = state.switchProfile(s, '/b');
+  assert.equal(s.zoom, 0.6);
+  assert.equal(s.neutral.yaw, -10);
+});
+
+test('settings reject malformed mappings and prototype keys, and sanitize stored profiles', () => {
+  const mapping = {
+    source: 'yaw',
+    inputMin: -1,
+    inputMax: 1,
+    outputMin: -30,
+    outputMax: 30,
+    smoothing: 0.1,
+    enabled: true,
+  };
+  const s = readSettings(
+    JSON.parse(
+      JSON.stringify({
+        mappings: {
+          good: mapping,
+          badSource: { ...mapping, source: 'constructor' },
+          zeroRange: { ...mapping, inputMax: -1 },
+          badOutput: { ...mapping, outputMax: 1e20 },
+        },
+        profiles: {
+          '/a': {
+            zoom: 20,
+            neutral: { ...NEUTRAL, gazeX: 'bad' },
+            mappings: { good: mapping },
+            background: '#abcdef',
+          },
+        },
+        hotkeys: { 'expression:smile': 'Alt+KeyS', bad: 42 },
+      }),
+    ),
+  );
+  assert.deepEqual(Object.keys(s.mappings), ['good']);
+  assert.equal(s.profiles['/a'].zoom, 2.5);
+  assert.equal(s.profiles['/a'].neutral, null);
+  assert.equal('background' in s.profiles['/a'], false);
+  assert.deepEqual(s.hotkeys, { 'expression:smile': 'Alt+KeyS' });
+  const poisoned = readSettings(
+    JSON.parse(
+      '{"mappings":{"__proto__":{},"constructor":{}},"profiles":{"__proto__":{},"constructor":{}},"hotkeys":{"__proto__":"KeyX"}}',
+    ),
+  );
+  assert.equal(Object.hasOwn(poisoned.mappings, '__proto__'), false);
+  assert.equal(Object.hasOwn(poisoned.profiles, 'constructor'), false);
+  assert.equal(Object.getPrototypeOf(poisoned.hotkeys), Object.prototype);
+});
+
+test('MediaPipe adds gaze, brows, mouth shift and normalized translation', () => {
+  const f = fromMediaPipe(
+    [
+      { categoryName: 'eyeLookOutLeft', score: 0.8 },
+      { categoryName: 'eyeLookInRight', score: 0.4 },
+      { categoryName: 'eyeLookUpLeft', score: 0.6 },
+      { categoryName: 'eyeLookUpRight', score: 0.2 },
+      { categoryName: 'browInnerUp', score: 0.2 },
+      { categoryName: 'browOuterUpLeft', score: 0.5 },
+      { categoryName: 'browDownRight', score: 0.4 },
+      { categoryName: 'mouthRight', score: 0.6 },
+      { categoryName: 'mouthLeft', score: 0.1 },
+    ],
+    [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 5, -2, -40, 1],
+  );
+  assert.ok(f);
+  assert.ok(Math.abs(f.gazeX - 0.6) < 1e-10);
+  assert.equal(f.gazeY, 0.4);
+  assert.equal(f.browLeft, 0.7);
+  assert.equal(f.browRight, -0.2);
+  assert.equal(f.mouthX, 0.5);
+  assert.equal(f.positionX, 0.5);
+  assert.equal(f.positionY, -0.2);
+  assert.equal(f.positionZ, -4);
+});

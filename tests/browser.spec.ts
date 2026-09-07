@@ -1,0 +1,1277 @@
+import { test, expect, type Page } from '@playwright/test';
+import { readFileSync, readdirSync } from 'node:fs';
+import { basename, dirname, resolve } from 'node:path';
+
+// Exercise the shipped bundle under the desktop CSP; Vite's React refresh preamble is dev-only.
+async function serveProduction(page: Page, entry: string) {
+  const csp = JSON.parse(readFileSync('src-tauri/tauri.conf.json', 'utf8')).app.security.csp;
+  await page.route('**/assets/*', (route) =>
+    route.fulfill({
+      path: resolve('dist/assets', basename(new URL(route.request().url()).pathname)),
+    }),
+  );
+  await page.route(entry, (route) =>
+    route.fulfill({
+      body: readFileSync('dist/index.html', 'utf8'),
+      contentType: 'text/html',
+      headers: { 'content-security-policy': csp },
+    }),
+  );
+}
+
+test('official Cubism Core renders a supplied model and applies head, body, eye, and mouth parameters', async ({
+  page,
+}, testInfo) => {
+  const fixture = process.env.VTUBELEAF_MODEL_FIXTURE;
+  test.skip(!fixture, 'Set VTUBELEAF_MODEL_FIXTURE to a licensed local model3.json.');
+  const modelPath = resolve(fixture!),
+    root = dirname(modelPath);
+  const files = readdirSync(root, { recursive: true, withFileTypes: true })
+    .filter((entry) => entry.isFile())
+    .map((entry) =>
+      resolve(entry.parentPath, entry.name)
+        .slice(root.length + 1)
+        .replaceAll('\\', '/'),
+    );
+  await page.route('**/test-model/**', (route) => {
+    const resource = decodeURIComponent(
+      new URL(route.request().url()).pathname.slice('/test-model/'.length),
+    );
+    return files.includes(resource)
+      ? route.fulfill({ path: resolve(root, resource) })
+      : route.abort();
+  });
+  await serveProduction(page, '**/?output=1');
+  await page.goto('/?output=1');
+  const parameters = await page.evaluate(
+    async (info) => {
+      const mocks = '/node_modules/@tauri-apps/api/mocks.js',
+        renderer = '/src/renderer.ts',
+        state = '/src/state.ts';
+      const { mockIPC } = await import(mocks),
+        { AvatarStage } = await import(renderer),
+        { defaults } = await import(state);
+      mockIPC(async (cmd: string, args: { resource: string }) => {
+        if (cmd === 'read_model_resource')
+          return (await fetch(`/test-model/${encodeURI(args.resource)}`)).arrayBuffer();
+      });
+      const container = document.createElement('div');
+      container.id = 'model-test';
+      container.style.cssText = 'position:fixed;inset:0;width:800px;height:800px;z-index:10';
+      document.body.append(container);
+      const stage = ((window as any).modelStage = new AvatarStage(container, () => {
+        throw new Error('WebGL context lost');
+      }));
+      stage.display({ ...defaults, background: '#00ff00' });
+      (window as any).modelInfo = info;
+      await stage.load(info);
+      stage.draw({}, 16);
+      if (!stage.expressions?.length || !stage.motions?.length)
+        throw new Error('model expression and motion controls missing');
+      return stage.parameters.map((parameter: { id: string }) => parameter.id);
+    },
+    { id: 'test-model', path: modelPath, name: basename(root), entry: basename(modelPath), files },
+  );
+  expect(parameters).toEqual(
+    expect.arrayContaining([
+      'ParamAngleX',
+      'ParamBodyAngleX',
+      'ParamEyeLOpen',
+      'ParamEyeROpen',
+      'ParamMouthOpenY',
+    ]),
+  );
+  const neutral = await page
+    .locator('#model-test canvas')
+    .screenshot({ path: testInfo.outputPath('model-neutral.png') });
+  const values = await page.evaluate(() => {
+    const stage = (window as any).modelStage;
+    const target = {
+      ParamAngleX: 25,
+      ParamBodyAngleX: -8,
+      ParamEyeLOpen: 0,
+      ParamEyeROpen: 0,
+      ParamMouthOpenY: 1,
+    };
+    for (let frame = 0; frame < 20; frame++) stage.draw(target, 16);
+    const core = stage.model.internalModel.coreModel;
+    return Object.fromEntries(
+      Object.keys(target).map((id) => [id, core.getParameterValueById(id)]),
+    );
+  });
+  expect(values).toEqual({
+    ParamAngleX: 25,
+    ParamBodyAngleX: -8,
+    ParamEyeLOpen: 0,
+    ParamEyeROpen: 0,
+    ParamMouthOpenY: 1,
+  });
+  const tracked = await page
+    .locator('#model-test canvas')
+    .screenshot({ path: testInfo.outputPath('model-tracked.png') });
+  expect(tracked.equals(neutral)).toBe(false);
+  const controls = await page.evaluate(async () => {
+    const stage = (window as any).modelStage;
+    const { defaults } = await import('/src/state.ts');
+    const { AvatarStage } = await import('/src/renderer.ts');
+    stage.display({ ...defaults, background: '#00ff00' });
+    const tick = (n = 60) => {
+      for (let i = 0; i < n; i++) stage.draw({ ParamAngleX: 5, ParamMouthOpenY: 0 }, 16);
+    };
+    stage.expressions.push(
+      {
+        id: 'test-a',
+        name: 'a',
+        data: { Parameters: [{ Id: 'ParamAngleX', Value: 12, Blend: 'Overwrite' }] },
+      },
+      {
+        id: 'test-b',
+        name: 'b',
+        data: { Parameters: [{ Id: 'ParamMouthOpenY', Value: 0.7, Blend: 'Overwrite' }] },
+      },
+    );
+    stage.toggleExpression('test-a');
+    stage.toggleExpression('test-b');
+    tick();
+    const mixed = { angle: stage.frame.ParamAngleX, mouth: stage.frame.ParamMouthOpenY };
+    stage.toggleExpression('test-a');
+    tick();
+    const toggled = { angle: stage.frame.ParamAngleX, mouth: stage.frame.ParamMouthOpenY };
+    stage.clearExpressions();
+    tick();
+    stage.motions.push({
+      id: 'test',
+      group: 'test',
+      name: 'test',
+      data: {
+        Version: 3,
+        Meta: {
+          Duration: 0.2,
+          Fps: 30,
+          Loop: false,
+          AreBeziersRestricted: true,
+          CurveCount: 1,
+          TotalSegmentCount: 1,
+          TotalPointCount: 2,
+          UserDataCount: 0,
+          TotalUserDataSize: 0,
+        },
+        Curves: [
+          {
+            Target: 'Parameter',
+            Id: 'ParamAngleX',
+            FadeInTime: 0,
+            FadeOutTime: 0,
+            Segments: [0, 25, 0, 0.2, 25],
+          },
+        ],
+        UserData: [],
+      },
+    });
+    stage.playMotion('test', 'once');
+    tick();
+    const once = stage.frame.ParamAngleX;
+    stage.playMotion('test', 'loop');
+    tick();
+    const loop = stage.frame.ParamAngleX;
+    stage.playMotion('test', 'hold');
+    tick();
+    const hold = stage.frame.ParamAngleX;
+    const heldFrame = { ...stage.frame },
+      heldParts = { ...stage.parts };
+    stage.stopMotion();
+    tick();
+    const stopped = stage.frame.ParamAngleX;
+    stage.display({ ...defaults, autoBlink: true, background: '#00ff00' });
+    stage.expressions.push({
+      id: 'test-eye',
+      name: 'eye',
+      data: { Parameters: [{ Id: 'ParamEyeLOpen', Value: 0, Blend: 'Overwrite' }] },
+    });
+    stage.toggleExpression('test-eye');
+    tick();
+    const expressionEye = stage.frame.ParamEyeLOpen;
+    stage.clearExpressions();
+    tick();
+    const eyeMotion = structuredClone(
+      stage.motions.find((motion: { id: string }) => motion.id === 'test'),
+    );
+    eyeMotion.id = 'test-eye';
+    eyeMotion.data.Curves[0].Id = 'ParamEyeLOpen';
+    eyeMotion.data.Curves[0].Segments = [0, 0, 0, 0.2, 0];
+    stage.motions.push(eyeMotion);
+    stage.playMotion('test-eye', 'hold');
+    tick();
+    const heldEye = stage.frame.ParamEyeLOpen;
+    stage.stopMotion();
+    const output = document.createElement('div');
+    output.id = 'passive-test';
+    output.style.cssText = 'position:fixed;inset:0;width:800px;height:800px;z-index:20';
+    document.body.append(output);
+    const passive = ((window as any).passiveStage = new AvatarStage(output, () => {}, true));
+    passive.display({ ...defaults, background: '#00ff00' });
+    await passive.load((window as any).modelInfo);
+    passive.draw(heldFrame, 16, heldParts);
+    const synchronized =
+      JSON.stringify(passive.frame) === JSON.stringify(heldFrame) &&
+      JSON.stringify(passive.parts) === JSON.stringify(heldParts);
+    return {
+      mixed,
+      toggled,
+      once,
+      loop,
+      hold,
+      stopped,
+      expressionEye,
+      heldEye,
+      synchronized,
+      finite: Object.values(heldFrame).every(Number.isFinite),
+      parts: Object.keys(heldParts).length,
+    };
+  });
+  expect(controls.mixed.angle).toBeCloseTo(12, 3);
+  expect(controls.mixed.mouth).toBeCloseTo(0.7, 3);
+  expect(controls.toggled.angle).toBeCloseTo(5, 3);
+  expect(controls.toggled.mouth).toBeCloseTo(0.7, 3);
+  expect(controls.once).toBeCloseTo(5, 3);
+  expect(controls.loop).toBeCloseTo(25, 3);
+  expect(controls.hold).toBeCloseTo(25, 3);
+  expect(controls.stopped).toBeCloseTo(5, 3);
+  expect(controls.expressionEye).toBeCloseTo(0, 3);
+  expect(controls.heldEye).toBeCloseTo(0, 3);
+  expect(controls.synchronized).toBe(true);
+  await page
+    .locator('#passive-test canvas')
+    .screenshot({ path: testInfo.outputPath('model-output-motion.png') });
+  await page.evaluate(() => (window as any).passiveStage.destroy());
+  expect(controls.finite).toBe(true);
+  expect(controls.parts).toBeGreaterThan(0);
+  await page.evaluate(() => (window as any).modelStage.destroy());
+  await expect(page.locator('#model-test canvas')).toHaveCount(0);
+});
+
+test('alternate model renders with missing standard parameters and accepts a custom mapping', async ({
+  page,
+}, testInfo) => {
+  const fixture = process.env.VTUBELEAF_ALT_MODEL_FIXTURE;
+  test.skip(!fixture, 'Set VTUBELEAF_ALT_MODEL_FIXTURE to the SDK Wanko model3.json.');
+  const modelPath = resolve(fixture!),
+    root = dirname(modelPath);
+  const files = readdirSync(root, { recursive: true, withFileTypes: true })
+    .filter((entry) => entry.isFile())
+    .map((entry) =>
+      resolve(entry.parentPath, entry.name)
+        .slice(root.length + 1)
+        .replaceAll('\\', '/'),
+    );
+  await page.route('**/test-model/**', (route) => {
+    const resource = decodeURIComponent(
+      new URL(route.request().url()).pathname.slice('/test-model/'.length),
+    );
+    return files.includes(resource)
+      ? route.fulfill({ path: resolve(root, resource) })
+      : route.abort();
+  });
+  await page.goto('/?output=1');
+  const result = await page.evaluate(
+    async (info) => {
+      const { mockIPC } = await import('/node_modules/@tauri-apps/api/mocks.js');
+      const { AvatarStage } = await import('/src/renderer.ts');
+      const { defaults, FaceMapper, NEUTRAL } = await import('/src/state.ts');
+      mockIPC(async (cmd: string, args: { resource: string }) => {
+        if (cmd === 'read_model_resource')
+          return (await fetch(`/test-model/${encodeURI(args.resource)}`)).arrayBuffer();
+      });
+      const container = document.createElement('div');
+      container.id = 'alternate-model';
+      container.style.cssText = 'position:fixed;inset:0;width:800px;height:800px;z-index:10';
+      document.body.append(container);
+      const stage = ((window as any).alternateStage = new AvatarStage(container, () => {
+        throw new Error('WebGL context lost');
+      }));
+      stage.display({ ...defaults, autoBlink: true, background: '#00ff00' });
+      await stage.load(info);
+      const mapper = new FaceMapper(),
+        face = { ...NEUTRAL, yaw: 30 };
+      const automatic = mapper.map(face, stage.parameters, defaults, 0.1);
+      const parameter = stage.parameters.find((p: { id: string }) => p.id === 'PARAM_ANGLE_X');
+      if (!parameter) throw new Error('Wanko head parameter missing');
+      const settings = {
+        ...defaults,
+        motionMirror: false,
+        mappings: {
+          [parameter.id]: {
+            source: 'yaw',
+            inputMin: -1,
+            inputMax: 1,
+            outputMin: parameter.min,
+            outputMax: parameter.max,
+            smoothing: 0,
+            enabled: true,
+          },
+        },
+      };
+      for (let i = 0; i < 60; i++)
+        stage.draw(mapper.map(face, stage.parameters, settings, 0.016), 16);
+      const custom = stage.frame[parameter.id];
+      stage.playMotion(stage.motions[0].id, 'loop');
+      for (let i = 0; i < 60; i++) stage.draw({}, 16);
+      stage.stopMotion();
+      stage.draw({}, 16);
+      return {
+        standard: stage.parameters.some((p: { id: string }) => p.id === 'ParamAngleX'),
+        automatic,
+        custom,
+        max: parameter.max,
+        expressions: stage.expressions.length,
+        finite: Object.values(stage.frame).every(Number.isFinite),
+      };
+    },
+    { id: 'alternate', path: modelPath, name: basename(root), entry: basename(modelPath), files },
+  );
+  expect(result.standard).toBe(false);
+  expect(result.automatic).toEqual({});
+  expect(result.custom).toBeCloseTo(result.max, 3);
+  expect(result.expressions).toBe(0);
+  expect(result.finite).toBe(true);
+  await page
+    .locator('#alternate-model canvas')
+    .screenshot({ path: testInfo.outputPath('model-wanko.png') });
+  await page.evaluate(() => (window as any).alternateStage.destroy());
+});
+
+test('studio panels reopen with the keyboard and fit the minimum desktop window', async ({
+  page,
+}, testInfo) => {
+  await page.goto('/');
+  await expect(page.locator('#stage canvas')).toBeVisible();
+  await page.screenshot({ path: testInfo.outputPath('studio-empty.png') });
+  const { minWidth: width, minHeight: height } = JSON.parse(
+    readFileSync('src-tauri/tauri.conf.json', 'utf8'),
+  ).app.windows[0];
+  await page.setViewportSize({ width, height });
+  const expanded = { x: 0, y: 0, width, height };
+  await expect.poll(() => page.locator('#stage').boundingBox()).toEqual(expanded);
+  await page.getByRole('button', { name: '收起设置面板' }).click();
+  await expect(page.locator('#controls')).toBeHidden();
+  const capture = page.getByRole('button', { name: '面捕', exact: true });
+  await expect(capture).toBeFocused();
+  await expect(capture).toHaveAttribute('aria-pressed', 'false');
+  await expect.poll(() => page.locator('#stage').boundingBox()).toEqual(expanded);
+  await page.keyboard.press('Enter');
+  await expect(page.locator('#capture')).toBeVisible();
+  await expect(capture).toHaveAttribute('aria-pressed', 'true');
+  for (const [name, title] of [
+    ['角色', '角色控制'],
+    ['画面', '画面设置'],
+    ['接入', '会议接入'],
+    ['面捕', '面部捕捉'],
+  ]) {
+    await page.getByRole('button', { name, exact: true }).click();
+    await expect(page.locator('#panel-title')).toHaveText(title);
+    await expect(page.locator('.panel:visible')).toHaveCount(1);
+  }
+  for (const selector of ['#stage', '#controls', '.session-bar', '#start', '#notice']) {
+    const box = (await page.locator(selector).boundingBox())!;
+    expect(box.x).toBeGreaterThanOrEqual(0);
+    expect(box.y).toBeGreaterThanOrEqual(0);
+    expect(box.x + box.width).toBeLessThanOrEqual(width);
+    expect(box.y + box.height).toBeLessThanOrEqual(height);
+  }
+  expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBe(width);
+  await page.screenshot({ path: testInfo.outputPath('studio-compact.png') });
+});
+
+test('live mode hides every overlay without replacing the full-window stage', async ({ page }) => {
+  await serveProduction(page, '**/');
+  await page.goto('/');
+  await expect(page.locator('#start')).toBeEnabled();
+  const canvas = await page.locator('#stage canvas').elementHandle();
+  const fullWindow = { x: 0, y: 0, width: 1200, height: 800 };
+  await expect.poll(() => page.locator('#stage canvas').boundingBox()).toEqual(fullWindow);
+  await page.getByRole('button', { name: '画面', exact: true }).click();
+  await page.getByRole('button', { name: '色键绿', exact: true }).click();
+  await page.locator('#live-mode').click();
+  await expect(page.locator('body')).toHaveText('', { useInnerText: true });
+  await expect(
+    page.locator('button:visible,input:visible,select:visible,video:visible'),
+  ).toHaveCount(0);
+  await expect(page.locator('#stage')).toBeFocused();
+  await page.keyboard.press('Tab');
+  await expect(page.locator('.studio-overlay :focus')).toHaveCount(0);
+  await expect.poll(() => page.locator('#stage canvas').boundingBox()).toEqual(fullWindow);
+  expect(await canvas!.evaluate((node) => node === document.querySelector('#stage canvas'))).toBe(
+    true,
+  );
+  await expect(page.locator('#stage')).toHaveCSS('background-color', 'rgb(0, 255, 0)');
+  await page.keyboard.press('Escape');
+  await expect(page.locator('#live-mode')).toBeFocused();
+  await expect(page.locator('#appearance')).toBeVisible();
+  await page.getByRole('button', { name: '收起设置面板' }).click();
+  await page.locator('#live-mode').click();
+  await page.keyboard.press('Escape');
+  await expect(page.locator('#controls')).toBeHidden();
+  await page.locator('#live-mode').click();
+  await page.reload();
+  await expect(page.locator('#live-mode')).toBeVisible();
+});
+
+test('studio renders under production CSP, saves settings, and never auto-captures', async ({
+  page,
+}) => {
+  await serveProduction(page, '**/');
+  await page.addInitScript(() => {
+    (window as any).captureCalls = 0;
+    navigator.mediaDevices.getUserMedia = async () => {
+      (window as any).captureCalls++;
+      throw new DOMException('denied', 'NotAllowedError');
+    };
+  });
+  await page.goto('/');
+  await expect(page.locator('#stage canvas')).toBeVisible();
+  await expect(page.locator('#notice')).not.toHaveClass(/error/);
+  await page.getByRole('button', { name: '画面', exact: true }).click();
+  await page.getByRole('button', { name: '色键绿', exact: true }).click();
+  await expect
+    .poll(() =>
+      page.evaluate(() => JSON.parse(localStorage.getItem('vtubeleaf-preview') || '{}').background),
+    )
+    .toBe('#00ff00');
+  await page.reload();
+  expect(await page.evaluate(() => (window as any).captureCalls)).toBe(0);
+  await page.getByRole('button', { name: '画面', exact: true }).click();
+  await expect(page.locator('#background')).toHaveValue('#00ff00');
+  await page.getByRole('button', { name: '面捕', exact: true }).click();
+  await page.getByRole('button', { name: '开始跟踪', exact: true }).click();
+  await expect(page.locator('#notice')).toContainText('摄像头权限被拒绝');
+  await expect(page.locator('#start')).toBeEnabled();
+  await expect(page.locator('#stop')).toBeDisabled();
+});
+
+test('React controls preserve keyboard edits across status updates and reload', async ({
+  page,
+}) => {
+  const errors: string[] = [];
+  page.on('pageerror', (error) => errors.push(error.message));
+  await page.goto('/');
+  const mirror = page.getByRole('switch', { name: '镜像角色转头方向', exact: true });
+  await expect(mirror).toBeChecked();
+  await mirror.focus();
+  await page.keyboard.press('Space');
+  await expect(mirror).not.toBeChecked();
+  const sensitivity = page.getByRole('slider', { name: '头部灵敏度', exact: true });
+  await sensitivity.focus();
+  await page.keyboard.press('ArrowRight');
+  await expect(sensitivity).toHaveAttribute('aria-valuenow', '1.1');
+  await expect(page.locator('#render-status')).toContainText('FPS');
+  await expect(sensitivity).toBeFocused();
+  await expect
+    .poll(() =>
+      page.evaluate(
+        () => JSON.parse(localStorage.getItem('vtubeleaf-preview') || '{}').sensitivity,
+      ),
+    )
+    .toBe(1.1);
+  await page.reload();
+  await expect(mirror).not.toBeChecked();
+  await expect(sensitivity).toHaveAttribute('aria-valuenow', '1.1');
+  expect(errors).toEqual([]);
+});
+
+test('React unmount flushes settings and releases a camera permission granted later', async ({
+  page,
+}) => {
+  const errors: string[] = [];
+  page.on('pageerror', (error) => errors.push(error.message));
+  await page.goto('/?output=1');
+  await page.evaluate(async () => {
+    const react = '/node_modules/.vite/deps/react.js';
+    const client = '/node_modules/.vite/deps/react-dom_client.js';
+    const app = '/src/App.tsx';
+    const { createElement, StrictMode } = (await import(react)).default;
+    const { createRoot } = (await import(client)).default;
+    const { App } = await import(app);
+    const host = document.createElement('div');
+    document.body.append(host);
+    const root = ((window as any).testRoot = createRoot(host));
+    navigator.mediaDevices.getUserMedia = () =>
+      new Promise((resolve) => {
+        (window as any).grantCamera = resolve;
+      });
+    root.render(createElement(StrictMode, null, createElement(App)));
+  });
+  await expect(page.locator('#start')).toBeEnabled();
+  await page.locator('#start').click({ force: true });
+  await expect.poll(() => page.evaluate(() => typeof (window as any).grantCamera)).toBe('function');
+  await page.evaluate(() => {
+    document.getElementById('motionMirror')!.click();
+    (window as any).testRoot.unmount();
+    (window as any).cameraStops = 0;
+    (window as any).grantCamera({
+      getTracks: () => [{ stop: () => (window as any).cameraStops++ }],
+    });
+  });
+  await expect.poll(() => page.evaluate(() => (window as any).cameraStops)).toBe(1);
+  await expect
+    .poll(() =>
+      page.evaluate(
+        () => JSON.parse(localStorage.getItem('vtubeleaf-preview') || '{}').motionMirror,
+      ),
+    )
+    .toBe(false);
+  await expect(page.locator('canvas')).toHaveCount(1);
+  await expect(page.locator('video')).toHaveCount(0);
+  expect(errors).toEqual([]);
+});
+
+test('output contains only the canvas and no video or controls', async ({ page }) => {
+  await page.goto('/?output=1');
+  await expect(page.locator('canvas')).toBeVisible();
+  await expect(page.locator('button,input,select,video,header,aside')).toHaveCount(0);
+  expect(await page.locator('body').innerText()).toBe('');
+});
+
+test('local MediaPipe runs with a synthetic camera and stop releases every track', async ({
+  page,
+}) => {
+  const external: string[] = [];
+  page.on('request', (request) => {
+    if (/^https?:/.test(request.url()) && !request.url().startsWith('http://127.0.0.1:1420/'))
+      external.push(request.url());
+  });
+  await page.goto('/');
+  await page.getByRole('button', { name: '开始跟踪', exact: true }).click();
+  await expect(page.locator('#tracking-status')).toHaveText('正在跟踪', { timeout: 20000 });
+  await expect(page.locator('#face-status')).toHaveText('未识别人脸 · 等待 / 回中立');
+  await page.getByRole('switch', { name: /^显示面捕预览/ }).click();
+  await expect(page.locator('#camera-video')).toBeVisible();
+  await page.evaluate(() => {
+    (window as any).testStream = (
+      document.getElementById('camera-video') as HTMLVideoElement
+    ).srcObject;
+  });
+  const videoTime = await page
+    .locator('#camera-video')
+    .evaluate((video: HTMLVideoElement) => video.currentTime);
+  await page.locator('#live-mode').click();
+  await expect(page.locator('#camera-video')).toBeHidden();
+  await expect
+    .poll(() =>
+      page.locator('#camera-video').evaluate((video: HTMLVideoElement) => video.currentTime),
+    )
+    .toBeGreaterThan(videoTime);
+  expect(
+    await page
+      .locator('#camera-video')
+      .evaluate((video: HTMLVideoElement) => video.srcObject === (window as any).testStream),
+  ).toBe(true);
+  await page.keyboard.press('Escape');
+  await expect(page.locator('#tracking-status')).toHaveText('正在跟踪');
+  await expect(page.locator('#camera-video')).toBeVisible();
+  await page.getByRole('button', { name: '暂停', exact: true }).click();
+  await expect(page.locator('#tracking-status')).toHaveText('已暂停');
+  expect(
+    await page.evaluate(() =>
+      (window as any).testStream
+        .getTracks()
+        .every((track: MediaStreamTrack) => track.readyState === 'live'),
+    ),
+  ).toBe(true);
+  await page.getByRole('button', { name: '停止', exact: true }).click();
+  await expect(page.locator('#tracking-status')).toHaveText('尚未开始');
+  expect(
+    await page.evaluate(() =>
+      (window as any).testStream
+        .getTracks()
+        .every((track: MediaStreamTrack) => track.readyState === 'ended'),
+    ),
+  ).toBe(true);
+  expect(
+    await page.locator('#camera-video').evaluate((video: HTMLVideoElement) => video.srcObject),
+  ).toBeNull();
+  expect(external).toEqual([]);
+});
+
+test('upper body uses real local pose inference and clears cropped joints before returning to face tracking', async ({
+  page,
+}, testInfo) => {
+  const fixture = process.env.VTUBELEAF_POSE_FIXTURE;
+  const faceFixture = process.env.VTUBELEAF_FACE_FIXTURE;
+  test.skip(
+    !fixture || !faceFixture,
+    'Set VTUBELEAF_POSE_FIXTURE to the official pose.jpg and VTUBELEAF_FACE_FIXTURE to face_landmark.png.',
+  );
+  test.setTimeout(60000);
+  await page.route('**/test-pose.jpg', (route) => route.fulfill({ path: resolve(fixture!) }));
+  await page.route('**/test-face.png', (route) => route.fulfill({ path: resolve(faceFixture!) }));
+  await page.goto('/?output=1');
+  const full = await page.evaluate(async () => {
+    const { Tracker } = await import('/src/tracker.ts');
+    const { defaults } = await import('/src/state.ts');
+    const picture = new Image();
+    picture.src = '/test-pose.jpg';
+    await picture.decode();
+    const source = document.createElement('canvas');
+    source.width = picture.width;
+    source.height = picture.height;
+    const ctx = source.getContext('2d')!;
+    const state = ((window as any).poseTest = {
+      picture,
+      source,
+      ctx,
+      crop: [0, 0, picture.width, picture.height],
+      frames: [] as any[],
+      errors: [] as string[],
+    });
+    const paint = () =>
+      ctx.drawImage(
+        state.picture,
+        ...(state.crop as [number, number, number, number]),
+        0,
+        0,
+        source.width,
+        source.height,
+      );
+    paint();
+    const stream = source.captureStream(24);
+    (state as any).stream = stream;
+    (state as any).drawing = setInterval(paint, 1000 / 24);
+    navigator.mediaDevices.getUserMedia = async () => stream;
+    const container = document.createElement('div');
+    container.style.cssText = 'position:fixed;inset:0;background:#102019;z-index:20';
+    const video = document.createElement('video');
+    const preview = document.createElement('canvas');
+    video.style.cssText = preview.style.cssText =
+      'position:absolute;width:100%;height:100%;object-fit:contain';
+    container.append(video, preview);
+    document.body.append(container);
+    const tracker = new Tracker(
+      video,
+      (face: any) => state.frames.push(face),
+      (error: string) => state.errors.push(error),
+      preview,
+    );
+    (state as any).tracker = tracker;
+    (state as any).preview = preview;
+    await tracker.start(defaults);
+    const deadline = performance.now() + 15000;
+    while (tracker.bodyStatus !== '已识别上半身' && performance.now() < deadline)
+      await new Promise((resolve) => setTimeout(resolve, 100));
+    // The pose fixture has a small profile face; inspect real pose output independently.
+    return { body: (tracker as any).body, errors: state.errors, status: tracker.bodyStatus };
+  });
+  expect(full.errors).toEqual([]);
+  expect(full.status).toBe('已识别上半身');
+  expect(Number.isFinite(full.body.bodyYaw)).toBe(true);
+  expect(Number.isFinite(full.body.bodyPitch)).toBe(true);
+  expect(full.body.armLeft).toBeGreaterThan(0.35);
+  expect(full.body.armRight).toBeGreaterThan(0.35);
+  await page.screenshot({ path: testInfo.outputPath('upper-body-landmarks.png') });
+  // The official MediaPipe pose.jpg fixture has its head at (435,235) and shoulders at y=320.
+  const crop = async (rect: number[]) =>
+    page.evaluate((rect) => {
+      const t = (window as any).poseTest;
+      t.crop = rect;
+      t.source.width = rect[2];
+      t.source.height = rect[3];
+      t.frames.length = 0;
+    }, rect);
+  await crop([220, 210, 570, 215]);
+  await expect
+    .poll(() => page.evaluate(() => (window as any).poseTest.tracker.bodyStatus), {
+      timeout: 15000,
+    })
+    .toBe('已识别肩膀 · 躯干未完整入镜');
+  await expect
+    .poll(() =>
+      page.evaluate(() => {
+        const body = (window as any).poseTest.tracker.body;
+        return Number.isFinite(body.bodyYaw) && body.bodyPitch === undefined;
+      }),
+    )
+    .toBe(true);
+  await page.evaluate(async () => {
+    const picture = new Image();
+    picture.src = '/test-face.png';
+    await picture.decode();
+    (window as any).poseTest.picture = picture;
+  });
+  await crop([0, 0, 425, 375]);
+  await expect
+    .poll(() => page.evaluate(() => (window as any).poseTest.tracker.bodyStatus), {
+      timeout: 15000,
+    })
+    .toBe('未看到双肩 · 身体随头部轻动');
+  await expect
+    .poll(
+      () =>
+        page.evaluate(() => {
+          const frames = (window as any).poseTest.frames;
+          return (
+            frames.length >= 3 &&
+            frames.slice(-3).every((f: any) => f.bodyYaw === undefined && Number.isFinite(f.yaw))
+          );
+        }),
+      { timeout: 15000 },
+    )
+    .toBe(true);
+  const stopped = await page.evaluate(async () => {
+    const t = (window as any).poseTest;
+    clearInterval(t.drawing);
+    await t.tracker.stop();
+    return {
+      released: t.stream
+        .getTracks()
+        .every((track: MediaStreamTrack) => track.readyState === 'ended'),
+      errors: t.errors,
+    };
+  });
+  expect(stopped).toEqual({ released: true, errors: [] });
+});
+
+for (const upperBody of ['enabled', 'disabled', 'unavailable'] as const) {
+  test(`local MediaPipe recognizes a supplied face image with upper body ${upperBody}`, async ({
+    page,
+  }) => {
+    const fixture = process.env.VTUBELEAF_FACE_FIXTURE;
+    test.skip(
+      !fixture,
+      'Set VTUBELEAF_FACE_FIXTURE to a local face image you may use for testing.',
+    );
+    let poseRequests = 0;
+    page.on('request', (request) => {
+      if (request.url().endsWith('/pose_landmarker_lite.task')) poseRequests++;
+    });
+    if (upperBody === 'unavailable')
+      await page.route('**/pose_landmarker_lite.task', (route) =>
+        route.fulfill({ status: 404, body: '' }),
+      );
+    await page.route('**/test-face.png', (route) =>
+      route.fulfill({ path: resolve(fixture!), contentType: 'image/png' }),
+    );
+    await page.goto('/?output=1');
+    const result = await page.evaluate(async (upperBody) => {
+      const trackerModule = '/src/tracker.ts',
+        stateModule = '/src/state.ts';
+      const { Tracker } = await import(trackerModule),
+        { defaults } = await import(stateModule);
+      const picture = new Image();
+      picture.src = '/test-face.png';
+      await picture.decode();
+      const canvas = document.createElement('canvas');
+      canvas.width = picture.width;
+      canvas.height = picture.height;
+      const context = canvas.getContext('2d')!;
+      context.drawImage(picture, 0, 0);
+      const stream = canvas.captureStream(24);
+      const drawing = setInterval(() => context.drawImage(picture, 0, 0), 1000 / 24);
+      navigator.mediaDevices.getUserMedia = async () => stream;
+      let faces = 0;
+      const errors: string[] = [];
+      const tracker = new Tracker(
+        document.createElement('video'),
+        (face: unknown) => {
+          if (face) faces++;
+        },
+        (error: string) => errors.push(error),
+      );
+      try {
+        const started = await tracker.start({ ...defaults, upperBody: upperBody !== 'disabled' });
+        const deadline = performance.now() + 15000;
+        while (faces < 3 && performance.now() < deadline)
+          await new Promise((resolve) => setTimeout(resolve, 100));
+        const bodyStatus = tracker.bodyStatus;
+        await tracker.stop();
+        return {
+          started,
+          faces,
+          errors,
+          bodyStatus,
+          released: stream.getTracks().every((track) => track.readyState === 'ended'),
+        };
+      } finally {
+        clearInterval(drawing);
+        await tracker.stop();
+      }
+    }, upperBody);
+    expect(result.started).toBe(true);
+    expect(result.faces).toBeGreaterThanOrEqual(3);
+    expect(result.errors).toEqual([]);
+    expect(result.released).toBe(true);
+    expect(poseRequests).toBe(upperBody === 'disabled' ? 0 : 1);
+    if (upperBody === 'disabled') expect(result.bodyStatus).toBe('上半身识别已关闭');
+    if (upperBody === 'unavailable') expect(result.bodyStatus).toContain('上半身资源加载失败');
+  });
+}
+
+test('face preview overlays live landmarks and clears them when paused or stopped', async ({
+  page,
+}, testInfo) => {
+  const fixture = process.env.VTUBELEAF_FACE_FIXTURE;
+  test.skip(!fixture, 'Set VTUBELEAF_FACE_FIXTURE to a local face image you may use for testing.');
+  await page.route('**/test-face.png', (route) =>
+    route.fulfill({ path: resolve(fixture!), contentType: 'image/png' }),
+  );
+  await page.goto('/');
+  await page.evaluate(async () => {
+    const picture = new Image();
+    picture.src = '/test-face.png';
+    await picture.decode();
+    const source = document.createElement('canvas');
+    source.width = picture.width;
+    source.height = picture.height;
+    const ctx = source.getContext('2d')!;
+    ctx.drawImage(picture, 0, 0);
+    const stream = source.captureStream(24);
+    (window as any).faceSource = { ctx, picture, source };
+    (window as any).faceDrawing = setInterval(() => ctx.drawImage(picture, 0, 0), 1000 / 24);
+    navigator.mediaDevices.getUserMedia = async () => stream;
+  });
+  await page.getByRole('switch', { name: /^显示面捕预览/ }).click();
+  await page.locator('#start').click();
+  await expect(page.locator('#tracking-status')).toHaveText('正在跟踪', { timeout: 20000 });
+  const mesh = page.locator('#face-mesh');
+  const drawnPixels = () =>
+    mesh.evaluate((canvas: HTMLCanvasElement) => {
+      const pixels = canvas.getContext('2d')!.getImageData(0, 0, canvas.width, canvas.height).data;
+      let count = 0;
+      for (let i = 3; i < pixels.length; i += 4) if (pixels[i]) count++;
+      return count;
+    });
+  await expect.poll(drawnPixels).toBeGreaterThan(1000);
+  expect(
+    await mesh.evaluate((canvas: HTMLCanvasElement) => {
+      const video = document.querySelector('video')!;
+      return (
+        canvas.width === video.videoWidth &&
+        canvas.height === video.videoHeight &&
+        getComputedStyle(canvas).objectFit === getComputedStyle(video).objectFit &&
+        getComputedStyle(canvas).transform === getComputedStyle(video).transform
+      );
+    }),
+  ).toBe(true);
+  await page.screenshot({ path: testInfo.outputPath('face-mesh-preview.png') });
+  await page.getByRole('switch', { name: '镜像摄像头预览', exact: true }).click();
+  expect(await mesh.evaluate((canvas) => getComputedStyle(canvas).transform)).toBe('none');
+  await page.locator('#pause').click();
+  await expect.poll(drawnPixels).toBe(0);
+  await page.locator('#pause').click();
+  await expect.poll(drawnPixels).toBeGreaterThan(1000);
+  await page.evaluate(() => {
+    clearInterval((window as any).faceDrawing);
+    const { ctx, source } = (window as any).faceSource;
+    (window as any).faceDrawing = setInterval(() => {
+      ctx.fillStyle = '#fff';
+      ctx.fillRect(0, 0, source.width, source.height);
+    }, 1000 / 24);
+  });
+  await expect.poll(drawnPixels).toBe(0);
+  await page.locator('#stop').click();
+  await expect(mesh).toBeHidden();
+  await expect.poll(drawnPixels).toBe(0);
+  await page.evaluate(() => clearInterval((window as any).faceDrawing));
+});
+
+test('camera permission completing after stop releases the late stream', async ({ page }) => {
+  await page.goto('/?output=1');
+  const result = await page.evaluate(async () => {
+    const trackerModule = '/src/tracker.ts',
+      stateModule = '/src/state.ts';
+    const { Tracker } = await import(trackerModule),
+      { defaults } = await import(stateModule);
+    let grant!: (stream: unknown) => void,
+      entered!: () => void,
+      stops = 0;
+    const requested = new Promise<void>((resolve) => {
+      entered = resolve;
+    });
+    navigator.mediaDevices.getUserMedia = () =>
+      new Promise((resolve) => {
+        grant = resolve;
+        entered();
+      });
+    const video = document.createElement('video');
+    const tracker = new Tracker(
+      video,
+      () => {},
+      () => {},
+    );
+    const started = tracker.start(defaults);
+    await requested;
+    await tracker.stop();
+    grant({ getTracks: () => [{ stop: () => stops++ }] });
+    return { started: await started, stops, detached: video.srcObject === null };
+  });
+  expect(result).toEqual({ started: false, stops: 1, detached: true });
+});
+
+test('stopping during OSF subscription prevents the old start and cleans listeners', async ({
+  page,
+}) => {
+  await page.goto('/?output=1');
+  const result = await page.evaluate(async () => {
+    const mocks = '/node_modules/@tauri-apps/api/mocks.js',
+      trackerModule = '/src/tracker.ts',
+      stateModule = '/src/state.ts';
+    const { mockIPC } = await import(mocks),
+      { Tracker } = await import(trackerModule),
+      { defaults } = await import(stateModule);
+    let resume!: (id: number) => void, entered!: () => void;
+    const subscribing = new Promise<void>((resolve) => {
+      entered = resolve;
+    });
+    const calls: string[] = [];
+    mockIPC((cmd: string) => {
+      calls.push(cmd);
+      if (cmd === 'plugin:event|listen')
+        return new Promise((resolve) => {
+          resume = resolve;
+          entered();
+        });
+    });
+    const tracker = new Tracker(
+      document.createElement('video'),
+      () => {},
+      () => {},
+    );
+    const started = tracker.start({ ...defaults, engine: 'openseeface' });
+    await subscribing;
+    await tracker.stop();
+    resume(1);
+    return { started: await started, calls };
+  });
+  expect(result.started).toBe(false);
+  expect(result.calls).not.toContain('start_openseeface');
+  expect(result.calls).toContain('stop_openseeface');
+  expect(result.calls).toContain('plugin:event|unlisten');
+});
+
+test('OSF process errors stop reception and return a retryable failure', async ({ page }) => {
+  await page.goto('/?output=1');
+  const result = await page.evaluate(async () => {
+    const mocks = '/node_modules/@tauri-apps/api/mocks.js',
+      eventModule = '/node_modules/@tauri-apps/api/event.js';
+    const trackerModule = '/src/tracker.ts',
+      stateModule = '/src/state.ts';
+    const { mockIPC } = await import(mocks),
+      { emit } = await import(eventModule);
+    const { Tracker } = await import(trackerModule),
+      { defaults } = await import(stateModule);
+    const calls: string[] = [],
+      errors: string[] = [];
+    mockIPC(
+      (cmd: string) => {
+        calls.push(cmd);
+      },
+      { shouldMockEvents: true },
+    );
+    const tracker = new Tracker(
+      document.createElement('video'),
+      () => {},
+      (error: string) => errors.push(error),
+    );
+    const started = await tracker.start({ ...defaults, engine: 'openseeface' });
+    await emit('openseeface-error', 'OpenSeeFace 跟踪进程已退出。请检查依赖与摄像头后重试。');
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    return { started, calls, errors };
+  });
+  expect(result.started).toBe(true);
+  expect(result.calls.filter((cmd) => cmd === 'stop_openseeface')).toHaveLength(1);
+  expect(result.errors).toHaveLength(1);
+  expect(result.errors[0]).toContain('OpenSeeFace');
+});
+
+test('model controls save profiles, expressions, shortcuts and a manual motion recording through IPC', async ({
+  page,
+}, testInfo) => {
+  const fixture = process.env.VTUBELEAF_MODEL_FIXTURE;
+  test.skip(!fixture, 'Set VTUBELEAF_MODEL_FIXTURE to a local model with expressions and motions.');
+  const modelPath = resolve(fixture!),
+    root = dirname(modelPath);
+  const files = readdirSync(root, { recursive: true, withFileTypes: true })
+    .filter((entry) => entry.isFile())
+    .map((entry) =>
+      resolve(entry.parentPath, entry.name)
+        .slice(root.length + 1)
+        .replaceAll('\\', '/'),
+    );
+  const info = { id: 'controls', path: modelPath, name: 'Haru', entry: basename(modelPath), files };
+  await page.route('**/test-model/**', (route) => {
+    const resource = decodeURIComponent(
+      new URL(route.request().url()).pathname.slice('/test-model/'.length),
+    );
+    return files.includes(resource)
+      ? route.fulfill({ path: resolve(root, resource) })
+      : route.abort();
+  });
+  await page.route('**/src/main.tsx*', async (route) => {
+    const response = await route.fetch();
+    const bootstrap = `import { mockIPC, mockWindows } from '/node_modules/@tauri-apps/api/mocks.js';
+      window.isTauri = true; mockWindows('main'); let chosen = 0;
+      const fixtureInfo = ${JSON.stringify(info)};
+      mockIPC(async (cmd, args) => {
+        if (cmd === 'load_settings') return null;
+        if (cmd === 'list_models') return { models: [], directory: '/test/models', errors: [] };
+        if (cmd === 'save_settings') { window.savedSettings = args.settings; return; }
+        if (cmd === 'choose_model') { window.chosenKind = args.kind; return { ...fixtureInfo, path: chosen++ ? fixtureInfo.path + '-second' : fixtureInfo.path }; }
+        if (cmd === 'open_models_directory') { if (window.openedLibrary) throw new Error('无法打开角色文件夹'); window.openedLibrary = true; return; }
+        if (cmd === 'load_model') return { ...fixtureInfo, path: args.path };
+        if (cmd === 'read_model_resource') return (await fetch('/test-model/' + encodeURI(args.resource))).arrayBuffer();
+        if (cmd === 'save_motion') { window.savedMotion = args.motion; return true; }
+        if (cmd === 'plugin:global-shortcut|register') { window.savedShortcut = args.shortcuts; return; }
+      }, { shouldMockEvents: true });\n`;
+    await route.fulfill({ response, body: bootstrap + (await response.text()) });
+  });
+  await page.goto('/');
+  await page.locator('#import-empty').click();
+  await expect(page.locator('#model-name')).toHaveText('Haru');
+  await expect(page.locator('#import-model')).toBeEnabled();
+  const stageArea = (await page.locator('#stage').boundingBox())!;
+  const center = { x: stageArea.x + stageArea.width / 2, y: stageArea.y + stageArea.height / 2 };
+  await page.mouse.move(center.x, center.y);
+  await page.mouse.down();
+  await page.mouse.move(center.x + stageArea.width / 10, center.y + stageArea.height / 10, {
+    steps: 5,
+  });
+  await page.mouse.up();
+  await expect
+    .poll(() => page.evaluate(() => (window as any).savedSettings?.x))
+    .toBeCloseTo(0.1, 2);
+  expect(await page.evaluate(() => (window as any).savedSettings.y)).toBeCloseTo(0.1, 2);
+  await page.mouse.wheel(0, -300);
+  await expect
+    .poll(() => page.evaluate(() => (window as any).savedSettings?.zoom))
+    .toBeGreaterThan(1);
+  await page.screenshot({ path: testInfo.outputPath('studio-drag-zoom.png') });
+  await page.getByRole('button', { name: '画面', exact: true }).click();
+  await page.locator('#reset-display').click();
+  await expect.poll(() => page.evaluate(() => (window as any).savedSettings?.zoom)).toBe(1);
+  expect(
+    await page.evaluate(() => [(window as any).savedSettings.x, (window as any).savedSettings.y]),
+  ).toEqual([0, 0]);
+  await page.screenshot({ path: testInfo.outputPath('studio-main.png') });
+  const initialStage = await page.locator('#stage').boundingBox();
+  await page.getByRole('button', { name: '收起设置面板' }).click();
+  await expect.poll(() => page.locator('#stage canvas').boundingBox()).toEqual(initialStage);
+  await page.locator('#live-mode').click();
+  await expect(page.locator('body')).toHaveText('', { useInnerText: true });
+  await page.screenshot({ path: testInfo.outputPath('studio-live.png') });
+  await page.keyboard.press('Escape');
+  await expect(page.locator('#render-status')).toContainText('FPS');
+  await page.screenshot({ path: testInfo.outputPath('studio-stage.png') });
+  await page.getByRole('button', { name: '角色', exact: true }).click();
+  await page.locator('#mapping-parameter').selectOption('ParamAngleX');
+  await page.locator('#mapping-inputMin').fill('-0.5');
+  await page.locator('#save-mapping').click();
+  await expect
+    .poll(() =>
+      page.evaluate(
+        () =>
+          (window as any).savedSettings?.profiles[(window as any).savedSettings?.modelPath]
+            ?.mappings.ParamAngleX?.inputMin,
+      ),
+    )
+    .toBe(-0.5);
+  const expression = page.locator('#expression-buttons button').first();
+  await expression.click();
+  await expect(expression).toHaveAttribute('aria-pressed', 'true');
+  await page.locator('#clear-expressions').click();
+  await expect(expression).toHaveAttribute('aria-pressed', 'false');
+  await page.getByRole('button', { name: '全局快捷键' }).click();
+  await page.locator('#hotkey-binding').fill('Control+Shift+1');
+  await page.locator('#save-hotkey').click();
+  await expect
+    .poll(() => page.evaluate(() => (window as any).savedShortcut))
+    .toEqual(['Control+Shift+Digit1']);
+  await page.locator('#record-toggle').click();
+  await expect(page.locator('#record-status')).not.toHaveText('0.0 s');
+  await page.locator('#record-toggle').click();
+  await page.locator('#record-save').click();
+  await expect
+    .poll(() => page.evaluate(() => (window as any).savedMotion?.Meta?.CurveCount ?? 0))
+    .toBeGreaterThan(0);
+  await page.screenshot({ path: testInfo.outputPath('studio-model-controls.png') });
+  await page.getByRole('button', { name: '角色库', exact: true }).click();
+  await page.getByRole('button', { name: '打开角色文件夹' }).click();
+  await expect.poll(() => page.evaluate(() => (window as any).openedLibrary)).toBe(true);
+  await page.getByRole('button', { name: '添加角色', exact: true }).click();
+  await expect(page.getByRole('menuitem', { name: '选择模型文件夹' })).toBeVisible();
+  await page.screenshot({ path: testInfo.outputPath('library-add-menu.png') });
+  await page.getByRole('menuitem', { name: '选择文件（model3.json / ZIP）' }).click();
+  await expect.poll(() => page.evaluate(() => (window as any).chosenKind)).toBe('file');
+  await expect
+    .poll(() => page.evaluate(() => (window as any).savedSettings?.modelPath))
+    .toBe(modelPath + '-second');
+  expect(await page.evaluate(() => (window as any).savedSettings.mappings)).toEqual({});
+  await page.locator('.model-card').first().click();
+  await expect
+    .poll(() => page.evaluate(() => (window as any).savedSettings?.modelPath))
+    .toBe(modelPath);
+  expect(
+    await page.evaluate(() => (window as any).savedSettings.mappings.ParamAngleX.inputMin),
+  ).toBe(-0.5);
+  await expect(page.locator('#notice')).not.toHaveClass(/error/);
+  await page.getByRole('button', { name: '打开角色文件夹' }).click();
+  await expect(page.locator('#notice')).toContainText('无法打开角色文件夹');
+  await expect(page.locator('#notice')).toHaveClass(/error/);
+});
+
+test('character icons appear as squares without loading model resources', async ({ page }) => {
+  await page.route('**/src/main.tsx*', async (route) => {
+    const response = await route.fetch();
+    const bootstrap = `import { mockIPC, mockWindows } from '/node_modules/@tauri-apps/api/mocks.js';
+      window.isTauri = true; mockWindows('main'); window.resourceReads = 0;
+      const canvas = document.createElement('canvas'); canvas.width = 48; canvas.height = 24;
+      const context = canvas.getContext('2d'); context.fillStyle = '#39794b'; context.fillRect(0, 0, 48, 24);
+      const icon = await (await fetch(canvas.toDataURL('image/jpeg'))).arrayBuffer();
+      mockIPC(async (cmd) => {
+        if (cmd === 'load_settings') return null;
+        if (cmd === 'list_models') return { models: [{ id: 'icon', path: '/icon/model.model3.json', name: 'Icon', entry: 'model.model3.json', files: [] }], directory: '/icon', errors: [] };
+        if (cmd === 'read_model_preview') return icon;
+        if (cmd === 'read_model_resource' || cmd === 'save_model_preview') { window.resourceReads++; throw new Error('icon must not render a model'); }
+      }, { shouldMockEvents: true });\n`;
+    await route.fulfill({ response, body: bootstrap + (await response.text()) });
+  });
+  await page.goto('/');
+  await expect(page.locator('#start')).toBeEnabled();
+  await page.getByRole('button', { name: '角色库', exact: true }).click();
+  const icon = page.getByRole('img', { name: 'Icon 角色预览' });
+  await expect(icon).toBeVisible();
+  const dimensions = await icon.evaluate((image: HTMLImageElement) => ({
+    width: image.clientWidth,
+    height: image.clientHeight,
+    naturalWidth: image.naturalWidth,
+  }));
+  expect(dimensions.width).toBe(dimensions.height);
+  expect(dimensions.naturalWidth).toBe(48);
+  expect(await page.evaluate(() => (window as any).resourceReads)).toBe(0);
+});
+
+test('character library generates avatars before selection, imports drops and restores previews', async ({
+  page,
+}, testInfo) => {
+  const fixtures = [process.env.VTUBELEAF_MODEL_FIXTURE, process.env.VTUBELEAF_ALT_MODEL_FIXTURE];
+  test.skip(
+    fixtures.some((fixture) => !fixture),
+    'Set both licensed model fixtures.',
+  );
+  const models = fixtures.map((fixture, index) => {
+    const path = resolve(fixture!),
+      root = dirname(path);
+    const files = readdirSync(root, { recursive: true, withFileTypes: true })
+      .filter((entry) => entry.isFile())
+      .map((entry) =>
+        resolve(entry.parentPath, entry.name)
+          .slice(root.length + 1)
+          .replaceAll('\\', '/'),
+      );
+    return {
+      id: `library-${index}`,
+      path: `/managed/models/${index}/${basename(path)}`,
+      name: basename(root),
+      entry: basename(path),
+      files,
+    };
+  });
+  await page.route('**/library-fixture/**', (route) => {
+    const [id, ...parts] = decodeURIComponent(
+      new URL(route.request().url()).pathname.slice('/library-fixture/'.length),
+    ).split('/');
+    const index = models.findIndex((entry) => entry.id === id),
+      resource = parts.join('/');
+    return index >= 0 && models[index].files.includes(resource)
+      ? route.fulfill({ path: resolve(dirname(resolve(fixtures[index]!)), resource) })
+      : route.abort();
+  });
+  await page.route('**/src/main.tsx*', async (route) => {
+    const response = await route.fetch();
+    const bootstrap = `import { mockIPC, mockWindows } from '/node_modules/@tauri-apps/api/mocks.js';
+      window.isTauri = true; mockWindows('main');
+      const models = ${JSON.stringify(models)};
+      const library = JSON.parse(localStorage.getItem('test-library') ?? JSON.stringify(models));
+      const previews = JSON.parse(localStorage.getItem('test-previews') ?? '{}');
+      mockIPC(async (cmd, args) => {
+        if (cmd === 'load_settings') return JSON.parse(localStorage.getItem('test-settings') ?? 'null');
+        if (cmd === 'save_settings') { localStorage.setItem('test-settings', JSON.stringify(args.settings)); return; }
+        if (cmd === 'list_models') return { models: library, directory: '/managed/models', errors: [] };
+        if (cmd === 'load_model') {
+          if (args.path === '/dropped/broken.zip') throw new Error('模型资源缺失');
+          const model = models.find((model) => model.path === args.path) ?? models[args.path === '/dropped/second.zip' ? 1 : 0];
+          if (!library.some((item) => item.path === model.path)) library.push(model);
+          localStorage.setItem('test-library', JSON.stringify(library));
+          return model;
+        }
+        if (cmd === 'read_model_preview') return new Uint8Array(previews[args.id] ?? []).buffer;
+        if (cmd === 'save_model_preview') { previews[args.id] = args.png; localStorage.setItem('test-previews', JSON.stringify(previews)); return; }
+        if (cmd === 'read_model_resource') return (await fetch('/library-fixture/' + args.id + '/' + encodeURI(args.resource))).arrayBuffer();
+      }, { shouldMockEvents: true });\n`;
+    await route.fulfill({ response, body: bootstrap + (await response.text()) });
+  });
+  await page.goto('/');
+  await expect(page.locator('#start')).toBeEnabled();
+  await page.getByRole('button', { name: '角色库', exact: true }).click();
+  await expect(page.locator('.model-card img')).toHaveCount(2);
+  await expect(page.locator('.model-card[aria-pressed="true"]')).toHaveCount(0);
+  await page.screenshot({ path: testInfo.outputPath('library-before-selection.png') });
+  const drop = async (event: string, paths: string[] = []) =>
+    page.evaluate(
+      async ({ event, paths }) => {
+        const { emit } = await import('/node_modules/@tauri-apps/api/event.js');
+        await emit(event, { paths, position: { x: 300, y: 300 } });
+      },
+      { event, paths },
+    );
+  await drop('tauri://drag-enter', ['/dropped/first']);
+  await expect(page.locator('.model-drop-overlay')).toBeVisible();
+  await page.screenshot({ path: testInfo.outputPath('library-drop.png') });
+  await drop('tauri://drag-leave');
+  await expect(page.locator('.model-drop-overlay')).toBeHidden();
+  await drop('tauri://drag-drop', ['/dropped/first', '/dropped/broken.zip', '/dropped/second.zip']);
+  await expect(page.locator('.model-card')).toHaveCount(2);
+  await expect(page.locator('#notice')).toContainText('已加入 2 个角色');
+  await expect(page.locator('#notice')).toContainText('broken.zip');
+  await expect(page.locator('.model-card img')).toHaveCount(2);
+  for (const entry of models) {
+    await expect(page.getByRole('img', { name: `${entry.name} 角色预览` })).toBeVisible();
+  }
+  const previewPixels = await page.locator('.model-card img').evaluateAll(async (images) =>
+    Promise.all(
+      images.map(async (image) => {
+        await (image as HTMLImageElement).decode();
+        const canvas = document.createElement('canvas');
+        canvas.width = 256;
+        canvas.height = 256;
+        const context = canvas.getContext('2d')!;
+        context.drawImage(image as HTMLImageElement, 0, 0);
+        const data = context.getImageData(0, 0, 256, 256).data;
+        let visible = 0,
+          top = 256;
+        for (let i = 3; i < data.length; i += 4) {
+          if (data[i] < 32) continue;
+          visible++;
+          top = Math.min(top, Math.floor(i / 4 / 256));
+        }
+        return { visible, top };
+      }),
+    ),
+  );
+  await page.screenshot({ path: testInfo.outputPath('library-two-characters.png') });
+  for (const [index, pixels] of previewPixels.entries()) {
+    expect(pixels.visible, models[index].name).toBeGreaterThan(1000);
+    expect(pixels.top, `${models[index].name} avatar top margin`).toBeLessThan(52);
+  }
+  await page.getByRole('button', { name: `切换到 ${models[0].name}`, exact: true }).click();
+  await expect(page.locator('#model-name')).toHaveText(models[0].name);
+  await expect(
+    page.getByRole('button', { name: `切换到 ${models[0].name}`, exact: true }),
+  ).toHaveAttribute('aria-pressed', 'true');
+  await page.reload();
+  await expect(page.locator('#model-name')).toHaveText(models[0].name);
+  await page.getByRole('button', { name: '角色库', exact: true }).click();
+  await expect(page.locator('.model-card img')).toHaveCount(2);
+  await page.getByRole('button', { name: `切换到 ${models[1].name}`, exact: true }).click();
+  await expect(page.locator('#model-name')).toHaveText(models[1].name);
+  await expect(page.locator('#notice')).not.toHaveClass(/error/);
+  await page.setViewportSize({ width: 900, height: 650 });
+  await page.screenshot({ path: testInfo.outputPath('library-compact.png') });
+});
