@@ -1,0 +1,169 @@
+name: Package macOS release
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: package-macos-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  package:
+    runs-on: macos-15
+    timeout-minutes: 120
+    defaults:
+      run:
+        shell: bash
+    env:
+      APP_PATH: src-tauri/target/universal-apple-darwin/release/bundle/macos/VTubeLeaf.app
+    steps:
+      - name: Set temporary packaging directories
+        run: |
+          echo "SIGNING_DIR=$RUNNER_TEMP/vtubeleaf-signing" >> "$GITHUB_ENV"
+          echo "RELEASE_DIR=$RUNNER_TEMP/vtubeleaf-release" >> "$GITHUB_ENV"
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: npm
+      - name: Require production signing credentials
+        env:
+          MACOS_CERTIFICATE_P12_BASE64: ${{ secrets.MACOS_CERTIFICATE_P12_BASE64 }}
+          MACOS_CERTIFICATE_PASSWORD: ${{ secrets.MACOS_CERTIFICATE_PASSWORD }}
+          MACOS_HOST_PROFILE_BASE64: ${{ secrets.MACOS_HOST_PROFILE_BASE64 }}
+          MACOS_CAMERA_PROFILE_BASE64: ${{ secrets.MACOS_CAMERA_PROFILE_BASE64 }}
+          APPLE_API_KEY_P8_BASE64: ${{ secrets.APPLE_API_KEY_P8_BASE64 }}
+          APPLE_API_KEY_ID: ${{ secrets.APPLE_API_KEY_ID }}
+          APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
+          APPLE_TEAM_ID: ${{ vars.APPLE_TEAM_ID }}
+          APPLE_SIGNING_IDENTITY: ${{ vars.APPLE_SIGNING_IDENTITY }}
+        run: node scripts/check-macos-release.mjs
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-apple-darwin,x86_64-apple-darwin
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+          key: macos-universal-release
+      - run: npm ci
+      - name: Check code and packaging prerequisites
+        run: |
+          npm test
+          node scripts/check-macos-release.mjs --self-test
+          node scripts/setup-assets.mjs --self-test
+          cargo test --locked --manifest-path src-tauri/Cargo.toml
+      - name: Prepare verified Cubism R4 and MediaPipe resources
+        run: |
+          npm run setup:assets
+          npm run setup:assets -- --check
+      - name: Build universal release app
+        # Sign only after embedding the camera; do not let Tauri notarize an incomplete app.
+        run: npm run tauri -- build --target universal-apple-darwin --bundles app -- --locked
+      - name: Import Developer ID certificate and provisioning profiles
+        env:
+          MACOS_CERTIFICATE_P12_BASE64: ${{ secrets.MACOS_CERTIFICATE_P12_BASE64 }}
+          MACOS_CERTIFICATE_PASSWORD: ${{ secrets.MACOS_CERTIFICATE_PASSWORD }}
+          MACOS_HOST_PROFILE_BASE64: ${{ secrets.MACOS_HOST_PROFILE_BASE64 }}
+          MACOS_CAMERA_PROFILE_BASE64: ${{ secrets.MACOS_CAMERA_PROFILE_BASE64 }}
+        run: |
+          umask 077
+          mkdir -p "$SIGNING_DIR"
+          printf '%s' "$MACOS_CERTIFICATE_P12_BASE64" | base64 --decode > "$SIGNING_DIR/certificate.p12"
+          printf '%s' "$MACOS_HOST_PROFILE_BASE64" | base64 --decode > "$SIGNING_DIR/host.provisionprofile"
+          printf '%s' "$MACOS_CAMERA_PROFILE_BASE64" | base64 --decode > "$SIGNING_DIR/camera.provisionprofile"
+          keychain="$SIGNING_DIR/release.keychain-db"
+          keychain_password=$(openssl rand -hex 32)
+          echo "::add-mask::$keychain_password"
+          security create-keychain -p "$keychain_password" "$keychain"
+          security set-keychain-settings -lut 7200 "$keychain"
+          security unlock-keychain -p "$keychain_password" "$keychain"
+          security import "$SIGNING_DIR/certificate.p12" -k "$keychain" \
+            -P "$MACOS_CERTIFICATE_PASSWORD" -T /usr/bin/codesign
+          security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$keychain_password" "$keychain" > /dev/null
+          security list-keychains -d user -s "$keychain"
+          rm "$SIGNING_DIR/certificate.p12"
+      - name: Embed camera and sign the complete app
+        env:
+          APPLE_TEAM_ID: ${{ vars.APPLE_TEAM_ID }}
+          APPLE_SIGNING_IDENTITY: ${{ vars.APPLE_SIGNING_IDENTITY }}
+        run: |
+          node scripts/build-camera.mjs --app "$APP_PATH" --arch universal --test \
+            --team-id "$APPLE_TEAM_ID" --identity "$APPLE_SIGNING_IDENTITY" \
+            --host-profile "$SIGNING_DIR/host.provisionprofile" \
+            --extension-profile "$SIGNING_DIR/camera.provisionprofile"
+          executable=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleExecutable' "$APP_PATH/Contents/Info.plist")
+          lipo -verify_arch arm64 x86_64 "$APP_PATH/Contents/MacOS/$executable"
+          lipo -verify_arch arm64 x86_64 "$APP_PATH/Contents/Library/SystemExtensions/com.vtubeleaf.desktop.camera.systemextension/Contents/MacOS/VTubeLeafCamera"
+      - name: Notarize, staple and create distributable DMG and ZIP
+        env:
+          APPLE_API_KEY_P8_BASE64: ${{ secrets.APPLE_API_KEY_P8_BASE64 }}
+          APPLE_API_KEY_ID: ${{ secrets.APPLE_API_KEY_ID }}
+          APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
+          APPLE_SIGNING_IDENTITY: ${{ vars.APPLE_SIGNING_IDENTITY }}
+        run: |
+          umask 077
+          printf '%s' "$APPLE_API_KEY_P8_BASE64" | base64 --decode > "$SIGNING_DIR/AuthKey.p8"
+          notarize() {
+            local archive="$1"
+            local result="$RUNNER_TEMP/notary-result.json"
+            local status=0
+            xcrun notarytool submit "$archive" --key "$SIGNING_DIR/AuthKey.p8" \
+              --key-id "$APPLE_API_KEY_ID" --issuer "$APPLE_API_ISSUER" \
+              --wait --timeout 30m --output-format json > "$result" || status=$?
+            cat "$result"
+            if [ "$status" -ne 0 ] || ! jq -e '.status == "Accepted"' "$result" > /dev/null; then
+              if jq -e '.id' "$result" > /dev/null; then
+                xcrun notarytool log "$(jq -r '.id' "$result")" \
+                  --key "$SIGNING_DIR/AuthKey.p8" --key-id "$APPLE_API_KEY_ID" --issuer "$APPLE_API_ISSUER"
+              fi
+              return 1
+            fi
+          }
+          ditto -c -k --keepParent "$APP_PATH" "$RUNNER_TEMP/notarization.zip"
+          notarize "$RUNNER_TEMP/notarization.zip"
+          xcrun stapler staple "$APP_PATH"
+          xcrun stapler validate "$APP_PATH"
+          codesign --verify --deep --strict --verbose=2 "$APP_PATH"
+          spctl --assess --type execute --verbose=2 "$APP_PATH"
+
+          version=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$APP_PATH/Contents/Info.plist")
+          name="VTubeLeaf-${version}-macos-universal"
+          mkdir -p "$RELEASE_DIR" "$RUNNER_TEMP/dmg-content"
+          ditto -c -k --keepParent "$APP_PATH" "$RELEASE_DIR/$name.zip"
+          ditto "$APP_PATH" "$RUNNER_TEMP/dmg-content/VTubeLeaf.app"
+          ln -s /Applications "$RUNNER_TEMP/dmg-content/Applications"
+          hdiutil create -volname VTubeLeaf -srcfolder "$RUNNER_TEMP/dmg-content" \
+            -format UDZO "$RELEASE_DIR/$name.dmg"
+          codesign --force --timestamp --sign "$APPLE_SIGNING_IDENTITY" "$RELEASE_DIR/$name.dmg"
+          notarize "$RELEASE_DIR/$name.dmg"
+          xcrun stapler staple "$RELEASE_DIR/$name.dmg"
+          xcrun stapler validate "$RELEASE_DIR/$name.dmg"
+          codesign --verify --strict --verbose=2 "$RELEASE_DIR/$name.dmg"
+          spctl --assess --type open --context context:primary-signature --verbose=2 "$RELEASE_DIR/$name.dmg"
+          cd "$RELEASE_DIR"
+          shasum -a 256 "$name.dmg" "$name.zip" > SHA256SUMS.txt
+      - name: Upload signed and notarized release packages
+        uses: actions/upload-artifact@v7
+        with:
+          name: VTubeLeaf-macos-universal-${{ github.run_number }}
+          path: |
+            ${{ runner.temp }}/vtubeleaf-release/*.dmg
+            ${{ runner.temp }}/vtubeleaf-release/*.zip
+            ${{ runner.temp }}/vtubeleaf-release/SHA256SUMS.txt
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 30
+      - name: Remove signing credentials
+        if: always()
+        run: |
+          if [ -n "${SIGNING_DIR:-}" ]; then
+            if [ -f "$SIGNING_DIR/release.keychain-db" ]; then
+              security delete-keychain "$SIGNING_DIR/release.keychain-db"
+            fi
+            rm -rf "$SIGNING_DIR"
+          fi
