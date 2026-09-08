@@ -1,3 +1,4 @@
+mod assets;
 mod models;
 mod motion;
 mod settings;
@@ -318,6 +319,8 @@ pub fn run() {
             load_settings,
             save_settings,
             save_motion,
+            assets::choose_asset,
+            assets::read_asset,
             choose_model,
             load_model,
             list_models,
