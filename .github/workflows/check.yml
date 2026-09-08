@@ -1,0 +1,55 @@
+name: Desktop checks
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  desktop:
+    name: ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            bundle: nsis
+          - os: macos-latest
+            bundle: app
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: npm
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+      - run: npm ci
+      - run: npm test
+      - run: node scripts/check-macos-release.mjs --self-test
+      - run: node scripts/setup-assets.mjs --self-test
+      - run: node scripts/setup-openseeface.mjs --self-test
+      - run: npm run setup:assets
+      - run: npm run setup:assets -- --check
+      - run: npm run tauri -- build --bundles ${{ matrix.bundle }}
+      - run: cargo test --locked --manifest-path src-tauri/Cargo.toml
+      - name: Windows camera integration checks (x64 and x86)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          foreach ($platform in @('x64', 'Win32')) {
+            $output = ".local/camera-check/$platform"
+            cmake -S native/windows-camera -B $output -A $platform -DBUILD_TESTING=ON
+            if ($LASTEXITCODE) { exit $LASTEXITCODE }
+            cmake --build $output --config Release --parallel
+            if ($LASTEXITCODE) { exit $LASTEXITCODE }
+            ctest --test-dir $output -C Release --output-on-failure
+            if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          }
