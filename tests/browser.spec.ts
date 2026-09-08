@@ -1,5 +1,5 @@
 import { test, expect, type Page } from '@playwright/test';
-import { readFileSync, readdirSync } from 'node:fs';
+import { readFileSync, readdirSync, writeFileSync } from 'node:fs';
 import { basename, dirname, resolve } from 'node:path';
 
 // Exercise the shipped bundle under the desktop CSP; Vite's React refresh preamble is dev-only.
@@ -81,6 +81,38 @@ test('official Cubism Core renders a supplied model and applies head, body, eye,
       'ParamMouthOpenY',
     ]),
   );
+  const importedActions = await page.evaluate(async () => {
+    const stage = (window as any).modelStage;
+    const id = stage.expressions[0].id;
+    stage.setExpression(id, true, 0.01);
+    const activated = stage.activeExpressions.has(id);
+    await new Promise((resolve) => setTimeout(resolve, 30));
+    stage.draw({}, 16);
+    const expired = !stage.activeExpressions.has(id);
+    stage.setExpression(id, true);
+    stage.setExpression(id, false);
+    const released = !stage.activeExpressions.has(id);
+    const motion = stage.motions[0].id;
+    stage.toggleHeldMotion(motion);
+    const holding = stage.playing?.mode === 'hold';
+    stage.toggleHeldMotion(motion);
+    const stopped = !stage.playing && Object.keys(stage.held).length === 0;
+    stage.toggleHeldMotion(motion);
+    await stage.load((window as any).modelInfo);
+    stage.toggleHeldMotion(motion);
+    const reloaded = stage.playing?.mode === 'hold';
+    stage.stopMotion();
+    stage.draw({}, 16);
+    return { activated, expired, released, holding, stopped, reloaded };
+  });
+  expect(importedActions).toEqual({
+    activated: true,
+    expired: true,
+    released: true,
+    holding: true,
+    stopped: true,
+    reloaded: true,
+  });
   const neutral = await page
     .locator('#model-test canvas')
     .screenshot({ path: testInfo.outputPath('model-neutral.png') });
@@ -110,6 +142,164 @@ test('official Cubism Core renders a supplied model and applies head, body, eye,
     .locator('#model-test canvas')
     .screenshot({ path: testInfo.outputPath('model-tracked.png') });
   expect(tracked.equals(neutral)).toBe(false);
+  const mapped = await page.evaluate(async () => {
+    const { readSettings, FaceMapper, fromMediaPipe } = await import('/src/state.ts');
+    const stage = (window as any).modelStage;
+    const settings = readSettings({
+      motionMirror: false,
+      eyeClosedThreshold: 0.25,
+      idleMotion: 'Idle:0',
+      neutral: {
+        yaw: 0,
+        pitch: 0,
+        roll: 0,
+        eyeLeft: 0.8,
+        eyeRight: 0.8,
+        mouthOpen: 0,
+        mouthSmile: 0,
+      },
+    });
+    stage.display(settings);
+    const face = fromMediaPipe(
+      [
+        { categoryName: 'eyeBlinkLeft', score: 0.85 },
+        { categoryName: 'eyeBlinkRight', score: 0.85 },
+      ],
+      [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1],
+    );
+    const mapper = new FaceMapper();
+    for (let frame = 0; frame < 90; frame++)
+      stage.draw(
+        mapper.map(
+          { ...face, bodyYaw: -15, armLeft: 1, armRight: 0 },
+          stage.parameters,
+          settings,
+          1 / 30,
+        ),
+        1000 / 30,
+      );
+    return { ...stage.frame };
+  });
+  expect(mapped.ParamEyeLOpen).toBeLessThan(0.001);
+  expect(mapped.ParamEyeROpen).toBeLessThan(0.001);
+  expect(mapped.ParamBodyAngleX).toBeLessThan(-1);
+  expect(mapped.ParamArmLA).toBeCloseTo(1, 2);
+  expect(mapped.ParamArmRA).toBeCloseTo(0, 2);
+  await page
+    .locator('#model-test canvas')
+    .screenshot({ path: testInfo.outputPath('model-mapped-blink-arms.png') });
+  const physics = await page.evaluate(async () => {
+    const stage = (window as any).modelStage;
+    const info = (window as any).modelInfo;
+    const { readSettings } = await import('/src/state.ts');
+    const model = await (await fetch(`/test-model/${encodeURI(info.entry)}`)).json();
+    const data = await (
+      await fetch(`/test-model/${encodeURI(model.FileReferences.Physics)}`)
+    ).json();
+    const ids = [
+      ...new Set(
+        data.PhysicsSettings.flatMap((group: any) =>
+          group.Output.map((o: any) => o.Destination.Id),
+        ),
+      ),
+    ] as string[];
+    const run = async (
+      strength: number,
+      groups: Record<string, number> = {},
+      fps = 60,
+      frameMs = 1000 / 30,
+    ) => {
+      await stage.load(info);
+      stage.display(
+        readSettings({
+          physicsStrength: strength,
+          physicsWind: 0.4,
+          physicsFps: fps,
+          physicsGroups: groups,
+        }),
+      );
+      for (let i = 0; i < 90; i++)
+        stage.draw(
+          { ParamAngleX: Math.sin(i / 9) * 25, ParamAngleZ: Math.cos(i / 13) * 12 },
+          frameMs,
+        );
+      return ids.map((id) => stage.frame[id]);
+    };
+    const groups = stage.physicsGroups.map((group: any) => group.id);
+    const disabled = await run(0);
+    const enabled = await run(1);
+    const amplified = await run(2);
+    const mutedGroups = await run(1, Object.fromEntries(groups.map((id: string) => [id, 0])));
+    await run(1, {}, 30, 1000 / 60);
+    const particles = () => JSON.stringify(stage.model.internalModel.physics._physicsRig.particles);
+    const beforeInterstitial = particles();
+    let afterInterstitial = '';
+    let afterStep = '';
+    const slowFrames: number[][] = [];
+    for (let i = 0; i < 6; i++) {
+      stage.draw({ ParamAngleX: 20, ParamAngleZ: 10 }, 1000 / 60);
+      slowFrames.push(ids.map((id) => stage.frame[id]));
+      if (i === 0) afterInterstitial = particles();
+      if (i === 1) afterStep = particles();
+    }
+    const { mockIPC } = await import('/node_modules/@tauri-apps/api/mocks.js');
+    mockIPC(async (cmd: string, args: { id: string; resource: string }) => {
+      if (cmd !== 'read_model_resource') return;
+      if (args.id === 'no-physics' && args.resource === info.entry) {
+        const withoutPhysics = structuredClone(model);
+        delete withoutPhysics.FileReferences.Physics;
+        return new TextEncoder().encode(JSON.stringify(withoutPhysics)).buffer;
+      }
+      return (await fetch(`/test-model/${encodeURI(args.resource)}`)).arrayBuffer();
+    });
+    stage.draw({ ParamAngleX: -20 }, 1000 / 60);
+    const previousModel = stage.model;
+    const previousEvaluator = previousModel.internalModel.physics.evaluate;
+    await stage.load({ ...info, id: 'no-physics' });
+    const cleared =
+      stage.physicsGroups.length === 0 &&
+      !stage.model.internalModel.physics &&
+      !previousModel.internalModel.coreModel;
+    stage.draw({ ParamAngleX: 20 }, 1000 / 60);
+    await stage.load(info);
+    const freshParticles = particles();
+    stage.draw({ ParamAngleX: 20 }, 1000 / 60);
+    const freshState =
+      stage.model.internalModel.physics.evaluate !== previousEvaluator &&
+      particles() === freshParticles;
+    return {
+      groups,
+      disabled,
+      enabled,
+      amplified,
+      mutedGroups,
+      slowFrames,
+      interstitialStable: afterInterstitial === beforeInterstitial,
+      stepAdvanced: afterStep !== beforeInterstitial,
+      cleared,
+      freshState,
+      reloaded: stage.physicsGroups.map((group: any) => group.id),
+    };
+  });
+  expect(physics.groups.length).toBeGreaterThan(0);
+  expect(physics.reloaded).toEqual(physics.groups);
+  expect(physics.interstitialStable).toBe(true);
+  expect(physics.stepAdvanced).toBe(true);
+  expect(physics.cleared).toBe(true);
+  expect(physics.freshState).toBe(true);
+  expect(physics.enabled.every(Number.isFinite)).toBe(true);
+  expect(physics.enabled.some((value, i) => Math.abs(value - physics.disabled[i]) > 0.001)).toBe(
+    true,
+  );
+  expect(physics.mutedGroups).toEqual(physics.disabled);
+  expect(physics.amplified.some((value, i) => Math.abs(value - physics.enabled[i]) > 0.001)).toBe(
+    true,
+  );
+  expect(
+    physics.slowFrames.every((frame) =>
+      frame.some((value, i) => Math.abs(value - physics.disabled[i]) > 0.001),
+    ),
+  ).toBe(true);
   const controls = await page.evaluate(async () => {
     const stage = (window as any).modelStage;
     const { defaults } = await import('/src/state.ts');
@@ -543,6 +733,12 @@ test('local MediaPipe runs with a synthetic camera and stop releases every track
   await page.getByRole('button', { name: '开始跟踪', exact: true }).click();
   await expect(page.locator('#tracking-status')).toHaveText('正在跟踪', { timeout: 20000 });
   await expect(page.locator('#face-status')).toHaveText('未识别人脸 · 等待 / 回中立');
+  const label = await page
+    .locator('#camera-video')
+    .evaluate(
+      (video: HTMLVideoElement) => (video.srcObject as MediaStream).getVideoTracks()[0].label,
+    );
+  await expect(page.getByText(`正在使用：${label}`, { exact: true })).toBeVisible();
   await page.getByRole('switch', { name: /^显示面捕预览/ }).click();
   await expect(page.locator('#camera-video')).toBeVisible();
   await page.evaluate(() => {
@@ -657,11 +853,12 @@ test('upper body uses real local pose inference and clears cropped joints before
     const deadline = performance.now() + 15000;
     while (tracker.bodyStatus !== '已识别上半身' && performance.now() < deadline)
       await new Promise((resolve) => setTimeout(resolve, 100));
-    // The pose fixture has a small profile face; inspect real pose output independently.
-    return { body: (tracker as any).body, errors: state.errors, status: tracker.bodyStatus };
+    // The small profile face is not detected; body data must still reach the consumer.
+    return { body: state.frames.at(-1), errors: state.errors, status: tracker.bodyStatus };
   });
   expect(full.errors).toEqual([]);
   expect(full.status).toBe('已识别上半身');
+  expect(full.body.yaw).toBeUndefined();
   expect(Number.isFinite(full.body.bodyYaw)).toBe(true);
   expect(Number.isFinite(full.body.bodyPitch)).toBe(true);
   expect(full.body.armLeft).toBeGreaterThan(0.35);
@@ -729,6 +926,234 @@ test('upper body uses real local pose inference and clears cropped joints before
   expect(stopped).toEqual({ released: true, errors: [] });
 });
 
+test('hand signals remain stable between slower inference ticks and clear on absence or failure', async ({
+  page,
+}) => {
+  await page.goto('/?output=1');
+  const result = await page.evaluate(async () => {
+    const { Tracker } = await import('/src/tracker.ts');
+    const video = document.createElement('video');
+    let now = 1000;
+    Object.defineProperties(video, {
+      readyState: { value: 4 },
+      currentTime: { get: () => now / 1000 },
+    });
+    const frames: any[] = [];
+    const errors: string[] = [];
+    const tracker: any = new Tracker(
+      video,
+      (frame: any) => frames.push(frame),
+      (error: string) => errors.push(error),
+    );
+    tracker.trackingFps = 30;
+    tracker.landmarker = {
+      detectForVideo: () => ({
+        facialTransformationMatrixes: [{ data: [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1] }],
+        faceBlendshapes: [{ categories: [] }],
+        faceLandmarks: [],
+      }),
+      close() {},
+    };
+    const points = Array.from({ length: 21 }, (_, i) => ({ x: 0.5, y: 0.8 - i * 0.02, z: 0 }));
+    let mode = 'present';
+    let handCalls = 0;
+    tracker.hand = {
+      detectForVideo: () => {
+        handCalls++;
+        if (mode === 'error') throw new Error('synthetic hand inference failure');
+        return mode === 'present'
+          ? {
+              landmarks: [points],
+              worldLandmarks: [points],
+              handedness: [[{ categoryName: 'Left', score: 1 }]],
+            }
+          : { landmarks: [], worldLandmarks: [], handedness: [] };
+      },
+      close() {},
+    };
+    const realNow = performance.now.bind(performance);
+    performance.now = () => now;
+    const tick = (time: number) => {
+      now = time;
+      tracker.tick(tracker.generation);
+      clearTimeout(tracker.timer);
+    };
+    try {
+      [1000, 1033, 1066, 1101].forEach(tick);
+      const steady = frames.splice(0);
+      const samples = handCalls;
+      mode = 'absent';
+      [1202, 1235].forEach(tick);
+      const absent = frames.splice(0);
+      mode = 'present';
+      tick(1303);
+      mode = 'error';
+      [1404, 1437].forEach(tick);
+      const failed = frames.slice(-2);
+      return { steady, samples, absent, failed, errors };
+    } finally {
+      performance.now = realNow;
+      await tracker.stop();
+    }
+  });
+  expect(result.samples).toBe(2);
+  expect(result.steady).toHaveLength(4);
+  for (const frame of result.steady) {
+    expect(Number.isFinite(frame.yaw)).toBe(true);
+    expect(frame.handLeftFound).toBe(1);
+    expect(frame.handLeftIndex).toBeCloseTo(1);
+  }
+  for (const frame of [...result.absent, ...result.failed]) {
+    expect(frame.handLeftFound).toBe(0);
+    expect(frame.handLeftIndex).toBeUndefined();
+    expect(Number.isFinite(frame.yaw)).toBe(true);
+  }
+  expect(result.errors).toEqual([]);
+});
+
+test('local hands survive a hidden face and clear when hands leave the frame', async ({
+  page,
+}, testInfo) => {
+  const fixture = process.env.VTUBELEAF_HAND_FIXTURE;
+  test.skip(!fixture, 'Set VTUBELEAF_HAND_FIXTURE to a local hand image you may use for testing.');
+  test.setTimeout(60000);
+  await page.route('**/test-hands.jpg', (route) => route.fulfill({ path: resolve(fixture!) }));
+  await page.goto('/?output=1');
+  const started = await page.evaluate(async () => {
+    const { Tracker } = await import('/src/tracker.ts');
+    const { defaults } = await import('/src/state.ts');
+    const picture = new Image();
+    picture.src = '/test-hands.jpg';
+    await picture.decode();
+    const source = document.createElement('canvas');
+    source.width = picture.width;
+    source.height = picture.height;
+    const ctx = source.getContext('2d')!;
+    const state = ((window as any).handTest = {
+      frames: [] as any[],
+      errors: [] as string[],
+      blank: false,
+      hideFace: false,
+    });
+    const paint = () => {
+      ctx.drawImage(picture, 0, 0);
+      ctx.fillStyle = '#202020';
+      if (state.blank) ctx.fillRect(0, 0, source.width, source.height);
+      else if (state.hideFace) ctx.fillRect(0, 450, source.width, 160);
+    };
+    paint();
+    const stream = source.captureStream(24);
+    (state as any).stream = stream;
+    (state as any).drawing = setInterval(paint, 1000 / 24);
+    let constraints: MediaStreamConstraints | undefined;
+    navigator.mediaDevices.getUserMedia = async (value) => {
+      constraints = value;
+      return stream;
+    };
+    const container = document.createElement('div');
+    container.style.cssText = 'position:fixed;inset:0;background:#102019;z-index:20';
+    const video = document.createElement('video');
+    const preview = document.createElement('canvas');
+    video.style.cssText = preview.style.cssText =
+      'position:absolute;width:100%;height:100%;object-fit:contain';
+    container.append(video, preview);
+    document.body.append(container);
+    const tracker = new Tracker(
+      video,
+      (face: any) => state.frames.push(face),
+      (error: string) => state.errors.push(error),
+      preview,
+    );
+    (state as any).tracker = tracker;
+    await tracker.start({
+      ...defaults,
+      upperBody: false,
+      handTracking: true,
+      cameraResolution: '1080p',
+      trackingFps: 24,
+      handFps: 10,
+    });
+    return { constraints, settings: tracker.cameraSettings };
+  });
+  expect(started.constraints).toMatchObject({
+    audio: false,
+    video: { width: { ideal: 1920 }, height: { ideal: 1080 }, frameRate: { ideal: 24 } },
+  });
+  expect(started.settings).toContain('640');
+  await expect
+    .poll(
+      () =>
+        page.evaluate(() => {
+          const f = (window as any).handTest.frames.at(-1);
+          return f?.handLeftFound === 1 && f?.handRightFound === 1;
+        }),
+      { timeout: 15000 },
+    )
+    .toBe(true);
+  await page.screenshot({ path: testInfo.outputPath('hand-landmarks.png') });
+  await page.evaluate(() => {
+    const t = (window as any).handTest;
+    t.hideFace = true;
+    t.frames.length = 0;
+  });
+  await expect
+    .poll(
+      () =>
+        page.evaluate(() => {
+          const frames = (window as any).handTest.frames;
+          return (
+            frames.length >= 3 &&
+            frames
+              .slice(-3)
+              .every(
+                (f: any) => f.yaw === undefined && f.handLeftFound === 1 && f.handRightFound === 1,
+              )
+          );
+        }),
+      { timeout: 15000 },
+    )
+    .toBe(true);
+  await page.evaluate(() => {
+    const t = (window as any).handTest;
+    t.blank = true;
+    t.frames.length = 0;
+  });
+  await expect
+    .poll(
+      () =>
+        page.evaluate(() => {
+          const frames = (window as any).handTest.frames;
+          return (
+            frames.length >= 3 &&
+            frames
+              .slice(-3)
+              .every(
+                (f: any) =>
+                  f.handLeftFound === 0 &&
+                  f.handRightFound === 0 &&
+                  f.handLeftIndex === undefined &&
+                  f.handRightIndex === undefined,
+              )
+          );
+        }),
+      { timeout: 15000 },
+    )
+    .toBe(true);
+  expect(
+    await page.evaluate(async () => {
+      const t = (window as any).handTest;
+      clearInterval(t.drawing);
+      await t.tracker.stop();
+      return {
+        errors: t.errors,
+        released: t.stream
+          .getTracks()
+          .every((track: MediaStreamTrack) => track.readyState === 'ended'),
+      };
+    }),
+  ).toEqual({ errors: [], released: true });
+});
+
 for (const upperBody of ['enabled', 'disabled', 'unavailable'] as const) {
   test(`local MediaPipe recognizes a supplied face image with upper body ${upperBody}`, async ({
     page,
@@ -739,13 +1164,19 @@ for (const upperBody of ['enabled', 'disabled', 'unavailable'] as const) {
       'Set VTUBELEAF_FACE_FIXTURE to a local face image you may use for testing.',
     );
     let poseRequests = 0;
+    let handRequests = 0;
     page.on('request', (request) => {
       if (request.url().endsWith('/pose_landmarker_lite.task')) poseRequests++;
+      if (request.url().endsWith('/hand_landmarker.task')) handRequests++;
     });
-    if (upperBody === 'unavailable')
+    if (upperBody === 'unavailable') {
       await page.route('**/pose_landmarker_lite.task', (route) =>
         route.fulfill({ status: 404, body: '' }),
       );
+      await page.route('**/hand_landmarker.task', (route) =>
+        route.fulfill({ status: 404, body: '' }),
+      );
+    }
     await page.route('**/test-face.png', (route) =>
       route.fulfill({ path: resolve(fixture!), contentType: 'image/png' }),
     );
@@ -776,17 +1207,23 @@ for (const upperBody of ['enabled', 'disabled', 'unavailable'] as const) {
         (error: string) => errors.push(error),
       );
       try {
-        const started = await tracker.start({ ...defaults, upperBody: upperBody !== 'disabled' });
+        const started = await tracker.start({
+          ...defaults,
+          upperBody: upperBody !== 'disabled',
+          handTracking: upperBody === 'unavailable',
+        });
         const deadline = performance.now() + 15000;
         while (faces < 3 && performance.now() < deadline)
           await new Promise((resolve) => setTimeout(resolve, 100));
         const bodyStatus = tracker.bodyStatus;
+        const handStatus = tracker.handStatus;
         await tracker.stop();
         return {
           started,
           faces,
           errors,
           bodyStatus,
+          handStatus,
           released: stream.getTracks().every((track) => track.readyState === 'ended'),
         };
       } finally {
@@ -799,12 +1236,14 @@ for (const upperBody of ['enabled', 'disabled', 'unavailable'] as const) {
     expect(result.errors).toEqual([]);
     expect(result.released).toBe(true);
     expect(poseRequests).toBe(upperBody === 'disabled' ? 0 : 1);
+    expect(handRequests).toBe(upperBody === 'unavailable' ? 1 : 0);
     if (upperBody === 'disabled') expect(result.bodyStatus).toBe('上半身识别已关闭');
     if (upperBody === 'unavailable') expect(result.bodyStatus).toContain('上半身资源加载失败');
+    if (upperBody === 'unavailable') expect(result.handStatus).toContain('手部资源加载失败');
   });
 }
 
-test('face preview overlays live landmarks and clears them when paused or stopped', async ({
+test('face preview hides the camera by default, toggles it independently and clears lost landmarks', async ({
   page,
 }, testInfo) => {
   const fixture = process.env.VTUBELEAF_FACE_FIXTURE;
@@ -827,6 +1266,8 @@ test('face preview overlays live landmarks and clears them when paused or stoppe
     (window as any).faceDrawing = setInterval(() => ctx.drawImage(picture, 0, 0), 1000 / 24);
     navigator.mediaDevices.getUserMedia = async () => stream;
   });
+  const showCamera = page.getByRole('switch', { name: /^显示真人画面/ });
+  await expect(showCamera).not.toBeChecked();
   await page.getByRole('switch', { name: /^显示面捕预览/ }).click();
   await page.locator('#start').click();
   await expect(page.locator('#tracking-status')).toHaveText('正在跟踪', { timeout: 20000 });
@@ -850,7 +1291,28 @@ test('face preview overlays live landmarks and clears them when paused or stoppe
       );
     }),
   ).toBe(true);
+  await expect(page.locator('#camera-video')).toHaveCSS('opacity', '0');
+  const videoTime = await page
+    .locator('#camera-video')
+    .evaluate((video: HTMLVideoElement) => video.currentTime);
+  await expect(mesh).toBeVisible();
+  await expect.poll(drawnPixels).toBeGreaterThan(1000);
+  await expect
+    .poll(() =>
+      page.locator('#camera-video').evaluate((video: HTMLVideoElement) => video.currentTime),
+    )
+    .toBeGreaterThan(videoTime);
+  await page.screenshot({ path: testInfo.outputPath('face-landmarks-only.png') });
+  await showCamera.click();
+  await expect(showCamera).toBeChecked();
+  await expect(page.locator('#camera-video')).toHaveCSS('opacity', '1');
+  await expect(mesh).toBeVisible();
+  await expect.poll(drawnPixels).toBeGreaterThan(1000);
   await page.screenshot({ path: testInfo.outputPath('face-mesh-preview.png') });
+  await showCamera.click();
+  await expect(showCamera).not.toBeChecked();
+  await expect(page.locator('#camera-video')).toHaveCSS('opacity', '0');
+  await expect.poll(drawnPixels).toBeGreaterThan(1000);
   await page.getByRole('switch', { name: '镜像摄像头预览', exact: true }).click();
   expect(await mesh.evaluate((canvas) => getComputedStyle(canvas).transform)).toBe('none');
   await page.locator('#pause').click();
@@ -870,6 +1332,8 @@ test('face preview overlays live landmarks and clears them when paused or stoppe
   await expect(mesh).toBeHidden();
   await expect.poll(drawnPixels).toBe(0);
   await page.evaluate(() => clearInterval((window as any).faceDrawing));
+  await page.reload();
+  await expect(showCamera).not.toBeChecked();
 });
 
 test('camera permission completing after stop releases the late stream', async ({ page }) => {
@@ -946,6 +1410,144 @@ test('stopping during OSF subscription prevents the old start and cleans listene
   expect(result.calls).toContain('plugin:event|unlisten');
 });
 
+test('NVIDIA experimental settings are visible on Windows and survive reload', async ({
+  page,
+}, testInfo) => {
+  await page.addInitScript(() => Object.defineProperty(navigator, 'platform', { value: 'Win32' }));
+  await page.goto('/');
+  await page.locator('#engine').selectOption('nvidia');
+  await expect(page.locator('#engine option:checked')).toHaveText('NVIDIA RTX · 实验中');
+  const options = page.locator('#nvidia-options');
+  await expect(options).toBeVisible();
+  await expect(options).toContainText('尚未完成实机验证');
+  await page.locator('#nvidia-path').fill('C:\\ARSDK\\bin\\VTubeLeafNvidia.exe');
+  await page.locator('#nvidia-model-dir').fill('C:\\ARSDK\\bin\\models');
+  await page.locator('#nvidia-camera').fill('2');
+  await page.locator('#nvidia-fps').selectOption('24');
+  await page.locator('#nvidia-resolution').selectOption('720p');
+  await expect
+    .poll(() =>
+      page.evaluate(
+        () => JSON.parse(localStorage.getItem('vtubeleaf-preview') || '{}').cameraResolution,
+      ),
+    )
+    .toBe('720p');
+  await page.reload();
+  await expect(page.locator('#engine')).toHaveValue('nvidia');
+  await expect(page.locator('#nvidia-path')).toHaveValue('C:\\ARSDK\\bin\\VTubeLeafNvidia.exe');
+  await expect(page.locator('#nvidia-model-dir')).toHaveValue('C:\\ARSDK\\bin\\models');
+  await expect(page.locator('#nvidia-camera')).toHaveValue('2');
+  await expect(page.locator('#nvidia-fps')).toHaveValue('24');
+  await expect(page.locator('#nvidia-resolution')).toHaveValue('720p');
+  await options.screenshot({ path: testInfo.outputPath('nvidia-settings.png') });
+  await page.screenshot({ path: testInfo.outputPath('nvidia-windows.png') });
+});
+
+test('NVIDIA is hidden on macOS but a restored setting explains the unsupported platform', async ({
+  page,
+}) => {
+  await page.addInitScript(() =>
+    Object.defineProperty(navigator, 'platform', { value: 'MacIntel' }),
+  );
+  await page.goto('/');
+  await expect(page.locator('#engine')).toHaveValue('mediapipe');
+  await expect(page.locator('#engine option[value="nvidia"]')).toHaveCount(0);
+  await page.evaluate(() =>
+    localStorage.setItem('vtubeleaf-preview', JSON.stringify({ engine: 'nvidia' })),
+  );
+  await page.reload();
+  await expect(page.locator('#engine option[value="nvidia"]')).toBeDisabled();
+  await expect(page.locator('#nvidia-options')).toContainText('此平台不支持');
+  await page.locator('#engine').selectOption('mediapipe');
+  await expect(page.locator('#nvidia-options')).toBeHidden();
+});
+
+test('NVIDIA frames respect pause, errors and native engine switching', async ({ page }) => {
+  await page.goto('/?output=1');
+  const result = await page.evaluate(async () => {
+    const mocks = '/node_modules/@tauri-apps/api/mocks.js',
+      events = '/node_modules/@tauri-apps/api/event.js';
+    const tracking = '/src/tracker.ts',
+      state = '/src/state.ts';
+    const { mockIPC } = await import(mocks),
+      { emit } = await import(events);
+    const { Tracker } = await import(tracking),
+      { defaults } = await import(state);
+    const calls: { cmd: string; args: unknown }[] = [],
+      frames: { eyeLeft: number }[] = [],
+      errors: string[] = [];
+    let cameraRequests = 0;
+    navigator.mediaDevices.getUserMedia = async () => {
+      cameraRequests++;
+      throw new Error('Native tracker must own the camera');
+    };
+    mockIPC(
+      (cmd: string, args: unknown) => {
+        calls.push({ cmd, args });
+      },
+      { shouldMockEvents: true },
+    );
+    const tracker = new Tracker(
+      document.createElement('video'),
+      (frame: { eyeLeft: number }) => frames.push(frame),
+      (error: string) => errors.push(error),
+    );
+    const settings = {
+      ...defaults,
+      engine: 'nvidia',
+      nvidiaPath: 'C:\\SDK\\VTubeLeafNvidia.exe',
+      nvidiaModelDir: 'C:\\SDK\\models',
+      camera: 2,
+      trackingFps: 24,
+      cameraResolution: '720p',
+    };
+    const started = await tracker.start(settings);
+    const packet = { detected: true, rotation: [0, 0, 0, 1], expressions: Array(53).fill(0) };
+    packet.expressions[10] = 0.75;
+    await emit('nvidia-frame', packet);
+    tracker.pause(true);
+    await emit('nvidia-frame', packet);
+    tracker.pause(false);
+    await emit('nvidia-frame', { ...packet, expressions: [] });
+    await emit('nvidia-frame', { detected: false });
+    await tracker.start({ ...defaults, engine: 'openseeface' });
+    await emit('nvidia-frame', packet);
+    await emit('nvidia-error', 'stale error');
+    await tracker.start(settings);
+    await emit('nvidia-error', 'SDK load failed');
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    await emit('nvidia-frame', packet);
+    await tracker.stop();
+    return {
+      started,
+      calls: calls.filter(({ cmd }) => !cmd.startsWith('plugin:')),
+      frames,
+      errors,
+      cameraRequests,
+    };
+  });
+  expect(result.started).toBe(true);
+  expect(result.cameraRequests).toBe(0);
+  expect(result.frames).toHaveLength(1);
+  expect(result.frames[0].eyeLeft).toBe(0.25);
+  expect(result.errors).toEqual(['NVIDIA RTX（实验中）：SDK load failed']);
+  expect(result.calls.map(({ cmd }) => cmd)).toEqual([
+    'start_nvidia',
+    'stop_nvidia',
+    'start_openseeface',
+    'stop_openseeface',
+    'start_nvidia',
+    'stop_nvidia',
+  ]);
+  expect(result.calls[0].args).toEqual({
+    executable: 'C:\\SDK\\VTubeLeafNvidia.exe',
+    modelDir: 'C:\\SDK\\models',
+    camera: 2,
+    fps: 24,
+    resolution: '720p',
+  });
+});
+
 test('OSF process errors stop reception and return a retryable failure', async ({ page }) => {
   await page.goto('/?output=1');
   const result = await page.evaluate(async () => {
@@ -1018,6 +1620,23 @@ test('model controls save profiles, expressions, shortcuts and a manual motion r
         if (cmd === 'load_model') return { ...fixtureInfo, path: args.path };
         if (cmd === 'read_model_resource') return (await fetch('/test-model/' + encodeURI(args.resource))).arrayBuffer();
         if (cmd === 'save_motion') { window.savedMotion = args.motion; return true; }
+        if (cmd === 'read_model_vts_config') {
+          window.autoVtsReads = (window.autoVtsReads || 0) + 1;
+          if (chosen > 1) return { Version: 99 };
+          return { Version: 1, ParameterSettings: [
+            { OutputLive2D: 'ParamAngleX', Input: 'FaceAngleX', InputRangeLower: -18, InputRangeUpper: 18,
+              OutputRangeLower: -20, OutputRangeUpper: 20, Smoothing: 0, ClampInput: true, ClampOutput: true }
+          ], Hotkeys: [] };
+        }
+        if (cmd === 'choose_vts_config') {
+          if (window.vtsImported) return { Version: 99 };
+          window.vtsImported = true;
+          return { Version: 1, ParameterSettings: [
+            { OutputLive2D: 'ParamAngleY', Input: 'FaceAngleY', InputRangeLower: -30, InputRangeUpper: 30,
+              OutputRangeLower: -20, OutputRangeUpper: 20, Smoothing: 20, ClampInput: true, ClampOutput: true },
+            { OutputLive2D: 'ParamAngleZ', Input: 'UnsupportedInput' }
+          ], Hotkeys: [{ Action: 'RemoveAllExpressions', Triggers: { Trigger1: 'LeftShift', Trigger2: 'N9', Trigger3: '' }, IsActive: true, IsGlobal: true }] };
+        }
         if (cmd === 'plugin:global-shortcut|register') { window.savedShortcut = args.shortcuts; return; }
       }, { shouldMockEvents: true });\n`;
     await route.fulfill({ response, body: bootstrap + (await response.text()) });
@@ -1026,6 +1645,16 @@ test('model controls save profiles, expressions, shortcuts and a manual motion r
   await page.locator('#import-empty').click();
   await expect(page.locator('#model-name')).toHaveText('Haru');
   await expect(page.locator('#import-model')).toBeEnabled();
+  await expect
+    .poll(() => page.evaluate(() => (window as any).savedSettings?.mappings.ParamAngleX?.inputMin))
+    .toBe(-0.6);
+  expect(
+    await page.evaluate(
+      () =>
+        (window as any).savedSettings.profiles[(window as any).savedSettings.modelPath].mappings
+          .ParamAngleX.inputMin,
+    ),
+  ).toBe(-0.6);
   const stageArea = (await page.locator('#stage').boundingBox())!;
   const center = { x: stageArea.x + stageArea.width / 2, y: stageArea.y + stageArea.height / 2 };
   await page.mouse.move(center.x, center.y);
@@ -1072,6 +1701,21 @@ test('model controls save profiles, expressions, shortcuts and a manual motion r
       ),
     )
     .toBe(-0.5);
+  await page.getByRole('button', { name: '物理效果', exact: true }).click();
+  await page.getByRole('slider', { name: '整体强度', exact: true }).focus();
+  await page.keyboard.press('Home');
+  await page.keyboard.press('ArrowRight');
+  await page.locator('#physics-fps').selectOption('60');
+  const physicsGroup = page.locator('[id^="physics-group-"] [role="slider"]').first();
+  await expect(physicsGroup).toBeVisible();
+  await physicsGroup.focus();
+  await page.keyboard.press('Home');
+  await expect.poll(() => page.evaluate(() => (window as any).savedSettings?.physicsFps)).toBe(60);
+  expect(await page.evaluate(() => (window as any).savedSettings.physicsStrength)).toBe(0.05);
+  expect(
+    Object.values(await page.evaluate(() => (window as any).savedSettings.physicsGroups)),
+  ).toContain(0);
+  await page.screenshot({ path: testInfo.outputPath('studio-physics-controls.png') });
   const expression = page.locator('#expression-buttons button').first();
   await expression.click();
   await expect(expression).toHaveAttribute('aria-pressed', 'true');
@@ -1103,6 +1747,12 @@ test('model controls save profiles, expressions, shortcuts and a manual motion r
     .poll(() => page.evaluate(() => (window as any).savedSettings?.modelPath))
     .toBe(modelPath + '-second');
   expect(await page.evaluate(() => (window as any).savedSettings.mappings)).toEqual({});
+  expect(
+    await page.evaluate(() => (window as any).savedSettings.vtsImportReport.join(' ')),
+  ).toContain('不是受支持的');
+  await expect(page.locator('#notice')).toContainText('VTS');
+  expect(await page.evaluate(() => (window as any).savedSettings.physicsStrength)).toBe(1);
+  expect(await page.evaluate(() => (window as any).savedSettings.physicsGroups)).toEqual({});
   await page.locator('.model-card').first().click();
   await expect
     .poll(() => page.evaluate(() => (window as any).savedSettings?.modelPath))
@@ -1110,7 +1760,30 @@ test('model controls save profiles, expressions, shortcuts and a manual motion r
   expect(
     await page.evaluate(() => (window as any).savedSettings.mappings.ParamAngleX.inputMin),
   ).toBe(-0.5);
+  expect(await page.evaluate(() => (window as any).savedSettings.physicsStrength)).toBe(0.05);
+  expect(
+    Object.values(await page.evaluate(() => (window as any).savedSettings.physicsGroups)),
+  ).toContain(0);
   await expect(page.locator('#notice')).not.toHaveClass(/error/);
+  expect(await page.evaluate(() => (window as any).autoVtsReads)).toBe(2);
+  await page.getByRole('button', { name: '角色', exact: true }).click();
+  await page.locator('#import-vts').click();
+  await expect
+    .poll(() => page.evaluate(() => (window as any).savedSettings?.mappings.ParamAngleY?.inputMin))
+    .toBe(-1);
+  const imported = await page.evaluate(() => (window as any).savedSettings);
+  expect(imported.mappings.ParamAngleX.inputMin).toBe(-0.5);
+  expect(imported.hotkeys['clear-expressions']).toBe('Shift+Digit9');
+  expect(imported.profiles[modelPath].vtsImportReport).toEqual(imported.vtsImportReport);
+  await page.getByRole('button', { name: 'VTS 导入结果', exact: true }).click();
+  await expect(page.getByText(/不支持输入源 UnsupportedInput/)).toBeVisible();
+  await page.screenshot({ path: testInfo.outputPath('vts-import.png') });
+  await page.locator('#import-vts').click();
+  await expect(page.locator('#notice')).toContainText('不是受支持的');
+  expect(await page.evaluate(() => (window as any).savedSettings.mappings)).toEqual(
+    imported.mappings,
+  );
+  await page.getByRole('button', { name: '角色库', exact: true }).click();
   await page.getByRole('button', { name: '打开角色文件夹' }).click();
   await expect(page.locator('#notice')).toContainText('无法打开角色文件夹');
   await expect(page.locator('#notice')).toHaveClass(/error/);
@@ -1204,6 +1877,14 @@ test('character library generates avatars before selection, imports drops and re
         if (cmd === 'read_model_preview') return new Uint8Array(previews[args.id] ?? []).buffer;
         if (cmd === 'save_model_preview') { previews[args.id] = args.png; localStorage.setItem('test-previews', JSON.stringify(previews)); return; }
         if (cmd === 'read_model_resource') return (await fetch('/library-fixture/' + args.id + '/' + encodeURI(args.resource))).arrayBuffer();
+        if (cmd === 'read_model_vts_config') {
+          localStorage.setItem('test-vts-reads', String(Number(localStorage.getItem('test-vts-reads') ?? 0) + 1));
+          if (args.id === models[0].id) throw new Error('发现多个 VTS 配置，请手动选择需要的配置');
+          return { Version: 1, ParameterSettings: [
+            { OutputLive2D: 'PARAM_ANGLE_X', Input: 'FaceAngleX', InputRangeLower: -18, InputRangeUpper: 18,
+              OutputRangeLower: -20, OutputRangeUpper: 20, Smoothing: 0, ClampInput: true, ClampOutput: true }
+          ], Hotkeys: [] };
+        }
       }, { shouldMockEvents: true });\n`;
     await route.fulfill({ response, body: bootstrap + (await response.text()) });
   });
@@ -1230,6 +1911,10 @@ test('character library generates avatars before selection, imports drops and re
   await expect(page.locator('.model-card')).toHaveCount(2);
   await expect(page.locator('#notice')).toContainText('已加入 2 个角色');
   await expect(page.locator('#notice')).toContainText('broken.zip');
+  await expect(page.locator('#notice')).toContainText('多个 VTS 配置');
+  const saved = await page.evaluate(() => JSON.parse(localStorage.getItem('test-settings')!));
+  expect(saved.profiles[models[0].path].vtsImportReport.join(' ')).toContain('多个 VTS 配置');
+  expect(saved.mappings.PARAM_ANGLE_X.inputMin).toBe(-0.6);
   await expect(page.locator('.model-card img')).toHaveCount(2);
   for (const entry of models) {
     await expect(page.getByRole('img', { name: `${entry.name} 角色预览` })).toBeVisible();
@@ -1260,6 +1945,20 @@ test('character library generates avatars before selection, imports drops and re
     expect(pixels.visible, models[index].name).toBeGreaterThan(1000);
     expect(pixels.top, `${models[index].name} avatar top margin`).toBeLessThan(52);
   }
+  await page.getByRole('button', { name: '角色', exact: true }).click();
+  await page.locator('#mapping-parameter').selectOption('PARAM_ANGLE_X');
+  await page.locator('#mapping-inputMin').fill('-0.4');
+  await page.locator('#save-mapping').click();
+  await expect
+    .poll(() =>
+      page.evaluate(
+        () => JSON.parse(localStorage.getItem('test-settings')!).mappings.PARAM_ANGLE_X.inputMin,
+      ),
+    )
+    .toBe(-0.4);
+  await page.getByRole('button', { name: 'VTS 导入结果', exact: true }).click();
+  await page.screenshot({ path: testInfo.outputPath('vts-auto-import.png') });
+  await page.getByRole('button', { name: '角色库', exact: true }).click();
   await page.getByRole('button', { name: `切换到 ${models[0].name}`, exact: true }).click();
   await expect(page.locator('#model-name')).toHaveText(models[0].name);
   await expect(
@@ -1272,6 +1971,781 @@ test('character library generates avatars before selection, imports drops and re
   await page.getByRole('button', { name: `切换到 ${models[1].name}`, exact: true }).click();
   await expect(page.locator('#model-name')).toHaveText(models[1].name);
   await expect(page.locator('#notice')).not.toHaveClass(/error/);
+  await expect
+    .poll(() =>
+      page.evaluate(
+        () => JSON.parse(localStorage.getItem('test-settings')!).mappings.PARAM_ANGLE_X.inputMin,
+      ),
+    )
+    .toBe(-0.4);
+  expect(await page.evaluate(() => localStorage.getItem('test-vts-reads'))).toBe('2');
   await page.setViewportSize({ width: 900, height: 650 });
   await page.screenshot({ path: testInfo.outputPath('library-compact.png') });
+});
+
+test('quality settings preserve privacy and calibration samples cancel on stop', async ({
+  page,
+}, testInfo) => {
+  await page.route('**/src/main.tsx*', async (route) => {
+    const response = await route.fetch();
+    const bootstrap = `import { mockIPC } from '/node_modules/@tauri-apps/api/mocks.js';
+      import { emit } from '/node_modules/@tauri-apps/api/event.js';
+      mockIPC(() => {}, { shouldMockEvents: true });
+      window.qualityEmit = emit;
+      localStorage.setItem('vtubeleaf-preview', JSON.stringify({engine:'openseeface'}));\n`;
+    await route.fulfill({ response, body: bootstrap + (await response.text()) });
+  });
+  await page.goto('/');
+  await expect(page.locator('#render-fps')).toBeVisible();
+  await page.locator('#render-fps').selectOption('60');
+  await page.locator('#start').click();
+  await expect(page.locator('#tracking-status')).toHaveText('正在跟踪');
+  await page.evaluate(() => {
+    let n = 0;
+    (window as any).qualityTimer = setInterval(
+      () =>
+        (window as any).qualityEmit('openseeface-frame', {
+          yaw: 8 + (n++ % 2 ? 0.5 : -0.5),
+          pitch: 0,
+          roll: 0,
+          eyeLeft: 0.8,
+          eyeRight: 0.9,
+          mouthOpen: 0,
+          mouthSmile: 0,
+        }),
+      35,
+    );
+  });
+  await expect(page.locator('#face-status')).toHaveText('已识别人脸');
+  await page.locator('#calibrate').click();
+  await expect(page.locator('#calibrate')).toBeDisabled();
+  await expect
+    .poll(() =>
+      page.evaluate(
+        () => JSON.parse(localStorage.getItem('vtubeleaf-preview') || '{}').neutral?.yaw,
+      ),
+    )
+    .toBeGreaterThan(7.4);
+  const neutral = await page.evaluate(
+    () => JSON.parse(localStorage.getItem('vtubeleaf-preview')!).neutral,
+  );
+  expect(neutral.yaw).toBeLessThan(8.6);
+  await page.locator('#calibrate').click();
+  await page.locator('#stop').click();
+  await expect(page.locator('#tracking-status')).toHaveText('尚未开始');
+  await page.evaluate(() => clearInterval((window as any).qualityTimer));
+  await page.getByText('眼睛、嘴部与丢脸恢复', { exact: true }).click();
+  await page.locator('#eye-link').selectOption('always');
+  await page.locator('#lost-mode').selectOption('hold');
+  await expect
+    .poll(() =>
+      page.evaluate(() => JSON.parse(localStorage.getItem('vtubeleaf-preview') || '{}').lostMode),
+    )
+    .toBe('hold');
+  const saved = await page.evaluate(() => JSON.parse(localStorage.getItem('vtubeleaf-preview')!));
+  expect(saved.neutral).toEqual(neutral);
+  expect(saved.renderFps).toBe(60);
+  expect(saved.previewCamera).toBe(false);
+  expect(saved.lipSyncMode).toBe('off');
+  expect(saved.handTracking).toBe(false);
+  await page.screenshot({ path: testInfo.outputPath('quality-controls.png') });
+  await page.locator('#engine').selectOption('mediapipe');
+  await page.getByText('采集质量与帧率', { exact: true }).click();
+  await page.locator('#camera-resolution').selectOption('1080p');
+  await page.locator('#tracking-fps').selectOption('24');
+  await page.locator('#hand-tracking').click();
+  await page.locator('#camera-resolution').scrollIntoViewIfNeeded();
+  await page.screenshot({ path: testInfo.outputPath('capture-quality-controls.png') });
+  await page.getByText('麦克风口型', { exact: true }).click();
+  await page.locator('#lip-sync-mode').selectOption('vowels');
+  await expect(page.locator('#calibrate-voice-A')).toBeDisabled();
+  await expect(page.locator('#mic-toggle')).toHaveText('开启麦克风');
+  await page.locator('#mic-toggle').scrollIntoViewIfNeeded();
+  await page.screenshot({ path: testInfo.outputPath('microphone-controls.png') });
+  await expect
+    .poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('vtubeleaf-preview') || '{}')))
+    .toMatchObject({
+      cameraResolution: '1080p',
+      trackingFps: 24,
+      handTracking: true,
+      lipSyncMode: 'vowels',
+    });
+});
+
+test('local Web Audio drives the mouth without a camera and stops all microphone tracks', async ({
+  page,
+}) => {
+  await page.goto('/?output=1');
+  await page.mouse.click(10, 10);
+  await page.evaluate(async () => {
+    const { createStudio } = await import('/src/studio.ts');
+    const context = new AudioContext();
+    const oscillator = context.createOscillator();
+    oscillator.frequency.value = 440;
+    const destination = context.createMediaStreamDestination();
+    oscillator.connect(destination);
+    oscillator.start();
+    await context.resume();
+    const state = ((window as any).audioTest = {
+      context,
+      oscillator,
+      stream: destination.stream,
+      requests: [],
+      view: null,
+    });
+    navigator.mediaDevices.getUserMedia = async (constraints) => {
+      state.requests.push(constraints);
+      return destination.stream;
+    };
+    const container = document.createElement('div');
+    document.body.append(container);
+    state.studio = createStudio(
+      container,
+      document.createElement('video'),
+      (view) => (state.view = view),
+    );
+  });
+  await expect.poll(() => page.evaluate(() => (window as any).audioTest.view?.ready)).toBe(true);
+  expect(await page.evaluate(() => (window as any).audioTest.requests)).toEqual([]);
+  await page.evaluate(async () => {
+    const actions = (window as any).audioTest.studio.actions;
+    actions.setSetting('lipSyncMode', 'volume');
+    actions.setSetting('micGain', 1);
+    await actions.toggleMic();
+  });
+  await expect
+    .poll(() => page.evaluate(() => (window as any).audioTest.view.faceInput.mouthOpen))
+    .toBeGreaterThan(0.2);
+  expect(await page.evaluate(() => (window as any).audioTest.view.faceInput.yaw)).toBeUndefined();
+  expect(await page.evaluate(() => (window as any).audioTest.requests)).toEqual([
+    { audio: true, video: false },
+  ]);
+  await page.evaluate(async () => {
+    const state = (window as any).audioTest;
+    const calibration = state.studio.actions.calibrateVoice('A').catch(() => {});
+    await state.studio.actions.toggleMic();
+    await calibration;
+  });
+  await expect
+    .poll(() => page.evaluate(() => (window as any).audioTest.view.micActive))
+    .toBe(false);
+  expect(
+    await page.evaluate(() =>
+      (window as any).audioTest.stream
+        .getTracks()
+        .every((track: MediaStreamTrack) => track.readyState === 'ended'),
+    ),
+  ).toBe(true);
+  expect(await page.evaluate(() => (window as any).audioTest.view.settings.voiceTemplates)).toEqual(
+    {},
+  );
+  await page.evaluate(async () => {
+    const state = (window as any).audioTest;
+    state.studio.destroy();
+    state.oscillator.stop();
+    await state.context.close();
+  });
+});
+
+test('scene layers render GIF and Live2D items, preserve failures and match passive output', async ({
+  page,
+}, testInfo) => {
+  const fixture = process.env.VTUBELEAF_MODEL_FIXTURE;
+  test.skip(!fixture, 'Set VTUBELEAF_MODEL_FIXTURE to a licensed local model.');
+  const modelPath = resolve(fixture!),
+    root = dirname(modelPath);
+  const files = readdirSync(root, { recursive: true, withFileTypes: true })
+    .filter((e) => e.isFile())
+    .map((e) =>
+      resolve(e.parentPath, e.name)
+        .slice(root.length + 1)
+        .replaceAll('\\', '/'),
+    );
+  await page.route('**/scene-model/**', (route) => {
+    const resource = decodeURIComponent(
+      new URL(route.request().url()).pathname.slice('/scene-model/'.length),
+    );
+    return files.includes(resource)
+      ? route.fulfill({ path: resolve(root, resource) })
+      : route.abort();
+  });
+  await page.goto('/?output=1');
+  const result = await page.evaluate(
+    async (info) => {
+      const { AvatarStage } = await import('/src/renderer.ts');
+      const { readSettings } = await import('/src/state.ts');
+      const { mockIPC } = await import('/node_modules/@tauri-apps/api/mocks.js');
+      const gif = Uint8Array.from(
+        '47494638396101000100800000ff00000000ff21f90400050000002c000000000100010000020244010021f90400050000002c00000000010001000002024c01003b'.match(
+          /../g,
+        )!,
+        (h) => parseInt(h, 16),
+      ).buffer;
+      let releaseAsset!: () => void;
+      let assetRequested!: () => void;
+      const assetGate = new Promise<void>((resolve) => {
+        releaseAsset = resolve;
+      });
+      const requested = new Promise<void>((resolve) => {
+        assetRequested = resolve;
+      });
+      mockIPC(async (command: string, args: any) => {
+        if (command === 'read_model_resource')
+          return (await fetch('/scene-model/' + encodeURI(args.resource))).arrayBuffer();
+        if (command === 'read_asset') {
+          if (args.id.startsWith('f')) throw new Error('missing asset');
+          if (args.id.startsWith('b')) {
+            assetRequested();
+            await assetGate;
+          }
+          return gif;
+        }
+      });
+      const make = (left: number, passive: boolean) => {
+        const container = document.createElement('div');
+        container.style.cssText = `position:fixed;top:100px;left:${left}px;width:360px;height:360px`;
+        document.body.append(container);
+        return new AvatarStage(container, () => {}, passive);
+      };
+      const main = make(100, false),
+        output = make(500, true);
+      const settings = readSettings({
+        background: '#ffffff',
+        composition: {
+          items: [
+            {
+              id: 'gif',
+              kind: 'image',
+              source: 'a'.repeat(32) + '.gif',
+              name: 'Animated',
+              x: -0.3,
+              y: -0.25,
+              scale: 0.18,
+            },
+            {
+              id: 'model-item',
+              kind: 'live2d',
+              source: info.path,
+              name: 'Live2D',
+              x: 0.3,
+              scale: 0.35,
+              attach: 'model',
+            },
+          ],
+        },
+      });
+      await main.load(info);
+      await output.load(info);
+      await main.compose(settings, [info]);
+      await output.compose(settings, [info]);
+      const first = (main as any).layers.frames.gif.index;
+      for (let frame = 0; frame < 4; frame++) main.draw({ ParamAngleX: 20 }, 16);
+      const next = main.sceneFrames.gif.index;
+      output.draw(main.frame, 16, main.parts, main.sceneFrames);
+      const matches = JSON.stringify(main.sceneFrames) === JSON.stringify(output.sceneFrames);
+      const pixels = (stage: any) =>
+        Array.from(stage.app.renderer.extract.pixels(stage.app.stage) as Uint8Array);
+      const a = pixels(main),
+        b = pixels(output);
+      const images = [main.canvas.toDataURL(), output.canvas.toDataURL()];
+      const parity = a.length === b.length && a.every((value, index) => value === b[index]);
+      const diagnostics = {
+        lengthA: a.length,
+        lengthB: b.length,
+        different: a.filter((v, i) => v !== b[i]).length,
+        mainParams: JSON.stringify(main.frame) === JSON.stringify(output.frame),
+        mainParts: JSON.stringify(main.parts) === JSON.stringify(output.parts),
+        mainBounds: main.content.getBounds().toString(),
+        outputBounds: output.content.getBounds().toString(),
+      };
+      const visuals = (main as any).layers.visuals;
+      const original = visuals[0].node;
+      let failed = false;
+      try {
+        await main.compose(
+          readSettings({
+            ...settings,
+            composition: {
+              items: [{ ...settings.composition.items[0], source: 'f'.repeat(32) + '.gif' }],
+            },
+          }),
+          [info],
+        );
+      } catch {
+        failed = true;
+      }
+      const preserved = (main as any).layers.visuals[0].node === original;
+      settings.x = 0.1;
+      settings.zoom = 1.5;
+      settings.rotation = 30;
+      settings.composition.items[1].behind = true;
+      main.display(settings);
+      main.draw({}, 16);
+      const attached =
+        visuals[1].node.x !== 360 * 0.8 &&
+        visuals[1].node.rotation > 0 &&
+        visuals[1].node.zIndex < 0;
+      settings.composition.items[0].visible = false;
+      main.draw({}, 16);
+      const hidden = !original.visible;
+      settings.modelVisible = false;
+      main.display(settings);
+      main.draw({}, 16);
+      const mainHiddenOnly = !(main as any).model.visible && visuals[1].node.visible;
+      const emptyScene = readSettings({ background: '#ff0000' });
+      await main.compose(emptyScene, []);
+      const slowScene = main.compose(
+        readSettings({
+          background: '#0000ff',
+          composition: {
+            items: [{ id: 'late', kind: 'image', source: 'b'.repeat(32) + '.gif' }],
+          },
+        }),
+        [],
+      );
+      await requested;
+      await main.compose(emptyScene, []);
+      releaseAsset();
+      await slowScene;
+      const latestSceneWins =
+        (main as any).settings.background === '#ff0000' &&
+        Object.keys(main.sceneFrames).length === 0;
+      settings.modelVisible = true;
+      const prepared = await main.prepare(info, settings, [info]);
+      prepared.mount(main.canvas.parentElement!);
+      main.destroy();
+      prepared.draw({}, 16);
+      const preparedVisible = pixels(prepared).some((value, index) => index % 4 === 3 && value > 0);
+      (window as any).sceneStages = [prepared, output];
+      return {
+        first,
+        next,
+        matches,
+        parity,
+        diagnostics,
+        images,
+        failed,
+        preserved,
+        attached,
+        hidden,
+        mainHiddenOnly,
+        latestSceneWins,
+        preparedVisible,
+        canvases: document.querySelectorAll('canvas').length,
+      };
+    },
+    { id: 'scene-model', path: modelPath, name: 'Haru', entry: basename(modelPath), files },
+  );
+  result.images.forEach((data, i) =>
+    writeFileSync(
+      testInfo.outputPath(`parity-${i}.png`),
+      Buffer.from(data.split(',')[1], 'base64'),
+    ),
+  );
+  await page.screenshot({ path: testInfo.outputPath('scene-output.png') });
+  expect(result).toMatchObject({
+    first: 0,
+    next: 1,
+    matches: true,
+    parity: true,
+    failed: true,
+    preserved: true,
+    attached: true,
+    hidden: true,
+    mainHiddenOnly: true,
+    latestSceneWins: true,
+    preparedVisible: true,
+    canvases: 3,
+  });
+  await page.evaluate(() => (window as any).sceneStages.forEach((stage: any) => stage.destroy()));
+});
+
+test('output coalesces state changes while one scene is loading', async ({ page }) => {
+  await page.route('**/src/main.tsx*', async (route) => {
+    const response = await route.fetch();
+    const bootstrap = `import { mockIPC, mockWindows } from '/node_modules/@tauri-apps/api/mocks.js';
+      import { AvatarStage } from '/src/renderer.ts';
+      window.isTauri = true; mockWindows('output');
+      const gate = new Promise(resolve => { window.releaseOutputAsset = resolve; });
+      const bytes = Uint8Array.from('47494638396101000100800000ff00000000ff21f90400050000002c00000000010001000002024401003b'.match(/../g), h => parseInt(h, 16)).buffer;
+      window.prepareCalls = 0;
+      const prepare = AvatarStage.prototype.prepare;
+      AvatarStage.prototype.prepare = async function (...args) {
+        window.prepareCalls++;
+        const candidate = await prepare.apply(this, args);
+        window.outputCandidate = candidate;
+        return candidate;
+      };
+      mockIPC(async cmd => {
+        if (cmd === 'read_asset') { window.assetRequested = true; await gate; return bytes; }
+      }, { shouldMockEvents: true });
+      const invoke = window.__TAURI_INTERNALS__.invoke;
+      window.__TAURI_INTERNALS__.invoke = (cmd, args, options) => {
+        if (cmd === 'plugin:event|emit_to' && args.event === 'output-ready') window.outputReady = true;
+        return invoke(cmd, args, options);
+      };\n`;
+    await route.fulfill({ response, body: bootstrap + (await response.text()) });
+  });
+  await page.goto('/?output=1');
+  await expect.poll(() => page.evaluate(() => (window as any).outputReady)).toBe(true);
+  const update = async (count: number) =>
+    page.evaluate(async (count) => {
+      const { emit } = await import('/node_modules/@tauri-apps/api/event.js');
+      for (let i = 0; i < count; i++)
+        await emit('output-state', {
+          model: null,
+          models: [],
+          revision: 1,
+          settings: {
+            x: i / 100,
+            background: i === count - 1 ? '#ff0000' : '#0000ff',
+            composition: {
+              items: [{ id: 'flag', kind: 'image', source: 'a'.repeat(32) + '.gif' }],
+            },
+          },
+        });
+    }, count);
+  await update(1);
+  await expect.poll(() => page.evaluate(() => (window as any).assetRequested)).toBe(true);
+  await update(20);
+  expect(await page.evaluate(() => (window as any).prepareCalls)).toBe(1);
+  await page.evaluate(() => (window as any).releaseOutputAsset());
+  await expect(page.locator('#stage')).toHaveCSS('background-color', 'rgb(255, 0, 0)');
+  await expect
+    .poll(() => page.evaluate(() => (window as any).outputCandidate?.settings.x))
+    .toBe(0.19);
+  expect(await page.evaluate(() => (window as any).prepareCalls)).toBeLessThanOrEqual(2);
+  await expect(page.locator('canvas')).toHaveCount(1);
+});
+
+test('props-only scenes support dragging, saving, recall, visibility shortcuts and reload', async ({
+  page,
+}, testInfo) => {
+  await page.route('**/src/main.tsx*', async (route) => {
+    const response = await route.fetch();
+    const bootstrap = `import { mockIPC, mockWindows } from '/node_modules/@tauri-apps/api/mocks.js';
+      window.isTauri = true; mockWindows('main');
+      const asset = 'a'.repeat(32) + '.gif';
+      let cameraActive = false;
+      const bytes = Uint8Array.from('47494638396101000100800000ff00000000ff21f90400050000002c000000000100010000020244010021f90400050000002c00000000010001000002024c01003b'.match(/../g), h => parseInt(h, 16)).buffer;
+      mockIPC(async (cmd, args) => {
+        if (cmd === 'load_settings') return JSON.parse(localStorage.getItem('scene-test-settings') || 'null');
+        if (cmd === 'save_settings') { window.savedSettings = args.settings; localStorage.setItem('scene-test-settings', JSON.stringify(args.settings)); return; }
+        if (cmd === 'list_models') return { models: [], directory: '/test/models', errors: [] };
+        if (cmd === 'choose_asset') return { id: asset, name: 'Color flag' };
+        if (cmd === 'read_asset') return bytes;
+        if (cmd === 'plugin:virtual-camera|start' || cmd === 'plugin:virtual-camera|stop') {
+          cameraActive = cmd.endsWith('|start');
+          window.cameraActions = [...(window.cameraActions || []), cameraActive ? 'start' : 'stop'];
+        }
+        if (cmd.startsWith('plugin:virtual-camera|')) return { supported: true, installed: true, active: cameraActive, message: 'Test' };
+        if (cmd === 'plugin:global-shortcut|register') { window.shortcut = args; return; }
+      }, { shouldMockEvents: true });\n`;
+    await route.fulfill({ response, body: bootstrap + (await response.text()) });
+  });
+  await page.goto('/');
+  await page.getByRole('button', { name: '画面', exact: true }).click();
+  await page.getByRole('button', { name: '添加图片 / GIF', exact: true }).click();
+  await expect(page.locator('#item-name')).toHaveValue('Color flag');
+  await expect(page.locator('#empty-state')).toBeHidden();
+  await page.mouse.move(480, 360);
+  await page.mouse.down();
+  await page.mouse.move(600, 440, { steps: 4 });
+  await page.mouse.up();
+  await expect
+    .poll(() => page.evaluate(() => (window as any).savedSettings?.composition.items[0].x))
+    .toBeCloseTo(0.1, 2);
+  await page.locator('#scene-name').fill('旗帜场景');
+  await page.getByRole('button', { name: '保存为新场景', exact: true }).click();
+  await expect(page.locator('#saved-scene option')).toHaveCount(2);
+  const sceneId = await page.locator('#saved-scene option').last().getAttribute('value');
+  await page.locator('#saved-scene').selectOption(sceneId!);
+  await page.locator('#item-name').fill('Changed');
+  await page.getByRole('button', { name: '切换场景', exact: true }).click();
+  await page.locator('#selected-item').selectOption({ label: '1 · Color flag' });
+  await expect(page.locator('#item-name')).toHaveValue('Color flag');
+  await page.getByRole('checkbox', { name: '显示', exact: true }).uncheck();
+  await expect
+    .poll(() => page.evaluate(() => (window as any).savedSettings?.composition.items[0].visible))
+    .toBe(false);
+  await page.getByRole('button', { name: '角色', exact: true }).click();
+  await page.getByRole('button', { name: '全局快捷键', exact: true }).click();
+  const action = await page
+    .locator('#hotkey-action option')
+    .evaluateAll(
+      (options) =>
+        (options as HTMLOptionElement[]).find((option) => option.value.startsWith('item:'))!.value,
+    );
+  await page.locator('#hotkey-action').selectOption(action);
+  await page.locator('#hotkey-binding').fill('Control+Shift+9');
+  await page.locator('#save-hotkey').click();
+  await expect
+    .poll(() => page.evaluate(() => (window as any).shortcut?.shortcuts))
+    .toEqual(['Control+Shift+Digit9']);
+  await page.evaluate(() =>
+    (window as any).shortcut.handler.onmessage({
+      state: 'Pressed',
+      shortcut: 'Control+Shift+Digit9',
+    }),
+  );
+  await expect
+    .poll(() => page.evaluate(() => (window as any).savedSettings?.composition.items[0].visible))
+    .toBe(true);
+  for (const action of [
+    'toggle-tracking',
+    'calibrate',
+    'toggle-mic',
+    'toggle-model',
+    'toggle-camera',
+  ]) {
+    await expect(page.locator(`#hotkey-action option[value="${action}"]`)).toHaveCount(1);
+  }
+  expect(await page.evaluate(() => (window as any).cameraActions ?? [])).not.toContain('start');
+  await page.locator('#hotkey-action').selectOption('toggle-model');
+  await page.locator('#hotkey-binding').fill('Control+Shift+8');
+  await page.locator('#save-hotkey').click();
+  await expect
+    .poll(() => page.evaluate(() => (window as any).shortcut?.shortcuts))
+    .toEqual(['Control+Shift+Digit8']);
+  await page.evaluate(() =>
+    (window as any).shortcut.handler.onmessage({
+      state: 'Pressed',
+      shortcut: 'Control+Shift+Digit8',
+    }),
+  );
+  await expect
+    .poll(() => page.evaluate(() => (window as any).savedSettings?.modelVisible))
+    .toBe(false);
+  await page.locator('#hotkey-action').selectOption('toggle-camera');
+  await page.locator('#hotkey-binding').fill('Control+Shift+7');
+  await page.locator('#save-hotkey').click();
+  await expect
+    .poll(() => page.evaluate(() => (window as any).shortcut?.shortcuts))
+    .toEqual(['Control+Shift+Digit7']);
+  for (const action of ['start', 'stop']) {
+    await page.evaluate(() => {
+      const handler = (window as any).shortcut.handler;
+      handler.onmessage({ state: 'Released', shortcut: 'Control+Shift+Digit7' });
+      handler.onmessage({ state: 'Pressed', shortcut: 'Control+Shift+Digit7' });
+    });
+    await expect
+      .poll(() => page.evaluate(() => (window as any).cameraActions?.at(-1)))
+      .toBe(action);
+  }
+  await page.getByRole('button', { name: '画面', exact: true }).click();
+  const overflow = await page
+    .locator('.scene-controls')
+    .evaluate((panel) => panel.scrollWidth > panel.clientWidth + 1);
+  expect(overflow).toBe(false);
+  await expect(
+    page.getByText('显卡上下文已丢失。请重新加载角色；反复失败时重启应用。', { exact: true }),
+  ).toBeHidden();
+  await page.screenshot({ path: testInfo.outputPath('scene-controls.png') });
+  await page.getByRole('button', { name: '接入', exact: true }).click();
+  await page.screenshot({ path: testInfo.outputPath('virtual-camera-controls.png') });
+  await page.reload();
+  await page.getByRole('button', { name: '画面', exact: true }).click();
+  await expect(page.locator('#saved-scene option')).toHaveCount(2);
+  await expect(page.locator('#selected-item option')).toHaveCount(2);
+  expect(await page.evaluate(() => (window as any).savedSettings?.modelPath ?? '')).toBe('');
+});
+
+test('attached dragging follows the pointer and scene recall preserves the live frame while loading fails', async ({
+  page,
+}) => {
+  await page.goto('/?output=1');
+  await page.evaluate(async () => {
+    const { createStudio } = await import('/src/studio.ts');
+    const { mockIPC, mockWindows } = await import('/node_modules/@tauri-apps/api/mocks.js');
+    (window as any).isTauri = true;
+    mockWindows('main');
+    const asset = 'a'.repeat(32) + '.gif';
+    const bytes = Uint8Array.from(
+      '47494638396101000100800000ff00000000ff21f90400050000002c00000000010001000002024401003b'.match(
+        /../g,
+      )!,
+      (h) => parseInt(h, 16),
+    ).buffer;
+    const state = ((window as any).sceneTransaction = { requested: false });
+    mockIPC(
+      async (cmd: string) => {
+        if (cmd === 'list_models') return { models: [], directory: '/models', errors: [] };
+        if (cmd === 'load_settings')
+          return {
+            background: '#ff0000',
+            zoom: 2,
+            rotation: 90,
+            composition: { items: [{ id: 'flag', kind: 'image', source: asset, attach: 'model' }] },
+            scenes: [
+              {
+                id: 'broken',
+                name: 'Broken',
+                modelPath: '/missing/model.model3.json',
+                background: '#0000ff',
+                placement: { x: 0, y: 0, zoom: 1, rotation: 0 },
+                composition: { items: [] },
+              },
+            ],
+          };
+        if (cmd === 'read_asset') return bytes;
+        if (cmd === 'load_model') {
+          state.requested = true;
+          await new Promise<void>((resolve) => {
+            state.release = resolve;
+          });
+          throw new Error('missing scene model');
+        }
+        if (cmd.startsWith('plugin:virtual-camera|'))
+          return { supported: false, installed: false, active: false, message: 'Test' };
+      },
+      { shouldMockEvents: true },
+    );
+    state.container = document.createElement('div');
+    state.container.style.cssText = 'position:fixed;width:600px;height:300px;left:0;top:0';
+    document.body.append(state.container);
+    state.studio = createStudio(state.container, document.createElement('video'), (view) => {
+      state.view = view;
+    });
+  });
+  await expect
+    .poll(() => page.evaluate(() => (window as any).sceneTransaction.view?.ready))
+    .toBe(true);
+  const delta = await page.evaluate(() => {
+    const state = (window as any).sceneTransaction;
+    state.studio.actions.selectItem('flag');
+    state.studio.actions.pan(0.1, 0);
+    const item = state.studio.snapshot().settings.composition.items[0];
+    return { x: item.x, y: item.y };
+  });
+  expect(delta.x).toBeCloseTo(0, 5);
+  expect(delta.y).toBeCloseTo(-0.1, 5);
+  await page.evaluate(() => {
+    const state = (window as any).sceneTransaction;
+    state.canvas = state.container.querySelector('canvas');
+    state.pending = state.studio.actions.recallScene('broken').catch((error: Error) => {
+      state.error = error.message;
+    });
+  });
+  await expect
+    .poll(() => page.evaluate(() => (window as any).sceneTransaction.requested))
+    .toBe(true);
+  expect(
+    await page.evaluate(() => {
+      const state = (window as any).sceneTransaction;
+      return {
+        background: state.container.style.backgroundColor,
+        sameCanvas: state.canvas === state.container.querySelector('canvas'),
+        items: state.view.settings.composition.items.length,
+      };
+    }),
+  ).toEqual({ background: 'rgb(255, 0, 0)', sameCanvas: true, items: 1 });
+  await page.evaluate(async () => {
+    const state = (window as any).sceneTransaction;
+    state.release();
+    await state.pending;
+  });
+  expect(
+    await page.evaluate(() => {
+      const state = (window as any).sceneTransaction;
+      return {
+        error: state.error,
+        background: state.container.style.backgroundColor,
+        busy: state.view.sceneBusy,
+        sameCanvas: state.canvas === state.container.querySelector('canvas'),
+      };
+    }),
+  ).toEqual({
+    error: 'missing scene model',
+    background: 'rgb(255, 0, 0)',
+    busy: false,
+    sameCanvas: true,
+  });
+  await page.evaluate(() => (window as any).sceneTransaction.studio.destroy());
+});
+
+test('VTS local and global hotkeys release on key-up, blur and rebind without duplicate presses', async ({
+  page,
+}) => {
+  await page.goto('/?output=1');
+  const result = await page.evaluate(async () => {
+    const { mockIPC, clearMocks } = await import('/node_modules/@tauri-apps/api/mocks.js');
+    const { Hotkeys } = await import('/src/hotkeys.ts');
+    (window as any).isTauri = true;
+    const calls: [string, boolean][] = [];
+    const registered: string[] = [];
+    const handlers: any[] = [];
+    mockIPC((cmd: string, args: any) => {
+      if (cmd === 'plugin:global-shortcut|register') {
+        registered.push(...args.shortcuts);
+        handlers.push(args.handler);
+      }
+    });
+    const hotkeys = new Hotkeys(
+      (id: string, pressed: boolean) => calls.push([id, pressed]),
+      (error: string) => {
+        throw new Error(error);
+      },
+    );
+    const bindings = { local: 'Control+A', global: 'Control+B' };
+    const options = { local: { scope: 'local' as const } };
+    await hotkeys.set(bindings, options);
+    const key = (type: string, code: string, ctrlKey = true) =>
+      window.dispatchEvent(new KeyboardEvent(type, { code, ctrlKey, cancelable: true }));
+    key('keydown', 'KeyA');
+    key('keydown', 'KeyA');
+    key('keyup', 'ControlLeft', false);
+    key('keydown', 'KeyA');
+    window.dispatchEvent(new Event('blur'));
+    key('keydown', 'KeyA');
+    await hotkeys.set(bindings, options);
+    key('keydown', 'KeyB'); // Global shortcuts must only arrive from the OS.
+    handlers[0].onmessage({ state: 'Pressed' }); // Stale registration is ignored.
+    handlers[1].onmessage({ state: 'Pressed' });
+    handlers[1].onmessage({ state: 'Pressed' });
+    handlers[1].onmessage({ state: 'Released' });
+    await hotkeys.destroy();
+    clearMocks();
+    (window as any).isTauri = false;
+    return { calls, registered };
+  });
+  expect(result.registered).toEqual(['Control+KeyB', 'Control+KeyB']);
+  expect(result.calls).toEqual([
+    ['local', true],
+    ['local', false],
+    ['local', true],
+    ['local', false],
+    ['local', true],
+    ['local', false],
+    ['global', true],
+    ['global', false],
+  ]);
+});
+
+test('bundled licenses are readable under desktop CSP without leaving the stage', async ({
+  page,
+}, testInfo) => {
+  await serveProduction(page, '**/');
+  await page.goto('/');
+  await page.getByRole('button', { name: '接入', exact: true }).click();
+  await page.getByRole('button', { name: '开源与第三方许可', exact: true }).click();
+  const text = page.getByLabel('许可正文');
+  await expect(text).toContainText('VTubeLeaf resource and bundled-code notices');
+  await page.getByLabel('许可文件').selectOption('/licenses/npm.txt');
+  await expect(text).toContainText('Permission is hereby granted');
+  await page.getByLabel('许可文件').selectOption('/licenses/rust.html');
+  await expect(text).toContainText('Mozilla Public License');
+  await expect(text).toContainText('2.0');
+  await expect(text).toContainText('https://crates.io/crates/');
+  await page.getByLabel('许可文件').selectOption('/licenses/vtubeleaf.txt');
+  await expect(text).toContainText('MIT License');
+  await expect(text).toContainText('Copyright (c) 2026 moonrailgun');
+  await expect(text).toContainText('Permission is hereby granted');
+  await expect(page.locator('#stage canvas')).toBeVisible();
+  await text.scrollIntoViewIfNeeded();
+  await page.screenshot({ path: testInfo.outputPath('licenses.png') });
+  await page.route('**/runtime/licenses/Core/LICENSE.md', (route) =>
+    route.fulfill({ status: 404, body: 'missing' }),
+  );
+  await page.getByLabel('许可文件').selectOption('/runtime/licenses/Core/LICENSE.md');
+  await expect(text).toHaveText('许可文件未包含在当前构建中。');
 });
