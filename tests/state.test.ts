@@ -3,6 +3,114 @@ import assert from 'node:assert/strict';
 import { defaults, readSettings, FaceMapper, NEUTRAL, fromMediaPipe } from '../src/state.ts';
 import * as state from '../src/state.ts';
 
+test('hand sources mirror positions and sides without subtracting finger calibration', () => {
+  const input = {
+    handLeftFound: 1,
+    handLeftX: 0.4,
+    handLeftY: -0.3,
+    handLeftAngle: 0.2,
+    handLeftOpen: 0.9,
+    handLeftIndex: 0.8,
+    handRightFound: 0,
+  };
+  const s = readSettings({ motionMirror: true, neutral: { ...NEUTRAL, handLeftOpen: 0.7 } });
+  const mirrored = state.normalizedFace(input, s);
+  assert.equal(mirrored.handRightFound, 1);
+  assert.equal(mirrored.handLeftFound, 0);
+  assert.equal(mirrored.handRightX, -0.4);
+  assert.equal(mirrored.handRightY, -0.3);
+  assert.equal(mirrored.handRightAngle, -0.2);
+  assert.equal(mirrored.handRightOpen, 0.9);
+  assert.equal(mirrored.handRightIndex, 0.8);
+  assert.equal(mirrored.yaw, undefined);
+  assert.equal(state.normalizedFace(input, { ...s, motionMirror: false }).handLeftX, 0.4);
+});
+
+test('lost tracking hold keeps a missing source but still accepts the body fallback', () => {
+  const mapper = new FaceMapper();
+  const s = readSettings({ lostMode: 'hold', motionMirror: false, headSmooth: 0 });
+  const params = [{ id: 'ParamBodyAngleX', min: -30, max: 30, default: 0 }];
+  mapper.map({ bodyYaw: 30 }, params, s, 0.1);
+  const fallback = mapper.map({ yaw: 30 }, params, s, 0.1).ParamBodyAngleX;
+  assert.ok(fallback < 30 && fallback > 9);
+  assert.equal(mapper.map({ mouthOpen: 0 }, params, s, 0.1).ParamBodyAngleX, fallback);
+});
+
+test('calibrated blink reaches closed and open endpoints at every sensitivity within model limits', () => {
+  const parameters = [
+    { id: 'ParamEyeLOpen', min: -0.5, max: 1.5, default: 1 },
+    { id: 'ParamEyeROpen', min: 0, max: 2, default: 1 },
+    { id: 'ParamMouthOpenY', min: 0, max: 2, default: 0 },
+  ];
+  for (const eyeSensitivity of [0.3, 1, 2]) {
+    const s = readSettings({
+      eyeSensitivity,
+      eyeSmooth: 0,
+      mouthSmooth: 0,
+      eyeClosedThreshold: 0.25,
+      neutral: { ...NEUTRAL, eyeLeft: 0.8, eyeRight: 0.8 },
+    });
+    const blink = fromMediaPipe(
+      [
+        { categoryName: 'eyeBlinkLeft', score: 0.81 },
+        { categoryName: 'eyeBlinkRight', score: 0.2 },
+        { categoryName: 'jawOpen', score: 1 },
+      ],
+      [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1],
+    );
+    assert.deepEqual(new FaceMapper().map(blink, parameters, s, 1 / 30), {
+      ParamEyeLOpen: 0,
+      ParamEyeROpen: 1,
+      ParamMouthOpenY: 1,
+    });
+  }
+  const settings = readSettings({ eyeClosedThreshold: 8 });
+  assert.equal(settings.eyeClosedThreshold, 0.6);
+});
+
+test('camera preview is private by default and only restores an explicit boolean choice', () => {
+  assert.equal(defaults.previewCamera, false);
+  for (const value of [null, {}, { previewCamera: 'true' }, { previewMode: 'overlay' }])
+    assert.equal(readSettings(value).previewCamera, false);
+  assert.equal(readSettings({ previewCamera: true }).previewCamera, true);
+  assert.equal(readSettings({ previewCamera: false }).previewCamera, false);
+});
+
+test('body-only tracking drives standard arms and lets lost face channels return to neutral', () => {
+  const parameters = [
+    { id: 'ParamAngleX', min: -30, max: 30, default: 0 },
+    { id: 'ParamEyeLOpen', min: 0, max: 1, default: 1 },
+    { id: 'ParamBodyAngleX', min: -30, max: 30, default: 0 },
+    ...['ParamArmLA', 'ParamArmRA', 'ParamArmLB', 'ParamArmRB'].map((id) => ({
+      id,
+      min: -30,
+      max: 30,
+      default: 0,
+    })),
+  ];
+  const s = readSettings({ motionMirror: false, headSmooth: 0, eyeSmooth: 0 });
+  const mapper = new FaceMapper();
+  mapper.map({ ...NEUTRAL, yaw: 30, eyeLeft: 0 }, parameters, s, 1 / 30);
+  const body = { bodyYaw: -15, armLeft: 1, armRight: 0, elbowLeft: 0.5, elbowRight: 0 };
+  assert.equal(state.isFace(body), false);
+  assert.equal(state.normalizedFace(body, s).yaw, undefined);
+  const frame = mapper.map(body, parameters, s, 1 / 30);
+  assert.equal(frame.ParamBodyAngleX, -15);
+  assert.equal(frame.ParamArmLA, 30);
+  assert.equal(frame.ParamArmRA, 0);
+  assert.equal(frame.ParamArmLB, 15);
+  assert.ok(frame.ParamAngleX > 0 && frame.ParamAngleX < 30);
+  assert.ok(frame.ParamEyeLOpen > 0 && frame.ParamEyeLOpen < 1);
+  assert.equal(new FaceMapper().map(body, parameters, s, 1 / 30).ParamAngleX, undefined);
+  assert.equal(
+    mapper.map(body, parameters, { ...s, autoBlink: true }, 1 / 30).ParamEyeLOpen,
+    undefined,
+  );
+  const mirrored = new FaceMapper().map(body, parameters, { ...s, motionMirror: true }, 1 / 30);
+  assert.equal(mirrored.ParamArmRA, 30);
+  assert.equal(mirrored.ParamArmLA, 0);
+});
+
 test('upper body requires visible shoulders, uses independent limbs and rejects clipped joints', () => {
   assert.equal(typeof state.fromPose, 'function');
   const image = Array.from({ length: 33 }, () => ({ x: 0.5, y: 0.5, z: 0, visibility: 0.99 }));
@@ -123,6 +231,7 @@ test('mapping respects model limits, missing parameters, calibration and lost fa
     headSmooth: 0,
     eyeSmooth: 0,
     neutral: { ...NEUTRAL, yaw: 15 },
+    eyeLink: 'off' as const,
   };
   assert.deepEqual(mapper.map({ ...NEUTRAL, yaw: 15 }, p, s, 1 / 30), {
     ParamAngleX: 2,
@@ -408,4 +517,107 @@ test('MediaPipe adds gaze, brows, mouth shift and normalized translation', () =>
   assert.equal(f.positionX, 0.5);
   assert.equal(f.positionY, -0.2);
   assert.equal(f.positionZ, -4);
+});
+
+test('linked eyes preserve front winks and use measured endpoints before side linking', () => {
+  const s = readSettings({
+    motionMirror: false,
+    eyeLink: 'side',
+    eyeLinkAngle: 25,
+    eyeClosedLeft: 0.1,
+    eyeClosedRight: 0.2,
+    neutral: { ...NEUTRAL, eyeLeft: 0.8, eyeRight: 0.9 },
+  });
+  const wink = { ...NEUTRAL, eyeLeft: 0.1, eyeRight: 0.9 };
+  assert.equal(state.normalizedFace(wink, s).eyeLeft, 0);
+  assert.equal(state.normalizedFace(wink, s).eyeRight, 1);
+  const linked = state.normalizedFace({ ...wink, yaw: 40 }, s);
+  assert.equal(linked.eyeLeft, linked.eyeRight);
+  const average = state.normalizedFace(wink, { ...s, eyeLink: 'always' });
+  assert.equal(average.eyeLeft, 0.5);
+  assert.equal(average.eyeRight, 0.5);
+});
+
+test('quality profile validation isolates model tuning and preserves capture devices', () => {
+  const s = readSettings({
+    modelPath: '/a',
+    eyeLink: 'always',
+    physicsStrength: 3,
+    physicsFps: 60,
+    physicsGroups: { hair: 0.3 },
+    voiceTemplates: { A: [NaN] },
+    micDeviceId: 'mic',
+    cameraResolution: '1080p',
+    trackingFps: 60,
+    handTracking: true,
+  });
+  assert.equal(s.physicsStrength, 2);
+  assert.deepEqual(s.voiceTemplates, {});
+  const b = state.switchProfile(s, '/b');
+  assert.equal(b.eyeLink, defaults.eyeLink);
+  assert.deepEqual(b.physicsGroups, {});
+  assert.equal(b.cameraResolution, '1080p');
+  assert.equal(b.micDeviceId, 'mic');
+  const a = state.switchProfile(b, '/a');
+  assert.equal(a.eyeLink, 'always');
+  assert.equal(a.physicsGroups.hair, 0.3);
+  assert.equal(
+    readSettings({ trackingFps: 999, renderFps: 1, handTracking: 'true' }).trackingFps,
+    defaults.trackingFps,
+  );
+});
+
+test('audio mouth can drive without a face and blends without inventing head input', () => {
+  const voice = { voiceVolume: 0.8, voiceA: 0.8, voiceI: 0, voiceU: 0, voiceE: 0, voiceO: 0 };
+  const s = readSettings({ lipSyncMode: 'volume', lipSyncBlend: 1 });
+  const values = state.normalizedFace(voice, s);
+  assert.equal(values.mouthOpen, 0.8);
+  assert.equal(values.yaw, undefined);
+  assert.equal(values.voiceA, 0.8);
+  assert.equal(state.normalizedFace(voice, { ...s, lipSyncMode: 'off' }).mouthOpen, undefined);
+  assert.equal(
+    state.normalizedFace({ ...NEUTRAL, ...voice }, { ...s, lipSyncBlend: 0.5 }).mouthOpen,
+    0.4,
+  );
+  const vowelSettings = {
+    ...s,
+    lipSyncMode: 'vowels' as const,
+    voiceTemplates: Object.fromEntries(
+      ['A', 'I', 'U', 'E', 'O'].map((v) => [v, Array(13).fill(0)]),
+    ),
+  };
+  assert.equal(
+    state.normalizedFace({ ...voice, voiceA: 1, voiceVolume: 0.2 }, vowelSettings).mouthOpen,
+    0.2,
+  );
+  assert.equal(
+    state.normalizedFace({ ...voice, voiceA: 1, voiceVolume: 0 }, vowelSettings).mouthOpen,
+    0,
+  );
+});
+
+test('imported hotkey behavior survives model profiles and rejects invalid options', () => {
+  const s = readSettings({
+    modelPath: '/a',
+    hotkeys: { 'expression:smile': 'Alt+A', 'motion:Idle:0': 'Alt+B' },
+    hotkeyOptions: {
+      'expression:smile': { scope: 'local', release: true, seconds: 2, motionMode: 'hold' },
+      'motion:Idle:0': { scope: 'global', motionMode: 'hold', seconds: -1 },
+      unbound: { scope: 'global' },
+    },
+  });
+  assert.deepEqual(s.hotkeyOptions, {
+    'expression:smile': { scope: 'local', release: true, seconds: 2 },
+    'motion:Idle:0': { scope: 'global', motionMode: 'hold' },
+  });
+  const other = state.switchProfile(s, '/b');
+  assert.deepEqual(other.hotkeyOptions, {});
+  assert.deepEqual(state.switchProfile(other, '/a').hotkeyOptions, s.hotkeyOptions);
+  assert.deepEqual(
+    readSettings({
+      hotkeys: s.hotkeys,
+      hotkeyOptions: { 'expression:smile': { scope: 'local', seconds: Infinity } },
+    }).hotkeyOptions,
+    { 'expression:smile': { scope: 'local' } },
+  );
 });

@@ -1,3 +1,7 @@
+import { readComposition, readScenes, type Composition, type Scene } from './scenes.ts';
+import type { VoiceFrame, VoiceTemplates } from './lipsync.ts';
+import { handSources, type HandSignals } from './hands.ts';
+
 export type UpperBody = {
   bodyYaw?: number;
   bodyPitch?: number;
@@ -8,27 +12,30 @@ export type UpperBody = {
   elbowRight?: number;
 };
 
-export type Face = UpperBody & {
-  yaw: number;
-  pitch: number;
-  roll: number;
-  eyeLeft: number;
-  eyeRight: number;
-  mouthOpen: number;
-  mouthSmile: number;
-  gazeX?: number;
-  gazeY?: number;
-  browLeft?: number;
-  browRight?: number;
-  mouthX?: number;
-  positionX?: number;
-  positionY?: number;
-  positionZ?: number;
-};
+export type Face = UpperBody &
+  Partial<VoiceFrame> &
+  HandSignals & {
+    yaw: number;
+    pitch: number;
+    roll: number;
+    eyeLeft: number;
+    eyeRight: number;
+    mouthOpen: number;
+    mouthSmile: number;
+    gazeX?: number;
+    gazeY?: number;
+    browLeft?: number;
+    browRight?: number;
+    mouthX?: number;
+    positionX?: number;
+    positionY?: number;
+    positionZ?: number;
+  };
 
 export type FaceKey = keyof Face;
 
 export const faceSources: Record<FaceKey, string> = {
+  ...handSources,
   yaw: '左右转头',
   pitch: '上下点头',
   roll: '头部倾斜',
@@ -51,6 +58,12 @@ export const faceSources: Record<FaceKey, string> = {
   armRight: '右上臂抬起',
   elbowLeft: '左肘弯曲',
   elbowRight: '右肘弯曲',
+  voiceVolume: '声音音量',
+  voiceA: '声音 A',
+  voiceI: '声音 I',
+  voiceU: '声音 U',
+  voiceE: '声音 E',
+  voiceO: '声音 O',
 };
 
 export type Mapping = {
@@ -63,15 +76,37 @@ export type Mapping = {
   enabled: boolean;
 };
 
+export type HotkeyOptions = {
+  scope: 'global' | 'local';
+  release?: boolean;
+  seconds?: number;
+  motionMode?: 'once' | 'hold';
+};
+
 export type ModelProfile = {
   motionMirror: boolean;
   sensitivity: number;
   eyeSensitivity: number;
+  eyeClosedThreshold: number;
+  eyeClosedLeft: number | null;
+  eyeClosedRight: number | null;
+  eyeLink: 'off' | 'always' | 'side';
+  eyeLinkAngle: number;
   mouthSensitivity: number;
   headSmooth: number;
   eyeSmooth: number;
   mouthSmooth: number;
   lostDelay: number;
+  lostMode: 'neutral' | 'hold';
+  lipSyncMode: 'off' | 'volume' | 'vowels';
+  lipSyncBlend: number;
+  voiceTemplates: VoiceTemplates;
+  physicsStrength: number;
+  physicsWind: number;
+  physicsFps: 0 | 30 | 60;
+  physicsGroups: Record<string, number>;
+  rotation: number;
+  modelVisible: boolean;
   zoom: number;
   x: number;
   y: number;
@@ -80,13 +115,28 @@ export type ModelProfile = {
   autoBlink: boolean;
   idleMotion: string;
   hotkeys: Record<string, string>;
+  hotkeyOptions: Record<string, HotkeyOptions>;
+  vtsImportReport: string[];
 };
 
 export type Settings = ModelProfile & {
-  engine: 'mediapipe' | 'openseeface';
+  engine: 'mediapipe' | 'openseeface' | 'nvidia';
   deviceId: string;
   previewMirror: boolean;
+  previewCamera: boolean;
   upperBody: boolean;
+  handTracking: boolean;
+  cameraResolution: '360p' | '720p' | '1080p';
+  trackingFps: 15 | 24 | 30 | 60;
+  bodyFps: 5 | 10 | 15 | 30;
+  handFps: 5 | 10 | 15 | 30;
+  renderFps: 30 | 60;
+  micDeviceId: string;
+  micGain: number;
+  micNoiseGate: number;
+  composition: Composition;
+  scenes: Scene[];
+  globalHotkeys: Record<string, string>;
   background: string;
   modelPath: string;
   recentModels: { name: string; path: string }[];
@@ -94,6 +144,8 @@ export type Settings = ModelProfile & {
   camera: number;
   pythonPath: string;
   scriptPath: string;
+  nvidiaPath: string;
+  nvidiaModelDir: string;
   profiles: Record<string, ModelProfile>;
 };
 
@@ -111,18 +163,46 @@ export const defaults: Settings = {
   engine: 'mediapipe',
   deviceId: '',
   previewMirror: true,
+  previewCamera: false,
   upperBody: true,
+  handTracking: false,
+  cameraResolution: '720p',
+  trackingFps: 30,
+  bodyFps: 10,
+  handFps: 10,
+  renderFps: 30,
+  micDeviceId: '',
+  micGain: 4,
+  micNoiseGate: 0.02,
   motionMirror: true,
   sensitivity: 1,
   eyeSensitivity: 1,
+  eyeClosedThreshold: 0.25,
+  eyeClosedLeft: null,
+  eyeClosedRight: null,
+  eyeLink: 'side',
+  eyeLinkAngle: 25,
   mouthSensitivity: 1.4,
   headSmooth: 0.12,
   eyeSmooth: 0.035,
   mouthSmooth: 0.06,
   lostDelay: 0.5,
+  lostMode: 'neutral',
+  lipSyncMode: 'off',
+  lipSyncBlend: 1,
+  voiceTemplates: {},
+  physicsStrength: 1,
+  physicsWind: 0,
+  physicsFps: 0,
+  physicsGroups: {},
+  rotation: 0,
+  modelVisible: true,
   zoom: 1,
   x: 0,
   y: 0,
+  composition: { backgroundImage: '', items: [] },
+  scenes: [],
+  globalHotkeys: {},
   background: '#e5ebdd',
   modelPath: '',
   recentModels: [],
@@ -130,12 +210,16 @@ export const defaults: Settings = {
   camera: 0,
   pythonPath: '',
   scriptPath: '',
+  nvidiaPath: '',
+  nvidiaModelDir: '',
   neutral: null,
   mappings: {},
   profiles: {},
   autoBlink: false,
   idleMotion: '',
   hotkeys: {},
+  hotkeyOptions: {},
+  vtsImportReport: [],
 };
 
 export const clamp = (n: number, min: number, max: number) => Math.min(max, Math.max(min, n));
@@ -150,11 +234,17 @@ const faceKeys = Object.keys(faceSources) as FaceKey[];
 const profileRanges = {
   sensitivity: [0.2, 3],
   eyeSensitivity: [0.3, 2],
+  eyeClosedThreshold: [0, 0.6],
+  eyeLinkAngle: [10, 60],
+  lipSyncBlend: [0, 1],
+  physicsStrength: [0, 2],
+  physicsWind: [-2, 2],
   mouthSensitivity: [0.2, 3],
   headSmooth: [0, 0.5],
   eyeSmooth: [0, 0.3],
   mouthSmooth: [0, 0.4],
   lostDelay: [0.1, 2],
+  rotation: [-180, 180],
   zoom: [0.25, 2.5],
   x: [-0.8, 0.8],
   y: [-0.8, 0.8],
@@ -211,11 +301,26 @@ function readProfile(v: unknown): ModelProfile {
     motionMirror: defaults.motionMirror,
     sensitivity: defaults.sensitivity,
     eyeSensitivity: defaults.eyeSensitivity,
+    eyeClosedThreshold: defaults.eyeClosedThreshold,
+    eyeClosedLeft: null,
+    eyeClosedRight: null,
+    eyeLink: defaults.eyeLink,
+    eyeLinkAngle: defaults.eyeLinkAngle,
     mouthSensitivity: defaults.mouthSensitivity,
     headSmooth: defaults.headSmooth,
     eyeSmooth: defaults.eyeSmooth,
     mouthSmooth: defaults.mouthSmooth,
     lostDelay: defaults.lostDelay,
+    lostMode: defaults.lostMode,
+    lipSyncMode: defaults.lipSyncMode,
+    lipSyncBlend: defaults.lipSyncBlend,
+    voiceTemplates: {},
+    physicsStrength: defaults.physicsStrength,
+    physicsWind: defaults.physicsWind,
+    physicsFps: defaults.physicsFps,
+    physicsGroups: {},
+    rotation: defaults.rotation,
+    modelVisible: defaults.modelVisible,
     zoom: defaults.zoom,
     x: defaults.x,
     y: defaults.y,
@@ -224,11 +329,40 @@ function readProfile(v: unknown): ModelProfile {
     autoBlink: defaults.autoBlink,
     idleMotion: '',
     hotkeys: {},
+    hotkeyOptions: {},
+    vtsImportReport: [],
   };
 
   if (!record(v)) return p;
 
-  for (const key of ['motionMirror', 'autoBlink'] as const)
+  if (Array.isArray(v.vtsImportReport))
+    p.vtsImportReport = v.vtsImportReport
+      .filter((item): item is string => typeof item === 'string')
+      .slice(0, 1024)
+      .map((item) => item.slice(0, 600));
+
+  if (v.eyeLink === 'off' || v.eyeLink === 'always' || v.eyeLink === 'side') p.eyeLink = v.eyeLink;
+  if (v.lostMode === 'hold') p.lostMode = v.lostMode;
+  if (v.lipSyncMode === 'volume' || v.lipSyncMode === 'vowels') p.lipSyncMode = v.lipSyncMode;
+  if (v.physicsFps === 30 || v.physicsFps === 60) p.physicsFps = v.physicsFps;
+  for (const key of ['eyeClosedLeft', 'eyeClosedRight'] as const)
+    if (typeof v[key] === 'number' && Number.isFinite(v[key])) p[key] = clamp(v[key], 0, 0.6);
+  if (record(v.physicsGroups))
+    for (const [id, weight] of Object.entries(v.physicsGroups).slice(0, 128))
+      if (safeKey(id) && id.length <= 512 && typeof weight === 'number' && Number.isFinite(weight))
+        p.physicsGroups[id] = clamp(weight, 0, 2);
+  if (record(v.voiceTemplates))
+    for (const vowel of ['A', 'I', 'U', 'E', 'O'] as const) {
+      const template = v.voiceTemplates[vowel];
+      if (
+        Array.isArray(template) &&
+        template.length === 13 &&
+        template.every((n) => typeof n === 'number' && Number.isFinite(n) && Math.abs(n) < 1e6)
+      )
+        p.voiceTemplates[vowel] = [...template];
+    }
+
+  for (const key of ['motionMirror', 'autoBlink', 'modelVisible'] as const)
     if (typeof v[key] === 'boolean') p[key] = v[key];
   for (const key of Object.keys(profileRanges) as (keyof typeof profileRanges)[])
     if (typeof v[key] === 'number' && Number.isFinite(v[key]))
@@ -251,6 +385,25 @@ function readProfile(v: unknown): ModelProfile {
       if (safeKey(id) && id.length <= 512 && typeof shortcut === 'string' && shortcut.length <= 128)
         p.hotkeys[id] = shortcut;
 
+  if (record(v.hotkeyOptions))
+    for (const id of Object.keys(p.hotkeys)) {
+      const value = v.hotkeyOptions[id];
+      if (!record(value) || !['local', 'global'].includes(value.scope as string)) continue;
+      const option: HotkeyOptions = { scope: value.scope as HotkeyOptions['scope'] };
+      if (id.startsWith('expression:')) {
+        if (value.release === true) option.release = true;
+        if (
+          typeof value.seconds === 'number' &&
+          Number.isFinite(value.seconds) &&
+          value.seconds > 0 &&
+          value.seconds <= 3600
+        )
+          option.seconds = value.seconds;
+      }
+      if (id.startsWith('motion:') && (value.motionMode === 'once' || value.motionMode === 'hold'))
+        option.motionMode = value.motionMode;
+      p.hotkeyOptions[id] = option;
+    }
   return p;
 }
 
@@ -259,12 +412,36 @@ export function readSettings(value: unknown): Settings {
   if (!record(value)) return s;
 
   const v = value;
+  s.composition = readComposition(v.composition);
+  s.scenes = readScenes(v.scenes);
+  s.globalHotkeys = readProfile({ hotkeys: v.globalHotkeys }).hotkeys;
   Object.assign(s, readProfile(v));
-  for (const key of ['deviceId', 'modelPath', 'pythonPath', 'scriptPath'] as const)
+  for (const key of [
+    'deviceId',
+    'micDeviceId',
+    'modelPath',
+    'pythonPath',
+    'scriptPath',
+    'nvidiaPath',
+    'nvidiaModelDir',
+  ] as const)
     if (typeof v[key] === 'string' && v[key].length < 4096) s[key] = v[key];
   if (typeof v.previewMirror === 'boolean') s.previewMirror = v.previewMirror;
+  if (typeof v.previewCamera === 'boolean') s.previewCamera = v.previewCamera;
   if (typeof v.upperBody === 'boolean') s.upperBody = v.upperBody;
-  if (v.engine === 'openseeface') s.engine = v.engine;
+  if (typeof v.handTracking === 'boolean') s.handTracking = v.handTracking;
+  if (v.cameraResolution === '360p' || v.cameraResolution === '1080p')
+    s.cameraResolution = v.cameraResolution;
+  if (v.trackingFps === 15 || v.trackingFps === 24 || v.trackingFps === 60)
+    s.trackingFps = v.trackingFps;
+  for (const key of ['bodyFps', 'handFps'] as const)
+    if (v[key] === 5 || v[key] === 15 || v[key] === 30) s[key] = v[key];
+  if (v.renderFps === 60) s.renderFps = v.renderFps;
+  if (typeof v.micGain === 'number' && Number.isFinite(v.micGain))
+    s.micGain = clamp(v.micGain, 0.1, 20);
+  if (typeof v.micNoiseGate === 'number' && Number.isFinite(v.micNoiseGate))
+    s.micNoiseGate = clamp(v.micNoiseGate, 0, 0.2);
+  if (v.engine === 'openseeface' || v.engine === 'nvidia') s.engine = v.engine;
   if (typeof v.port === 'number' && Number.isFinite(v.port))
     s.port = Math.round(clamp(v.port, 1024, 65535));
   if (typeof v.camera === 'number' && Number.isFinite(v.camera))
@@ -334,6 +511,10 @@ const parameterSources: Record<string, FaceKey> = {
   ParamBodyAngleX: 'bodyYaw',
   ParamBodyAngleY: 'bodyPitch',
   ParamBodyAngleZ: 'bodyRoll',
+  ParamArmLA: 'armLeft',
+  ParamArmRA: 'armRight',
+  ParamArmLB: 'elbowLeft',
+  ParamArmRB: 'elbowRight',
 };
 
 export const parameterNames: Record<string, string> = Object.fromEntries(
@@ -341,9 +522,6 @@ export const parameterNames: Record<string, string> = Object.fromEntries(
 );
 
 const bodyFallback = { bodyYaw: 'yaw', bodyPitch: 'pitch', bodyRoll: 'roll' } as const;
-const isBodySource = (source: FaceKey) =>
-  source.startsWith('body') || source.startsWith('arm') || source.startsWith('elbow');
-
 const unipolar = (source: FaceKey) =>
   source === 'eyeLeft' || source === 'eyeRight' || source === 'mouthOpen';
 
@@ -366,31 +544,101 @@ export function defaultMapping(p: Parameter, s: Settings): Mapping | undefined {
     source,
     inputMin: unipolar(source) ? 0 : -1,
     inputMax: 1,
-    outputMin: p.min,
-    outputMax: p.max,
+    // Cubism's normal eye/mouth opening is 0..1; wider bounds are for exaggerated expressions.
+    outputMin: unipolar(source) ? clamp(0, p.min, p.max) : p.min,
+    outputMax: unipolar(source) ? clamp(1, p.min, p.max) : p.max,
     smoothing: sourceSmoothing(source, s),
     enabled: true,
   };
 }
 
-export function normalizedFace(face: Face, s: Settings): Partial<Record<FaceKey, number>> {
+export function normalizedFace(face: Partial<Face>, s: Settings): Partial<Record<FaceKey, number>> {
   const neutral = s.neutral ?? NEUTRAL,
     mirror = s.motionMirror ? -1 : 1;
 
-  const angle = (v: number, n: number) =>
-    clamp(((((((v - n + 540) % 360) + 360) % 360) - 180) / 30) * s.sensitivity, -1, 1);
-  const open = (v: number, n: number) =>
-    clamp(1 - (1 - clamp(v / Math.max(0.2, n), 0, 1)) * s.eyeSensitivity, 0, 1);
+  const angle = (v: number | undefined, n: number) =>
+    clamp(((((((v! - n + 540) % 360) + 360) % 360) - 180) / 30) * s.sensitivity, -1, 1);
+  const open = (v: number | undefined, n: number, endpoint: number | null) => {
+    const high = Math.max(0.2, n),
+      low = endpoint ?? high * s.eyeClosedThreshold;
+    return clamp((v! - low) / Math.max(0.15, high - low), 0, 1) ** s.eyeSensitivity;
+  };
 
   const values: Partial<Record<FaceKey, number>> = {
     yaw: angle(face.yaw, neutral.yaw) * mirror,
     pitch: angle(face.pitch, neutral.pitch),
     roll: angle(face.roll, neutral.roll) * mirror,
-    eyeLeft: open(face.eyeLeft, neutral.eyeLeft),
-    eyeRight: open(face.eyeRight, neutral.eyeRight),
-    mouthOpen: clamp((face.mouthOpen - neutral.mouthOpen) * s.mouthSensitivity, 0, 1),
-    mouthSmile: clamp(face.mouthSmile - neutral.mouthSmile, -1, 1),
+    eyeLeft: open(face.eyeLeft, neutral.eyeLeft, s.eyeClosedLeft),
+    eyeRight: open(face.eyeRight, neutral.eyeRight, s.eyeClosedRight),
+    mouthOpen: clamp((face.mouthOpen! - neutral.mouthOpen) * s.mouthSensitivity, 0, 1),
+    mouthSmile: clamp(face.mouthSmile! - neutral.mouthSmile, -1, 1),
   };
+
+  if (Number.isFinite(values.eyeLeft) && Number.isFinite(values.eyeRight)) {
+    const yaw = ((((face.yaw! - neutral.yaw + 540) % 360) + 360) % 360) - 180;
+    const blend =
+      s.eyeLink === 'always'
+        ? 1
+        : s.eyeLink === 'side'
+          ? clamp((Math.abs(yaw) - s.eyeLinkAngle) / 10, 0, 1)
+          : 0;
+    // Positive camera-space yaw turns the left eye away; select before motion mirroring.
+    const linked =
+      s.eyeLink === 'always'
+        ? (values.eyeLeft! + values.eyeRight!) / 2
+        : yaw >= 0
+          ? values.eyeRight!
+          : values.eyeLeft!;
+    if (Number.isFinite(blend)) {
+      values.eyeLeft! += (linked - values.eyeLeft!) * blend;
+      values.eyeRight! += (linked - values.eyeRight!) * blend;
+    }
+  }
+  for (const key of ['voiceVolume', 'voiceA', 'voiceI', 'voiceU', 'voiceE', 'voiceO'] as const)
+    if (Number.isFinite(face[key])) values[key] = clamp(face[key]!, 0, 1);
+  if (s.lipSyncMode !== 'off' && values.voiceVolume !== undefined) {
+    const calibrated = ['A', 'I', 'U', 'E', 'O'].every((v) => Object.hasOwn(s.voiceTemplates, v));
+    const voice =
+      s.lipSyncMode === 'vowels' && calibrated
+        ? ((values.voiceA ?? 0) +
+            (values.voiceI ?? 0) * 0.35 +
+            (values.voiceU ?? 0) * 0.4 +
+            (values.voiceE ?? 0) * 0.7 +
+            (values.voiceO ?? 0) * 0.8) *
+          values.voiceVolume
+        : values.voiceVolume;
+    values.mouthOpen = clamp(
+      (Number.isFinite(values.mouthOpen) ? values.mouthOpen! : 0) * (1 - s.lipSyncBlend) +
+        voice * s.lipSyncBlend,
+      0,
+      1,
+    );
+  }
+  for (const side of ['Left', 'Right'] as const) {
+    const target = s.motionMirror ? (side === 'Left' ? 'Right' : 'Left') : side;
+    for (const part of [
+      'Found',
+      'X',
+      'Y',
+      'Z',
+      'Angle',
+      'Open',
+      'Thumb',
+      'Index',
+      'Middle',
+      'Ring',
+      'Little',
+    ] as const) {
+      const value = face[`hand${side}${part}`];
+      if (!Number.isFinite(value)) continue;
+      const signed = ['X', 'Y', 'Z', 'Angle'].includes(part);
+      values[`hand${target}${part}`] = clamp(
+        value! * (part === 'X' || part === 'Angle' ? mirror : 1),
+        signed ? -1 : 0,
+        1,
+      );
+    }
+  }
 
   for (const key of ['bodyYaw', 'bodyPitch', 'bodyRoll'] as const)
     if (Number.isFinite(face[key]))
@@ -420,7 +668,7 @@ export function normalizedFace(face: Face, s: Settings): Partial<Record<FaceKey,
     values[key] = key.startsWith('position') ? value : clamp(value, -1, 1);
   }
 
-  return values;
+  return Object.fromEntries(Object.entries(values).filter(([, value]) => Number.isFinite(value)));
 }
 
 export class FaceMapper {
@@ -430,7 +678,12 @@ export class FaceMapper {
     this.current = {};
   }
 
-  map(face: Face | null, parameters: Parameter[], s: Settings, dt: number): Record<string, number> {
+  map(
+    face: Partial<Face> | null,
+    parameters: Parameter[],
+    s: Settings,
+    dt: number,
+  ): Record<string, number> {
     const values = face ? normalizedFace(face, s) : null;
     const next: Record<string, number> = {};
 
@@ -442,21 +695,36 @@ export class FaceMapper {
       if (!mapping?.enabled) continue;
 
       let value = values?.[mapping.source];
-      const missingBody = isBodySource(mapping.source) && value === undefined;
-      if (missingBody && values && !custom && Object.hasOwn(bodyFallback, mapping.source))
-        value = values[bodyFallback[mapping.source as keyof typeof bodyFallback]]! * 0.3;
+      const missingSource = value === undefined;
+      if (value === undefined && values && !custom && Object.hasOwn(bodyFallback, mapping.source)) {
+        const head = values[bodyFallback[mapping.source as keyof typeof bodyFallback]];
+        if (head !== undefined) value = head * 0.3;
+      }
       if (
         values &&
         (value === undefined || !Number.isFinite(value)) &&
-        !(missingBody && Object.hasOwn(this.current, p.id))
+        !Object.hasOwn(this.current, p.id)
       )
         continue;
       if (!face && !Object.hasOwn(NEUTRAL, mapping.source) && !Object.hasOwn(this.current, p.id))
         continue;
-      if (!face && s.autoBlink && (mapping.source === 'eyeLeft' || mapping.source === 'eyeRight'))
+      if (
+        missingSource &&
+        s.autoBlink &&
+        (mapping.source === 'eyeLeft' || mapping.source === 'eyeRight')
+      )
         continue;
 
       let target = p.default;
+      if (
+        value === undefined &&
+        values &&
+        s.lostMode === 'hold' &&
+        Object.hasOwn(this.current, p.id)
+      ) {
+        next[p.id] = this.current[p.id];
+        continue;
+      }
       if (value !== undefined) {
         if (!custom && !unipolar(mapping.source))
           target =
@@ -469,7 +737,7 @@ export class FaceMapper {
               (mapping.outputMax - mapping.outputMin);
       }
 
-      const tau = !face || missingBody ? Math.max(mapping.smoothing, 0.12) : mapping.smoothing;
+      const tau = missingSource ? Math.max(mapping.smoothing, 0.12) : mapping.smoothing;
       const alpha = tau <= 0 ? 1 : 1 - Math.exp(-clamp(Number.isFinite(dt) ? dt : 0, 0, 0.1) / tau);
       const old = this.current[p.id] ?? clamp(p.default, p.min, p.max);
       next[p.id] = clamp(old + (clamp(target, p.min, p.max) - old) * alpha, p.min, p.max);
