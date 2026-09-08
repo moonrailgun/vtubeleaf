@@ -33,6 +33,7 @@ struct Model {
     entry: PathBuf,
     files: Vec<String>,
     icon: Option<String>,
+    vts_warning: Option<String>,
 }
 
 #[derive(Default)]
@@ -187,6 +188,14 @@ impl Registry {
         let path = checked_resource(&model.root, resource)?;
         read_bounded(&path, MAX_FILE_BYTES)
     }
+
+    pub fn read_vts_config(&self, id: &str) -> Result<Option<Value>, String> {
+        let model = self.models.get(id).ok_or("模型尚未加载")?;
+        if let Some(warning) = &model.vts_warning {
+            return Err(warning.clone());
+        }
+        super::vts::model_config(&model.entry).map(|config| config.map(|(_, value)| value))
+    }
 }
 
 fn copy_model(source: &Model, destination: &Path) -> Result<Model, String> {
@@ -207,7 +216,18 @@ fn copy_model(source: &Model, destination: &Path) -> Result<Model, String> {
             .map_err(|_| "无法创建角色资源目录")?;
         fs::write(target, bytes).map_err(|_| "无法复制角色资源，请检查磁盘空间")?;
     }
-    let model = validate_model(staging.path())?;
+    // Optional VTS data must never prevent an otherwise valid model from loading.
+    let vts_warning = (|| -> Result<(), String> {
+        if let Some((name, value)) = super::vts::model_config(&source.entry)? {
+            validate_resource(&name)?;
+            let bytes = serde_json::to_vec(&value).map_err(|_| "无法保存 VTS 配置")?;
+            fs::write(staging.path().join(name), bytes).map_err(|_| "无法复制 VTS 配置")?;
+        }
+        Ok(())
+    })()
+    .err();
+    let mut model = validate_model(staging.path())?;
+    model.vts_warning = vts_warning;
     let _ = staging.keep();
     Ok(model)
 }
@@ -404,6 +424,7 @@ fn validate_model(path: &Path) -> Result<Model, String> {
         entry,
         files: resources.into_iter().collect(),
         icon,
+        vts_warning: None,
     })
 }
 
@@ -621,6 +642,8 @@ mod tests {
         let source = tempfile::tempdir().unwrap();
         let data = tempfile::tempdir().unwrap();
         fixture(source.path());
+        let config = br#"{"Version":1,"ParameterSettings":[],"Hotkeys":[]}"#;
+        fs::write(source.path().join("leaf.vtube.json"), config).unwrap();
         let mut registry = Registry::default();
         let first = registry.load(source.path(), data.path()).unwrap();
         let second = registry
@@ -629,6 +652,19 @@ mod tests {
         assert!(Path::new(&first.path).starts_with(data.path().canonicalize().unwrap()));
         assert_ne!(first.path, second.path);
         source.close().unwrap();
+        for info in [&first, &second] {
+            let copied = fs::read(
+                Path::new(&info.path)
+                    .parent()
+                    .unwrap()
+                    .join("leaf.vtube.json"),
+            )
+            .expect("the adjacent VTS config must survive importing and removing the source");
+            assert_eq!(
+                serde_json::from_slice::<Value>(&copied).unwrap(),
+                serde_json::from_slice::<Value>(config).unwrap()
+            );
+        }
         assert_eq!(registry.read(&first.id, "texture.png").unwrap(), b"texture");
         assert_eq!(registry.read(&second.id, "leaf.moc3").unwrap(), b"MOC3");
         let mut restarted = Registry::default();
@@ -636,6 +672,12 @@ mod tests {
         assert_eq!(library.models.len(), 2);
         assert!(library.errors.is_empty());
         assert!(library.models.iter().any(|model| model.path == first.path));
+        for model in &library.models {
+            assert_eq!(
+                restarted.read_vts_config(&model.id).unwrap().unwrap()["Version"],
+                1
+            );
+        }
         let broken = data.path().join("models/broken");
         fs::create_dir(&broken).unwrap();
         let library = restarted.list(data.path()).unwrap();
@@ -656,6 +698,74 @@ mod tests {
         assert_eq!(
             next_run.read_preview(&restored.id, data.path()).unwrap(),
             png
+        );
+    }
+
+    #[test]
+    fn optional_vts_config_survives_zip_and_bad_configs_do_not_block_import() {
+        let source = tempfile::tempdir().unwrap();
+        let data = tempfile::tempdir().unwrap();
+        fixture(source.path());
+        let mut registry = Registry::default();
+        let config = source.path().join("leaf.vtube.json");
+        for contents in [
+            b"not json".as_slice(),
+            br#"{"FileReferences":{"Model":"other.model3.json"}}"#,
+        ] {
+            fs::write(&config, contents).unwrap();
+            let model = registry.load(source.path(), data.path()).unwrap();
+            assert!(registry.read_vts_config(&model.id).is_err());
+            assert_eq!(registry.read(&model.id, "leaf.moc3").unwrap(), b"MOC3");
+        }
+        File::create(&config)
+            .unwrap()
+            .set_len(2 * 1024 * 1024 + 1)
+            .unwrap();
+        let model = registry.load(source.path(), data.path()).unwrap();
+        assert!(registry
+            .read_vts_config(&model.id)
+            .unwrap_err()
+            .contains("2 MB"));
+        fs::remove_file(&config).unwrap();
+        let model = registry.load(source.path(), data.path()).unwrap();
+        assert_eq!(registry.read_vts_config(&model.id).unwrap(), None);
+        assert!(registry.read_vts_config("unknown").is_err());
+        #[cfg(unix)]
+        {
+            std::os::unix::fs::symlink(source.path().join("private.txt"), &config).unwrap();
+            let model = registry.load(source.path(), data.path()).unwrap();
+            assert!(registry
+                .read_vts_config(&model.id)
+                .unwrap_err()
+                .contains("符号链接"));
+            fs::remove_file(&config).unwrap();
+        }
+        fs::write(&config, br#"{"Version":1,"FileReferences":{"Model":"leaf.model3.json"},"ParameterSettings":[],"Hotkeys":[]}"#).unwrap();
+        let archive = data.path().join("model.zip");
+        let mut zip = zip::ZipWriter::new(File::create(&archive).unwrap());
+        for name in [
+            "leaf.model3.json",
+            "leaf.moc3",
+            "texture.png",
+            "leaf.vtube.json",
+        ] {
+            zip.start_file(format!("model/{name}"), SimpleFileOptions::default())
+                .unwrap();
+            zip.write_all(&fs::read(source.path().join(name)).unwrap())
+                .unwrap();
+        }
+        zip.finish().unwrap();
+        let info = registry.load(&archive, data.path()).unwrap();
+        assert_eq!(
+            registry.read_vts_config(&info.id).unwrap().unwrap()["Version"],
+            1
+        );
+        source.close().unwrap();
+        let mut restarted = Registry::default();
+        let info = restarted.load(Path::new(&info.path), data.path()).unwrap();
+        assert_eq!(
+            restarted.read_vts_config(&info.id).unwrap().unwrap()["Version"],
+            1
         );
     }
 

@@ -3,6 +3,7 @@ mod models;
 mod motion;
 mod settings;
 mod tracker;
+mod vts;
 
 use models::{Library, ModelInfo, Registry};
 use serde_json::Value;
@@ -227,6 +228,26 @@ async fn save_model_preview(
 }
 
 #[tauri::command]
+async fn read_model_vts_config(
+    window: WebviewWindow,
+    app: tauri::AppHandle,
+    id: String,
+) -> Result<Option<serde_json::Value>, String> {
+    require_main(&window)?;
+    tauri::async_runtime::spawn_blocking(move || {
+        let state = app.state::<AppState>();
+        let result = state
+            .models
+            .lock()
+            .map_err(|_| "模型状态不可用")?
+            .read_vts_config(&id);
+        result
+    })
+    .await
+    .map_err(|_| "VTS 配置读取任务中断")?
+}
+
+#[tauri::command]
 async fn read_model_resource(
     window: WebviewWindow,
     app: tauri::AppHandle,
@@ -321,6 +342,8 @@ pub fn run() {
             save_motion,
             assets::choose_asset,
             assets::read_asset,
+            vts::choose_vts_config,
+            read_model_vts_config,
             choose_model,
             load_model,
             list_models,
