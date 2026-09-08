@@ -1,0 +1,27 @@
+cmake_minimum_required(VERSION 3.24)
+project(VTubeLeafNvidia LANGUAGES CXX)
+if(NOT WIN32 OR NOT CMAKE_SIZEOF_VOID_P EQUAL 8)
+  message(FATAL_ERROR "The experimental NVIDIA tracker requires 64-bit Windows")
+endif()
+
+set(ARSDK_SAMPLES_DIR "" CACHE PATH "NVIDIA AR-SDK-Samples checkout")
+if(NOT EXISTS "${ARSDK_SAMPLES_DIR}/cmake/FindARSDK.cmake")
+  message(FATAL_ERROR "Set ARSDK_SAMPLES_DIR to NVIDIA's AR-SDK-Samples checkout")
+endif()
+list(APPEND CMAKE_MODULE_PATH "${ARSDK_SAMPLES_DIR}/cmake")
+find_package(ARSDK 1.1 REQUIRED)
+find_package(OpenCV 4 REQUIRED COMPONENTS core videoio)
+foreach(feature nvARFaceExpressions nvARLandmarkDetection nvARFaceBoxDetection)
+  if(NOT TARGET ${feature})
+    message(FATAL_ERROR "Install the AR SDK feature ${feature} before building")
+  endif()
+endforeach()
+
+add_executable(VTubeLeafNvidia main.cpp)
+target_compile_features(VTubeLeafNvidia PRIVATE cxx_std_17)
+target_compile_definitions(VTubeLeafNvidia PRIVATE NOMINMAX WIN32_LEAN_AND_MEAN)
+target_compile_options(VTubeLeafNvidia PRIVATE /W4 /utf-8)
+target_include_directories(VTubeLeafNvidia PRIVATE
+  "${ARSDK_SAMPLES_DIR}/utils" "${CUDA_INCLUDE_DIR}" ${OpenCV_INCLUDE_DIRS})
+target_link_libraries(VTubeLeafNvidia PRIVATE nvARPose NVCVImage
+  nvARFaceExpressions nvARLandmarkDetection nvARFaceBoxDetection ${OpenCV_LIBS})
