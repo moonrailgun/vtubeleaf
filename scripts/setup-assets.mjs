@@ -1,8 +1,8 @@
 import assert from 'node:assert/strict';
 import { createHash, randomUUID } from 'node:crypto';
-import { mkdir, mkdtemp, readFile, realpath, rename, rm, stat, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, rename, rm, stat, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { basename, dirname, isAbsolute, join, relative, resolve } from 'node:path';
+import { basename, dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { parseArgs } from 'node:util';
 
@@ -44,6 +44,21 @@ const wasm = [
   ],
 ];
 const hash = (bytes) => createHash('sha256').update(bytes).digest('hex');
+const coreLicenses = ['LICENSE.md', 'Core/LICENSE.md', 'Core/RedistributableFiles.txt'];
+const coreFiles = [
+  [
+    'Core/live2dcubismcore.min.js',
+    207155,
+    '25ae938cb4fe282ce189b357bcc97e603d1e1f7ec78bf04150d401c23cdc792f',
+  ],
+  ['LICENSE.md', 3017, 'c96e038ac249da5aeab715c043684ff72dd29f3fc333925637a7508f8a013ee3'],
+  ['Core/LICENSE.md', 520, 'b81e37048010ef1d336106151201a0323c3309cae44aecdedf57831fe88fa991'],
+  [
+    'Core/RedistributableFiles.txt',
+    205,
+    'd16c123688299e1e69a7f5ebc01b3bd75a8d408c024002a7d35b2aae94003f8c',
+  ],
+];
 
 function verify(bytes, expected, label) {
   if (bytes.length !== expected.bytes || hash(bytes) !== expected.sha256) {
@@ -92,6 +107,34 @@ async function download(model, label) {
   return verify(Buffer.concat(chunks), model, label);
 }
 
+async function prepareCubism(directory, check) {
+  // Validate the complete dependency before replacing any runtime files.
+  const files = await Promise.all(
+    coreFiles.map(async ([name, bytes, sha256]) => {
+      const target = coreLicenses.includes(name) ? `licenses/${name}` : basename(name);
+      const source = check
+        ? join(directory, target)
+        : join(root, 'node_modules/@vtubeleaf/cubism-core', name);
+      const data = verify(await boundedRead(source, bytes), { bytes, sha256 }, name);
+      return { target, data, bytes, sha256 };
+    }),
+  );
+  if (!check) {
+    for (const { target, data } of files) await atomicWrite(join(directory, target), data);
+  }
+  return {
+    cubismCore: {
+      source: '@vtubeleaf/cubism-core@5.0.0-r.4',
+      archiveLabel: 'CubismSdkForWeb-5-r.4',
+      bytes: files[0].bytes,
+      sha256: files[0].sha256,
+    },
+    files: Object.fromEntries(
+      files.map(({ target, bytes, sha256 }) => [target, { bytes, sha256 }]),
+    ),
+  };
+}
+
 async function selfTest() {
   const bytes = Buffer.from('verified asset');
   const expected = { bytes: bytes.length, sha256: hash(bytes) };
@@ -105,6 +148,13 @@ async function selfTest() {
     await assert.rejects(boundedRead(path, 1), /size/);
     await atomicWrite(path, Buffer.from('replacement'));
     assert.equal(await readFile(path, 'utf8'), 'replacement');
+    const cubism = await prepareCubism(directory, false);
+    assert.deepEqual(await prepareCubism(directory, true), cubism);
+    await writeFile(join(directory, 'licenses/Core/LICENSE.md'), 'tampered');
+    await assert.rejects(prepareCubism(directory, true), /mismatch/);
+    await prepareCubism(directory, false);
+    await rm(join(directory, 'live2dcubismcore.min.js'));
+    await assert.rejects(prepareCubism(directory, true), /ENOENT/);
   } finally {
     await rm(directory, { recursive: true, force: true });
   }
@@ -114,8 +164,6 @@ async function selfTest() {
 async function main() {
   const { values } = parseArgs({
     options: {
-      sdk: { type: 'string' },
-      'sdk-version': { type: 'string' },
       check: { type: 'boolean' },
       'mediapipe-only': { type: 'boolean' },
       'self-test': { type: 'boolean' },
@@ -124,7 +172,7 @@ async function main() {
   });
   if (values.help) {
     console.log(
-      'node scripts/setup-assets.mjs [--sdk /official/CubismSdkForWeb] [--sdk-version archive-label]\n  --mediapipe-only  Prepare/check tracking resources without Cubism Core\n  --check           Verify existing resources without downloads or writes\n  --self-test       Run local integrity/atomic-write checks',
+      'node scripts/setup-assets.mjs\n  Prepare pinned Cubism Core from npm dependencies and local tracking resources\n  --mediapipe-only  Prepare/check tracking resources without Cubism Core\n  --check           Verify existing resources without downloads or writes\n  --self-test       Run local integrity/atomic-write checks',
     );
     return;
   }
@@ -164,45 +212,24 @@ async function main() {
 
   const corePath = join(runtime, 'live2dcubismcore.min.js');
   if (!values['mediapipe-only']) {
-    let core;
-    if (values.sdk && !values.check) {
-      const sdkRoot = await realpath(resolve(values.sdk));
-      const source = await realpath(join(sdkRoot, 'Core/live2dcubismcore.min.js'));
-      const inside = relative(sdkRoot, source);
-      if (inside.startsWith('..') || isAbsolute(inside))
-        throw new Error('Cubism Core must be inside the supplied SDK directory.');
-      core = await boundedRead(source, 16 * 1024 * 1024);
-      if (core.length < 100_000 || !core.includes(Buffer.from('Live2DCubismCore')))
-        throw new Error('The SDK Core file does not look like Cubism Core for Web.');
-      await atomicWrite(corePath, core);
-      manifest.cubismCore = {
-        source: 'developer-supplied official SDK',
-        archiveLabel: values['sdk-version'] || basename(sdkRoot),
-        bytes: core.length,
-        sha256: hash(core),
-      };
-    } else {
-      try {
-        const previous = JSON.parse(await readFile(join(runtime, 'manifest.json'), 'utf8'));
-        core = verify(
-          await boundedRead(corePath, 16 * 1024 * 1024),
-          previous.cubismCore,
-          'Cubism Core',
-        );
-        manifest.cubismCore = previous.cubismCore;
-      } catch {
-        throw new Error(
-          'MediaPipe is ready; Cubism Core is missing or unverified. Download Cubism SDK for Web from https://www.live2d.com/en/sdk/download/web/ and review its terms, then run npm run setup:assets -- --sdk /path/to/CubismSdkForWeb. No Core or sample model is downloaded automatically.',
-        );
-      }
-    }
-    manifest.files['live2dcubismcore.min.js'] = { bytes: core.length, sha256: hash(core) };
+    const cubism = await prepareCubism(runtime, values.check);
+    manifest.cubismCore = cubism.cubismCore;
+    Object.assign(manifest.files, cubism.files);
   } else if (!values.check) {
     // Keep a previously supplied Core inventory when refreshing only MediaPipe.
     try {
       const previous = JSON.parse(await readFile(join(runtime, 'manifest.json'), 'utf8'));
       const core = await boundedRead(corePath, 16 * 1024 * 1024);
       verify(core, previous.cubismCore, 'Cubism Core');
+      for (const name of coreLicenses) {
+        const target = `licenses/${name}`;
+        verify(
+          await boundedRead(join(runtime, target), 128 * 1024),
+          previous.files[target],
+          target,
+        );
+        manifest.files[target] = previous.files[target];
+      }
       manifest.cubismCore = previous.cubismCore;
       manifest.files['live2dcubismcore.min.js'] = { bytes: core.length, sha256: hash(core) };
     } catch {
@@ -212,7 +239,7 @@ async function main() {
   if (!values.check)
     await atomicWrite(join(runtime, 'manifest.json'), `${JSON.stringify(manifest, null, 2)}\n`);
   console.log(
-    `${values.check ? 'Verified' : 'Prepared'} local MediaPipe ${version}${manifest.cubismCore ? ' and developer-supplied Cubism Core' : ''}. Resources remain ignored by Git.`,
+    `${values.check ? 'Verified' : 'Prepared'} local MediaPipe ${version}${manifest.cubismCore ? ' and pinned Cubism Core R4' : ''}. Generated runtime resources remain ignored by Git.`,
   );
 }
 
