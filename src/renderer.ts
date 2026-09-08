@@ -3,6 +3,8 @@ import { install } from '@pixi/unsafe-eval';
 import { invoke } from '@tauri-apps/api/core';
 import type { Live2DModel, Cubism4InternalModel } from 'pixi-live2d-display/cubism4';
 import { type Parameter, type Settings } from './state';
+import { SceneLayers, type SceneFrames } from './scene-renderer';
+import { physicsGroupsFromJson, wrapPhysics, type PhysicsGroup } from './physics';
 
 install(PIXI);
 
@@ -17,9 +19,9 @@ type ExpressionData = {
   [key: string]: unknown;
 };
 
-export type Motion = { id: string; name: string; group: string; data: MotionData };
+export type Motion = { id: string; name: string; group: string; data: MotionData; file: string };
 
-export type Expression = { id: string; name: string; data: ExpressionData };
+export type Expression = { id: string; name: string; data: ExpressionData; file: string };
 
 let coreReady: Promise<void> | undefined;
 
@@ -44,16 +46,22 @@ async function runtime() {
 
 export class AvatarStage {
   private app: PIXI.Application;
+  readonly content = new PIXI.Container();
+  private layers?: SceneLayers;
   private model?: Live2DModel;
   private urls: string[] = [];
   private generation = 0;
+  private compositionGeneration = 0;
   private values: Record<string, number> = {};
   private settings?: Settings;
-  private observer: ResizeObserver;
+  private observer?: ResizeObserver;
   parameters: Parameter[] = [];
   motions: Motion[] = [];
   expressions: Expression[] = [];
+  physicsGroups: PhysicsGroup[] = [];
   activeExpressions = new Set<string>();
+  private expressionExpiry = new Map<string, number>();
+  private heldMotion = '';
   frame: Record<string, number> = {};
   parts: Record<string, number> = {};
   private incomingParts: Record<string, number> = {};
@@ -66,6 +74,10 @@ export class AvatarStage {
   };
   private held: Record<string, number> = {};
   private expressionIds = new Set<string>();
+  private contextLost = (event: Event) => {
+    event.preventDefault();
+    this.onContextLost();
+  };
 
   get currentMotion() {
     return this.playing?.id ?? '';
@@ -73,21 +85,27 @@ export class AvatarStage {
 
   constructor(
     private container: HTMLElement,
-    onContextLost: () => void,
+    private onContextLost: () => void,
     private passive = false,
+    private sharedApp?: PIXI.Application,
   ) {
-    this.app = new PIXI.Application({
-      backgroundAlpha: 0,
-      antialias: true,
-      autoStart: false,
-      resolution: Math.min(devicePixelRatio, 2),
-      autoDensity: true,
-    });
+    this.app =
+      sharedApp ??
+      new PIXI.Application({
+        backgroundAlpha: 0,
+        antialias: true,
+        autoStart: false,
+        resolution: Math.min(devicePixelRatio, 2),
+        autoDensity: true,
+      });
+    if (sharedApp) return;
+    this.layers = new SceneLayers(
+      () => new AvatarStage(this.container, onContextLost, this.passive, this.app),
+    );
+    this.app.stage.addChild(this.layers.root);
+    this.layers.root.addChild(this.content);
     container.append(this.app.view);
-    this.app.view.addEventListener('webglcontextlost', (event: Event) => {
-      event.preventDefault();
-      onContextLost();
-    });
+    this.app.view.addEventListener('webglcontextlost', this.contextLost);
     this.observer = new ResizeObserver(() => this.layout());
     this.observer.observe(container);
   }
@@ -97,8 +115,19 @@ export class AvatarStage {
     const urls: string[] = [];
     let candidate: Live2DModel | undefined;
     try {
-      const { Live2DModel, Live2DFactory, Cubism4ModelSettings, MotionPreloadStrategy } =
-        await runtime();
+      const lib = await runtime();
+      const { Live2DModel, Live2DFactory, Cubism4ModelSettings, MotionPreloadStrategy } = lib;
+      // Runtime export omitted from pixi-live2d-display's declarations.
+      const { CubismShader_WebGL } = lib as unknown as {
+        CubismShader_WebGL: {
+          getInstance(): {
+            gl: WebGLRenderingContext;
+            release(): void;
+            _shaderSets: unknown[];
+            setGl(gl: WebGLRenderingContext): void;
+          };
+        };
+      };
       const bytes = await invoke<ArrayBuffer>('read_model_resource', {
         id: info.id,
         resource: info.entry,
@@ -121,6 +150,8 @@ export class AvatarStage {
         }),
       );
       const documents = new Map<string, MotionData & ExpressionData>();
+      let physicsDocument: unknown;
+      const physicsFile = json.FileReferences.Physics as string | undefined;
       json.url = `/${info.entry}`;
       const settings = new Cubism4ModelSettings(json);
       const paths = new Set<string>();
@@ -135,6 +166,7 @@ export class AvatarStage {
         const data = await invoke<ArrayBuffer>('read_model_resource', { id: info.id, resource });
         if (/\.(motion3|exp3)\.json$/i.test(path))
           documents.set(path, JSON.parse(new TextDecoder().decode(data)));
+        else if (path === physicsFile) physicsDocument = JSON.parse(new TextDecoder().decode(data));
         const type = /\.png$/i.test(path)
           ? 'image/png'
           : /\.jpe?g$/i.test(path)
@@ -179,10 +211,13 @@ export class AvatarStage {
       internal.motionManager.stopAllMotions();
       this.playing = undefined;
       this.held = {};
+      this.heldMotion = '';
       this.activeExpressions.clear();
+      this.expressionExpiry.clear();
       this.expressionIds.clear();
       this.frame = {};
       this.parts = {};
+      this.physicsGroups = this.passive ? [] : physicsGroupsFromJson(physicsDocument);
       this.motions = motionDefinitions
         .filter((def) => documents.has(def.file))
         .map((def) => ({ ...def, data: documents.get(def.file)! }));
@@ -199,12 +234,30 @@ export class AvatarStage {
         max: raw.maximumValues[i],
         default: raw.defaultValues[i],
       }));
+      // Cubism 4 shares one shader singleton across WebGL contexts (including thumbnails).
+      // ponytail: rebuild only on a context switch; cache per context if thumbnail throughput matters.
+      const draw = internal.draw.bind(internal);
+      internal.draw = (gl) => {
+        const shader = CubismShader_WebGL.getInstance();
+        if (shader.gl !== gl) {
+          shader.release();
+          shader._shaderSets = [];
+          shader.setGl(gl);
+        }
+        draw(gl);
+      };
       const blink = internal.eyeBlink;
       const blinkIds = [...internal.motionManager.eyeBlinkIds];
       if (this.passive) {
         internal.physics = undefined;
         internal.pose = undefined;
         internal.eyeBlink = undefined;
+      } else if (internal.physics) {
+        wrapPhysics(
+          internal.physics,
+          this.physicsGroups.map((group) => group.id),
+          () => this.settings,
+        );
       }
       internal.on('beforeMotionUpdate', () => {
         for (const p of this.parameters) internal.coreModel.setParameterValueById(p.id, p.default);
@@ -267,7 +320,7 @@ export class AvatarStage {
           Array.from(core.parts.ids, (id, i) => [id, core.parts.opacities[i]]),
         );
       });
-      this.app.stage.addChild(candidate);
+      this.content.addChild(candidate);
       this.layout();
       return true;
     } catch (error) {
@@ -289,8 +342,51 @@ export class AvatarStage {
 
   display(settings: Settings) {
     this.settings = settings;
-    this.container.style.backgroundColor = settings.background;
+    if (!this.sharedApp) this.container.style.backgroundColor = settings.background;
     this.layout();
+  }
+
+  async compose(settings: Settings, models: ModelInfo[]) {
+    const generation = ++this.compositionGeneration;
+    await this.layers?.load(settings.composition, models);
+    if (generation === this.compositionGeneration) this.display(settings);
+  }
+
+  async prepare(info: ModelInfo | null, settings: Settings, models: ModelInfo[]) {
+    // ponytail: one temporary WebGL context per scene switch; share staged resources if memory becomes a limit.
+    const candidate = new AvatarStage(
+      document.createElement('div'),
+      this.onContextLost,
+      this.passive,
+    );
+    try {
+      if (info) await candidate.load(info);
+      await candidate.compose(settings, models);
+      return candidate;
+    } catch (error) {
+      candidate.destroy();
+      throw error;
+    }
+  }
+
+  mount(container: HTMLElement) {
+    this.observer?.disconnect();
+    this.container = container;
+    container.append(this.canvas);
+    this.observer?.observe(container);
+    if (this.settings) this.display(this.settings);
+    this.draw({}, 0);
+  }
+
+  get canvas() {
+    return this.app.view;
+  }
+
+  centeredItem() {
+    if (!this.model) return;
+    this.model.anchor.set(0.5);
+    this.model.position.set(0);
+    this.model.scale.set(1);
   }
 
   thumbnail() {
@@ -300,6 +396,14 @@ export class AvatarStage {
       position = model.position.clone(),
       anchor = model.anchor.clone();
     const { width, height } = this.app.screen;
+    const hidden = this.layers?.root.children.filter((c) => c !== this.content && c.visible) ?? [];
+    hidden.forEach((c) => {
+      c.visible = false;
+    });
+    const rotation = model.rotation;
+    const visible = model.visible;
+    model.visible = true;
+    model.rotation = 0;
     const canvas = document.createElement('canvas');
     canvas.width = canvas.height = 256;
     try {
@@ -354,22 +458,30 @@ export class AvatarStage {
       model.scale.copyFrom(scale);
       model.position.copyFrom(position);
       model.anchor.copyFrom(anchor);
+      model.rotation = rotation;
+      model.visible = visible;
+      hidden.forEach((c) => {
+        c.visible = true;
+      });
       this.app.render();
     }
   }
 
   private layout() {
+    if (this.sharedApp) return;
     const { width, height } = this.container.getBoundingClientRect();
     if (width < 1 || height < 1) return;
     this.app.renderer.resize(width, height);
     if (!this.model || !this.settings) return;
     const model = this.model,
       s = this.settings;
+    model.visible = s.modelVisible;
     const fit =
       Math.min(width / model.internalModel.width, height / model.internalModel.height) *
       0.92 *
       s.zoom;
     model.anchor.set(0.5);
+    model.rotation = (s.rotation * Math.PI) / 180;
     model.scale.set(fit);
     model.position.set(width * (0.5 + s.x), height * (0.5 + s.y));
   }
@@ -408,17 +520,35 @@ export class AvatarStage {
     (this.model?.internalModel as Cubism4InternalModel | undefined)?.motionManager.stopAllMotions();
     this.playing = undefined;
     this.held = {};
+    this.heldMotion = '';
   }
 
-  toggleExpression(id: string) {
+  toggleHeldMotion(id: string) {
+    if (this.heldMotion === id) this.stopMotion();
+    else {
+      this.playMotion(id, 'hold');
+      this.heldMotion = id;
+    }
+  }
+
+  toggleExpression(id: string, seconds?: number) {
     if (!this.expressions.some((e) => e.id === id)) return;
-    if (this.activeExpressions.has(id)) this.activeExpressions.delete(id);
-    else this.activeExpressions.add(id);
+    this.setExpression(id, !this.activeExpressions.has(id), seconds);
+  }
+
+  setExpression(id: string, active: boolean, seconds?: number) {
+    if (!this.expressions.some((e) => e.id === id)) return;
+    this.expressionExpiry.delete(id);
+    if (active) {
+      this.activeExpressions.add(id);
+      if (seconds) this.expressionExpiry.set(id, performance.now() + seconds * 1000);
+    } else this.activeExpressions.delete(id);
     this.applyExpressions();
   }
 
   clearExpressions() {
     this.activeExpressions.clear();
+    this.expressionExpiry.clear();
     this.applyExpressions();
   }
 
@@ -437,16 +567,35 @@ export class AvatarStage {
     manager.queueManager.startMotion(expression, false, 0);
   }
 
-  draw(values: Record<string, number>, dt: number, parts: Record<string, number> = {}) {
+  get sceneFrames(): SceneFrames {
+    return this.layers?.frames ?? {};
+  }
+
+  draw(
+    values: Record<string, number>,
+    dt: number,
+    parts: Record<string, number> = {},
+    sceneFrames?: SceneFrames,
+  ) {
+    for (const [id, expiry] of this.expressionExpiry)
+      if (performance.now() >= expiry) this.setExpression(id, false);
     this.values = values;
     this.incomingParts = parts;
-    if (!this.passive) {
+    if (!this.passive && !this.sharedApp) {
       if (this.playing?.idle && this.playing.id !== this.settings?.idleMotion) this.stopMotion();
       if (!this.playing && !Object.keys(this.held).length && this.settings?.idleMotion)
         this.playMotion(this.settings.idleMotion, 'loop', true);
     }
     this.model?.update(Math.min(dt, 100));
-    this.app.render();
+    if (this.settings)
+      this.layers?.draw(
+        this.settings,
+        this.app.screen.width,
+        this.app.screen.height,
+        dt,
+        sceneFrames,
+      );
+    if (!this.sharedApp) this.app.render();
   }
 
   clear() {
@@ -459,17 +608,24 @@ export class AvatarStage {
     this.values = {};
     this.motions = [];
     this.expressions = [];
+    this.physicsGroups = [];
     this.activeExpressions.clear();
+    this.expressionExpiry.clear();
     this.playing = undefined;
     this.held = {};
+    this.heldMotion = '';
     this.frame = {};
     this.parts = {};
     this.app.render();
   }
 
   destroy() {
+    if (!this.sharedApp) this.app.view.removeEventListener('webglcontextlost', this.contextLost);
+    this.compositionGeneration++;
     this.clear();
-    this.observer.disconnect();
-    this.app.destroy(true);
+    this.observer?.disconnect();
+    this.layers?.destroy();
+    if (this.sharedApp) this.content.destroy();
+    else this.app.destroy(true);
   }
 }

@@ -24,6 +24,7 @@
     "@vtubeleaf/cubism-core": "file:vendor/vtubeleaf-cubism-core-5.0.0-r.4.tgz",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
+    "gifuct-js": "^2.1.2",
     "lucide-react": "^1.42.0",
     "pixi-live2d-display": "0.4.0",
     "pixi.js": "6.5.10",
