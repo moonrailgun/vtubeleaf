@@ -1,3 +1,4 @@
+import type { HotkeyOptions } from './state.ts';
 import { isTauri } from '@tauri-apps/api/core';
 import { register, unregister } from '@tauri-apps/plugin-global-shortcut';
 
@@ -93,22 +94,25 @@ function editing(target: EventTarget | null): boolean {
   );
 }
 
-/** Native shortcuts are global; preview shortcuts only work in the active page. */
+/** Native global bindings use the OS; local/preview bindings stay in the active window. */
 export class Hotkeys {
   private native = isTauri();
   private bindings = new Map<string, string>();
   private owned = new Set<string>();
-  private pressed = new Set<string>();
+  private pressed = new Map<string, string>();
+  private local = new Set<string>();
   private operation: Promise<void> = Promise.resolve();
   private destroyed = false;
   private revision = 0;
-  private run: (action: string) => void;
+  private run: (action: string, pressed: boolean) => void;
   private onError: (message: string) => void;
 
-  constructor(run: (action: string) => void, onError: (message: string) => void) {
+  constructor(run: (action: string, pressed: boolean) => void, onError: (message: string) => void) {
     this.run = run;
     this.onError = onError;
-    if (!this.native) window.addEventListener('keydown', this.keydown);
+    window.addEventListener('keydown', this.keydown);
+    window.addEventListener('keyup', this.keyup);
+    window.addEventListener('blur', this.blur);
   }
 
   private keydown = (event: KeyboardEvent) => {
@@ -132,10 +136,35 @@ export class Hotkeys {
       .filter(Boolean)
       .join('+');
     const action = this.bindings.get(shortcut);
-    if (action) {
+    if (action && this.local.has(shortcut) && !this.pressed.has(shortcut)) {
       event.preventDefault();
-      this.run(action);
+      this.pressed.set(shortcut, action);
+      this.run(action, true);
     }
+  };
+
+  private releasePressed(shortcut: string) {
+    const action = this.pressed.get(shortcut);
+    this.pressed.delete(shortcut);
+    if (action) this.run(action, false);
+  }
+
+  private keyup = (event: KeyboardEvent) => {
+    for (const shortcut of this.local) {
+      const parts = shortcut.split('+');
+      if (
+        parts.at(-1) === event.code ||
+        (parts.includes('Control') && !event.ctrlKey) ||
+        (parts.includes('Alt') && !event.altKey) ||
+        (parts.includes('Shift') && !event.shiftKey) ||
+        (parts.includes('Super') && !event.metaKey)
+      )
+        this.releasePressed(shortcut);
+    }
+  };
+
+  private blur = () => {
+    for (const shortcut of this.local) this.releasePressed(shortcut);
   };
 
   private queue(task: () => Promise<void>): Promise<void> {
@@ -145,8 +174,9 @@ export class Hotkeys {
 
   private async release() {
     this.revision++;
+    for (const shortcut of this.pressed.keys()) this.releasePressed(shortcut);
     this.bindings.clear();
-    this.pressed.clear();
+    this.local.clear();
     for (const shortcut of this.owned) {
       try {
         await unregister(shortcut);
@@ -157,13 +187,18 @@ export class Hotkeys {
     }
   }
 
-  set(bindings: Record<string, string>): Promise<void> {
-    const entries = Object.entries(bindings);
+  set(
+    bindings: Record<string, string>,
+    options: Record<string, HotkeyOptions> = {},
+  ): Promise<void> {
+    const entries = Object.entries(bindings).map(
+      ([action, raw]) => [action, raw, options[action]?.scope] as const,
+    );
     return this.queue(async () => {
       if (this.destroyed) return;
       await this.release();
       const conflicts = new Map<string, string>();
-      for (const [action, raw] of entries) {
+      for (const [action, raw, scope] of entries) {
         if (this.destroyed) break;
         if (typeof raw !== 'string' || !raw.trim()) continue;
         let shortcut: string;
@@ -183,24 +218,25 @@ export class Hotkeys {
           this.onError(`${action} 的旧快捷键尚未注销，请重试：${raw}`);
           continue;
         }
-        if (this.native) {
+        if (this.native && scope !== 'local') {
           try {
             const revision = this.revision;
             await register(shortcut, (event) => {
               if (revision !== this.revision) return;
               if (event.state !== 'Pressed') {
-                this.pressed.delete(shortcut);
+                this.releasePressed(shortcut);
                 return;
               }
               if (this.pressed.has(shortcut)) return;
-              this.pressed.add(shortcut);
               const current = this.bindings.get(shortcut);
               if (
                 !this.destroyed &&
                 current &&
                 !(document.hasFocus() && editing(document.activeElement))
-              )
-                this.run(current);
+              ) {
+                this.pressed.set(shortcut, current);
+                this.run(current, true);
+              }
             });
             this.owned.add(shortcut);
           } catch (error) {
@@ -208,7 +244,10 @@ export class Hotkeys {
             continue;
           }
         }
-        if (!this.destroyed) this.bindings.set(shortcut, action);
+        if (!this.destroyed) {
+          this.bindings.set(shortcut, action);
+          if (!this.native || scope === 'local') this.local.add(shortcut);
+        }
       }
     });
   }
@@ -216,6 +255,8 @@ export class Hotkeys {
   destroy(): Promise<void> {
     this.destroyed = true;
     window.removeEventListener('keydown', this.keydown);
+    window.removeEventListener('keyup', this.keyup);
+    window.removeEventListener('blur', this.blur);
     return this.queue(() => this.release());
   }
 }

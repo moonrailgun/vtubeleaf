@@ -4,12 +4,19 @@ import { emitTo, listen, type UnlistenFn } from '@tauri-apps/api/event';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import { AvatarStage, type ModelInfo } from './renderer';
 import { defaults, readSettings, type Settings } from './state';
+import type { SceneFrames } from './scene-renderer';
 
-export type OutputState = { model: ModelInfo | null; settings: Settings; revision: number };
+export type OutputState = {
+  model: ModelInfo | null;
+  models: ModelInfo[];
+  settings: Settings;
+  revision: number;
+};
 export type OutputFrame = {
   revision: number;
   parameters: Record<string, number>;
   parts: Record<string, number>;
+  sceneFrames: SceneFrames;
 };
 
 export function Output() {
@@ -24,8 +31,12 @@ export function Output() {
     let revision = 0;
     let values: Record<string, number> = {};
     let parts: Record<string, number> = {};
+    let sceneFrames: SceneFrames = {};
     let received = 0;
     let disposed = false;
+    let stateOperation = 0;
+    let pendingState: OutputState | undefined;
+    let applyingState = false;
     const unlisteners: UnlistenFn[] = [];
     const report = () => {
       if (native && !disposed)
@@ -51,28 +62,42 @@ export function Output() {
       await own(
         listen<OutputState>('output-state', async ({ payload }) => {
           if (disposed) return;
-          stage?.display(readSettings(payload.settings));
-          const next = payload.model;
-          if (!next) {
-            model = null;
-            revision = payload.revision;
-            values = {};
-            parts = {};
-            stage?.clear();
-          } else if (payload.revision !== revision || next.id !== model?.id) {
-            values = {};
-            parts = {};
-            model = next;
-            revision = payload.revision;
-            const loadingRevision = revision;
-            try {
-              await stage?.load(next);
-            } catch {
-              if (!disposed && loadingRevision === revision) {
-                model = null;
-                report();
+          pendingState = payload;
+          ++stateOperation;
+          if (applyingState) return;
+          applyingState = true;
+          try {
+            while (pendingState && !disposed) {
+              const payload = pendingState;
+              pendingState = undefined;
+              const operation = stateOperation;
+              const settings = readSettings(payload.settings);
+              const next = payload.model;
+              let candidate: AvatarStage | undefined;
+              try {
+                if (stage && (payload.revision !== revision || next?.id !== model?.id)) {
+                  candidate = await stage.prepare(next, settings, payload.models ?? []);
+                  if (disposed || operation !== stateOperation) continue;
+                  candidate.mount(container.current!);
+                  stage.destroy();
+                  stage = candidate;
+                  candidate = undefined;
+                  model = next;
+                  revision = payload.revision;
+                  values = {};
+                  parts = {};
+                  sceneFrames = {};
+                } else {
+                  await stage?.compose(settings, payload.models ?? []);
+                }
+              } catch {
+                if (!disposed && operation === stateOperation) report();
+              } finally {
+                candidate?.destroy();
               }
             }
+          } finally {
+            applyingState = false;
           }
         }),
       );
@@ -82,6 +107,7 @@ export function Output() {
           if (disposed || payload.revision !== revision) return;
           values = payload.parameters;
           parts = payload.parts;
+          sceneFrames = payload.sceneFrames ?? {};
           received = performance.now();
         }),
       );
@@ -101,7 +127,7 @@ export function Output() {
         for (const p of stage?.parameters ?? [])
           values[p.id] =
             (values[p.id] ?? p.default) + (p.default - (values[p.id] ?? p.default)) * 0.15;
-      stage?.draw(values, now - before, parts);
+      stage?.draw(values, now - before, parts, sceneFrames);
       before = now;
     }, 1000 / 30);
     return () => {

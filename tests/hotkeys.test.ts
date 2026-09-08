@@ -33,7 +33,9 @@ test('browser shortcuts normalize conflicts and ignore editing, repeat, inactive
     actions: string[] = [],
     errors: string[] = [];
   const hotkeys = new Hotkeys(
-    (action) => actions.push(action),
+    (action, pressed) => {
+      if (pressed) actions.push(action);
+    },
     (error) => errors.push(error),
   );
   await hotkeys.set({
@@ -91,7 +93,9 @@ test('native updates serialize, isolate failed bindings, suppress repeated Press
     }
   });
   const hotkeys = new Hotkeys(
-    (action) => actions.push(action),
+    (action, pressed) => {
+      if (pressed) actions.push(action);
+    },
     (error) => errors.push(error),
   );
   const first = hotkeys.set({ old: 'Ctrl+A' });
