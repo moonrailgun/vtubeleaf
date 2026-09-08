@@ -1,0 +1,169 @@
+import Foundation
+import CoreMediaIO
+import SystemExtensions
+
+private let hostQueue = DispatchQueue(label: "com.vtubeleaf.camera.host", qos: .userInteractive)
+private let cameraHost = CameraHost()
+
+private func objectIDs(_ object: CMIOObjectID, _ selector: CMIOObjectPropertySelector, scope: CMIOObjectPropertyScope = CMIOObjectPropertyScope(kCMIOObjectPropertyScopeGlobal)) -> [CMIOObjectID] {
+    var address = CMIOObjectPropertyAddress(mSelector: selector, mScope: scope, mElement: CMIOObjectPropertyElement(kCMIOObjectPropertyElementMain))
+    var size: UInt32 = 0
+    guard CMIOObjectGetPropertyDataSize(object, &address, 0, nil, &size) == noErr,
+          size > 0, size <= 65536, size % 4 == 0 else { return [] }
+    var result = [CMIOObjectID](repeating: 0, count: Int(size) / 4)
+    let status = result.withUnsafeMutableBytes { CMIOObjectGetPropertyData(object, &address, 0, nil, size, &size, $0.baseAddress!) }
+    return status == noErr ? Array(result.prefix(Int(size) / 4)) : []
+}
+
+private func deviceUID(_ device: CMIODeviceID) -> String? {
+    var address = CMIOObjectPropertyAddress(mSelector: CMIOObjectPropertySelector(kCMIODevicePropertyDeviceUID), mScope: CMIOObjectPropertyScope(kCMIOObjectPropertyScopeGlobal), mElement: CMIOObjectPropertyElement(kCMIOObjectPropertyElementMain))
+    var value: Unmanaged<CFString>?
+    var size = UInt32(MemoryLayout.size(ofValue: value))
+    guard CMIOObjectGetPropertyData(device, &address, 0, nil, size, &size, &value) == noErr else { return nil }
+    return value?.takeUnretainedValue() as String?
+}
+
+private final class CameraHost: NSObject, OSSystemExtensionRequestDelegate {
+    var installed = false
+    var message = "尚未安装 VTubeLeaf Camera"
+    var device: CMIODeviceID = 0
+    var stream: CMIOStreamID = 0
+    var queue: CMSimpleQueue?
+    var frames: CameraFrames?
+    var requests: [ObjectIdentifier: String] = [:]
+    var lastEnqueue: UInt64 = 0
+    var lastRefresh: UInt64 = 0
+
+    func findDevice() -> CMIODeviceID? {
+        objectIDs(CMIOObjectID(kCMIOObjectSystemObject), CMIOObjectPropertySelector(kCMIOHardwarePropertyDevices)).first { deviceUID($0) == cameraDeviceUID }
+    }
+    func snapshot() -> [String: Any] {
+        if stream != 0 && findDevice() != device {
+            stop()
+            message = "虚拟摄像头已断开，请重新启动输出"
+        }
+        let now = DispatchTime.now().uptimeNanoseconds
+        if now - lastRefresh > 2_000_000_000 && !requests.values.contains("status") {
+            lastRefresh = now
+            request("status")
+        }
+        return ["supported": true, "installed": installed, "active": stream != 0, "message": message]
+    }
+    func request(_ kind: String) {
+        if kind != "status" && requests.values.contains(where: { $0 != "status" }) {
+            message = "系统扩展请求正在处理中"; return
+        }
+        if kind == "install" {
+            let path = Bundle.main.bundleURL.appendingPathComponent("Contents/Library/SystemExtensions/\(cameraIdentifier).systemextension")
+            guard FileManager.default.fileExists(atPath: path.path) else {
+                message = "安装包缺少摄像头扩展，请先完成签名打包"; return
+            }
+        }
+        if kind == "uninstall" { stop() }
+        let request: OSSystemExtensionRequest
+        switch kind {
+        case "install": request = .activationRequest(forExtensionWithIdentifier: cameraIdentifier, queue: hostQueue)
+        case "uninstall": request = .deactivationRequest(forExtensionWithIdentifier: cameraIdentifier, queue: hostQueue)
+        default: request = .propertiesRequest(forExtensionWithIdentifier: cameraIdentifier, queue: hostQueue)
+        }
+        requests[ObjectIdentifier(request)] = kind
+        request.delegate = self
+        if kind != "status" { message = kind == "install" ? "正在请求安装，请在系统设置中批准扩展" : "正在请求卸载摄像头扩展" }
+        OSSystemExtensionManager.shared.submitRequest(request)
+    }
+    func start() throws {
+        if stream != 0 { return }
+        guard let device = findDevice() else { throw cameraError("找不到 VTubeLeaf Camera，请先安装并在系统设置中批准") }
+        let outputs = objectIDs(device, CMIOObjectPropertySelector(kCMIODevicePropertyStreams), scope: CMIOObjectPropertyScope(kCMIODevicePropertyScopeOutput))
+        guard let stream = outputs.first, outputs.count == 1 else { throw cameraError("找不到摄像头输入流") }
+        var value: Unmanaged<CMSimpleQueue>?
+        let result = CMIOStreamCopyBufferQueue(stream, nil, nil, &value)
+        guard result == noErr, let queue = value?.takeRetainedValue(), CMSimpleQueueGetCapacity(queue) > 0 else { throw cameraError("无法打开摄像头队列：\(result)") }
+        let frames = try CameraFrames()
+        let status = CMIODeviceStartStream(device, stream)
+        guard status == noErr else { throw cameraError("无法启动摄像头输入流：\(status)") }
+        self.device = device; self.stream = stream; self.queue = queue; self.frames = frames
+        installed = true; lastEnqueue = 0; message = "正在输出 1280×720 / 30 FPS"
+    }
+    func stop() {
+        if stream != 0 { CMIODeviceStopStream(device, stream) }
+        // CMIO owns buffers after enqueue; do not race its consumer by draining/resetting its queue.
+        queue = nil; frames = nil; stream = 0; device = 0; lastEnqueue = 0
+        message = installed ? "摄像头已安装，输出已停止" : "尚未安装 VTubeLeaf Camera"
+    }
+    func submit(_ bytes: UnsafeRawPointer, count: Int) throws {
+        guard count == cameraBytes else { throw cameraError("帧必须是 1280×720 RGBA") }
+        guard stream != 0, let queue, let frames else { throw cameraError("摄像头输出尚未启动") }
+        let now = DispatchTime.now().uptimeNanoseconds
+        if CMSimpleQueueGetCount(queue) > 0 {
+            if lastEnqueue > 0 && now - lastEnqueue > 2_000_000_000 {
+                stop(); throw cameraError("摄像头输入流超时，请重新启动输出")
+            }
+            return // One native frame in flight; drop newer frames while CMIO consumes it.
+        }
+        guard lastEnqueue == 0 || now - lastEnqueue >= 33_333_333 else { return }
+        let image = try frames.pixelBuffer(rgba: bytes, count: count)
+        let sample = try frames.sample(image, at: CMClockGetTime(CMClockGetHostTimeClock()))
+        let retained = Unmanaged.passRetained(sample)
+        let status = CMSimpleQueueEnqueue(queue, element: retained.toOpaque())
+        if status != noErr {
+            retained.release()
+            throw cameraError("摄像头帧入队失败：\(status)")
+        }
+        lastEnqueue = now
+    }
+    func requestNeedsUserApproval(_ request: OSSystemExtensionRequest) {
+        message = "请在系统设置 → 隐私与安全性（或登录项与扩展）中批准 VTubeLeaf Camera"
+    }
+    func request(_ request: OSSystemExtensionRequest, actionForReplacingExtension existing: OSSystemExtensionProperties, withExtension ext: OSSystemExtensionProperties) -> OSSystemExtensionRequest.ReplacementAction { .replace }
+    func request(_ request: OSSystemExtensionRequest, didFinishWithResult result: OSSystemExtensionRequest.Result) {
+        let kind = requests.removeValue(forKey: ObjectIdentifier(request))
+        if result == .willCompleteAfterReboot { message = "系统扩展变更将在重启后完成"; return }
+        if kind == "install" { installed = true; message = "摄像头已安装，可以启动输出" }
+        if kind == "uninstall" { installed = false; message = "摄像头已卸载" }
+    }
+    func request(_ request: OSSystemExtensionRequest, didFailWithError error: Error) {
+        let kind = requests.removeValue(forKey: ObjectIdentifier(request))
+        // A bare development executable may not be entitled to inspect system extensions.
+        if kind != "status" || !installed { message = "系统扩展：\(error.localizedDescription)" }
+    }
+    func request(_ request: OSSystemExtensionRequest, foundProperties properties: [OSSystemExtensionProperties]) {
+        requests.removeValue(forKey: ObjectIdentifier(request))
+        installed = properties.contains { $0.isEnabled && !$0.isUninstalling }
+        if properties.contains(where: { $0.isAwaitingUserApproval }) { message = "等待系统设置中的摄像头扩展批准" }
+        else if properties.contains(where: { $0.isUninstalling }) { message = "摄像头正在卸载，可能需要重启" }
+        else if installed && stream == 0 && message == "尚未安装 VTubeLeaf Camera" { message = "摄像头已安装，可以启动输出" }
+    }
+}
+
+@_cdecl("vtubeleaf_camera_command")
+public func cameraCommand(_ operation: Int32, _ output: UnsafeMutablePointer<CChar>?, _ capacity: Int) -> Int32 {
+    hostQueue.sync {
+        var code: Int32 = 0
+        do {
+            switch operation {
+            case 0: break
+            case 1: cameraHost.request("install")
+            case 2: cameraHost.request("uninstall")
+            case 3: try cameraHost.start()
+            case 4: cameraHost.stop()
+            default: throw cameraError("未知摄像头操作")
+            }
+        } catch { cameraHost.message = error.localizedDescription; code = -1 }
+        if let output, capacity > 0, let data = try? JSONSerialization.data(withJSONObject: cameraHost.snapshot()) {
+            guard data.count < capacity else { output[0] = 0; return -1 }
+            data.copyBytes(to: UnsafeMutableRawPointer(output).assumingMemoryBound(to: UInt8.self), count: data.count)
+            output[data.count] = 0
+        }
+        return code
+    }
+}
+
+@_cdecl("vtubeleaf_camera_submit")
+public func cameraSubmit(_ bytes: UnsafeRawPointer?, _ count: Int) -> Int32 {
+    guard let bytes, count == cameraBytes else { return -1 }
+    return hostQueue.sync {
+        do { try cameraHost.submit(bytes, count: count); return 0 }
+        catch { cameraHost.message = error.localizedDescription; return -1 }
+    }
+}
