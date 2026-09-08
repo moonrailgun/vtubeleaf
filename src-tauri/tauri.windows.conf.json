@@ -1,0 +1,18 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "bundle": {
+    "targets": ["nsis"],
+    "resources": {
+      "../native/windows-camera/bin/x64/VTubeLeafCamera.dll": "camera/x64/VTubeLeafCamera.dll",
+      "../native/windows-camera/bin/x86/VTubeLeafCamera.dll": "camera/x86/VTubeLeafCamera.dll",
+      "../native/windows-camera/vendor/LICENSE.microsoft": "camera/LICENSE.microsoft",
+      "../native/windows-camera/vendor/LICENSE.softcam": "camera/LICENSE.softcam"
+    },
+    "windows": {
+      "nsis": {
+        "installMode": "currentUser",
+        "installerHooks": "../native/windows-camera/installer.nsh"
+      }
+    }
+  }
+}

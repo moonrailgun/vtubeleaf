@@ -1,4 +1,5 @@
 mod assets;
+mod camera;
 mod models;
 mod motion;
 mod nvidia;
@@ -370,6 +371,7 @@ async fn stop_nvidia(window: WebviewWindow, app: tauri::AppHandle) -> Result<(),
 pub fn run() {
     let application = tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
+        .plugin(camera::init())
         .setup(|app| {
             #[cfg(desktop)]
             app.handle()
