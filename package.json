@@ -6,7 +6,9 @@
   "type": "module",
   "scripts": {
     "dev": "vite --host 127.0.0.1",
-    "build": "tsc --noEmit && vite build",
+    "build": "npm run licenses:check && tsc --noEmit && vite build",
+    "licenses:generate": "node scripts/licenses.mjs --generate",
+    "licenses:check": "node scripts/licenses.mjs",
     "check": "tsc --noEmit",
     "format": "prettier --write .",
     "format:check": "prettier --check .",

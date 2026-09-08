@@ -1,0 +1,25 @@
+{
+  "schema": 1,
+  "inputs": {
+    "LICENSE": "dbf5b94233912b21c2d6c30f6bc621c54feb014eb182e6ad8fe9fc3e55781e3d",
+    "package-lock.json": "095a106d97f53e5669a49feae20d16bc8764abfe110b0c72325ea9df206f7946",
+    "scripts/licenses.hbs": "d610eaccb5fa21eda12278ccb82387c024deb4c65ebe64fdfa706c2a06cb620d",
+    "scripts/licenses.mjs": "435e51b6bea761c64d7e8cae1e28797db5e12c808595be456f6737bb49e95ee0",
+    "scripts/setup-assets.mjs": "266596132d87c5426fb8bb55601155a1c36570a31fdabdde358cb895595c176a",
+    "src-tauri/Cargo.lock": "8287962f099069fb6d05cf25c9f60cd625c3efdda512957149cd4043b9b4ca3e",
+    "src-tauri/Cargo.toml": "40bf524cea4dc185181c1cd7c68bace18f1f21def73d89f015a90c1ac705a6bb",
+    "src-tauri/about.toml": "0cb368ee5ad1dea608d39df62241acfee271e8158c44d50fd4a01dba4562e06d"
+  },
+  "outputs": {
+    "public/licenses/cubism-framework.md": "7ed849bff1e6499aa7cd882e47d246ddbbe06817c1e84cb974df949488302614",
+    "public/licenses/mediapipe.txt": "8707eef0533987efc5b155d64761eeb6e20793f50b9bd1a68dad1cf4719d0ed8",
+    "public/licenses/npm.txt": "a2f052ac7a4a3c26669e3a3182ea706b600bcbae0cd9d28b3fa351b21c1b9f35",
+    "public/licenses/react-remove-scroll-bar.txt": "54b6e5731335b8952a0fe9eeda79bb9d0e1414a724544155f5ac890ab82571f2",
+    "public/licenses/resources.txt": "bf78f145c6641aa5986697cfae862e48ad63974cfe2bb88e6e535357f86e674b",
+    "public/licenses/rust.html": "7c86086f500733ed3ec4d8097549c8d4e2e9f90963197dea18ef2e33d3b61940",
+    "public/licenses/tauri-api.txt": "9dd42ea92cff2ede5cd477cbfcce051b2d0115c0ac7f368ee88cb545055dff1d",
+    "public/licenses/vtubeleaf.txt": "dbf5b94233912b21c2d6c30f6bc621c54feb014eb182e6ad8fe9fc3e55781e3d",
+    "public/licenses/windows-microsoft.txt": "3645a237b872306e4955bc2ce75783537bd7123bcb57332f8819e4cfbcf50b45",
+    "public/licenses/windows-softcam.txt": "e003f5ef5886aca12fa1f371042c2e714adc7e18234237733c4096a4ab35250d"
+  }
+}
