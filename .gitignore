@@ -3,6 +3,7 @@ dist/
 src-tauri/target/
 src-tauri/gen/
 .local/
+native/windows-camera/bin/
 public/runtime/
 test-results/
 playwright-report/
