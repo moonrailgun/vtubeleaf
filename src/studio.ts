@@ -12,6 +12,7 @@ import {
   rememberProfile,
   switchProfile,
   normalizedFace,
+  isFace,
   type Mapping,
   type Face,
   type Settings,
@@ -38,7 +39,7 @@ export function createStudio(
   const previews: Record<string, string> = {};
   let previewStage: AvatarStage | undefined;
   let previewTask: Promise<void> | undefined;
-  let lastFace: Face | null = null;
+  let lastFace: Partial<Face> | null = null;
   let lastFaceAt = 0;
   let tracking: 'stopped' | 'starting' | 'running' | 'paused' = 'stopped';
   let trackingOperation = 0;
@@ -377,7 +378,7 @@ export function createStudio(
       );
     },
     async calibrate() {
-      if (!lastFace || performance.now() - lastFaceAt > 250)
+      if (!isFace(lastFace) || performance.now() - lastFaceAt > 250)
         return notify('还没有稳定识别到人脸，请面向摄像头后重试。');
       if (lastFace.eyeLeft < 0.4 || lastFace.eyeRight < 0.4)
         return notify('请自然睁开双眼后再校准。');
