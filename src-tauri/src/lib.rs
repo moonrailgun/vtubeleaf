@@ -1,6 +1,7 @@
 mod assets;
 mod models;
 mod motion;
+mod nvidia;
 mod settings;
 mod tracker;
 mod vts;
@@ -18,7 +19,8 @@ struct AppState {
     data_dir: PathBuf,
     models: Mutex<Registry>,
     settings: Mutex<()>,
-    tracker: Mutex<Option<tracker::Tracker>>,
+    // Both native engines own their process until dropped; only one may hold the camera.
+    tracker: Mutex<Option<Box<dyn Send>>>,
 }
 
 fn require_main(window: &WebviewWindow) -> Result<(), String> {
@@ -284,7 +286,7 @@ async fn start_openseeface(
         active.take();
         let events = app.clone();
         let errors = app.clone();
-        *active = Some(tracker::Tracker::start(
+        *active = Some(Box::new(tracker::Tracker::start(
             port.unwrap_or(11573),
             camera.unwrap_or(0),
             python_path
@@ -301,7 +303,7 @@ async fn start_openseeface(
             move |error| {
                 let _ = errors.emit_to("main", "openseeface-error", error);
             },
-        )?);
+        )?));
         Ok(())
     })
     .await
@@ -318,6 +320,50 @@ async fn stop_openseeface(window: WebviewWindow, app: tauri::AppHandle) -> Resul
     })
     .await
     .map_err(|_| "OpenSeeFace 停止任务中断")?
+}
+
+#[tauri::command]
+async fn start_nvidia(
+    window: WebviewWindow,
+    app: tauri::AppHandle,
+    executable: String,
+    model_dir: String,
+    camera: u32,
+    fps: u32,
+    resolution: String,
+) -> Result<(), String> {
+    require_main(&window)?;
+    if !cfg!(windows) {
+        return Err("NVIDIA RTX 跟踪（实验中）仅支持 Windows".into());
+    }
+    tauri::async_runtime::spawn_blocking(move || {
+        let state = app.state::<AppState>();
+        let mut active = state.tracker.lock().map_err(|_| "面捕状态不可用")?;
+        active.take();
+        let events = app.clone();
+        let errors = app.clone();
+        *active = Some(Box::new(nvidia::Tracker::start(
+            Path::new(&executable),
+            Path::new(&model_dir),
+            camera,
+            fps,
+            &resolution,
+            move |frame| {
+                let _ = events.emit_to("main", "nvidia-frame", frame);
+            },
+            move |error| {
+                let _ = errors.emit_to("main", "nvidia-error", error);
+            },
+        )?));
+        Ok(())
+    })
+    .await
+    .map_err(|_| "NVIDIA 启动任务中断")?
+}
+
+#[tauri::command]
+async fn stop_nvidia(window: WebviewWindow, app: tauri::AppHandle) -> Result<(), String> {
+    stop_openseeface(window, app).await
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -352,7 +398,9 @@ pub fn run() {
             save_model_preview,
             read_model_resource,
             start_openseeface,
-            stop_openseeface
+            stop_openseeface,
+            start_nvidia,
+            stop_nvidia
         ])
         .on_window_event(|window, event| {
             if window.label() == "main" && matches!(event, tauri::WindowEvent::Destroyed) {
