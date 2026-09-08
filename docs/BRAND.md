@@ -40,3 +40,9 @@ node scripts/brand.mjs
 [brand.mjs](../scripts/brand.mjs) 是图形与字标的可重建源，使用已安装的 Tauri CLI 导出 PNG、ICO 与 ICNS，并检查 PNG 尺寸、RGBA 通道及容器文件头。修改时先改脚本，再导出。
 
 `public/brand/proposals/` 与 `proposals.svg` / `.png` 保留为早期方案存档，不参与当前品牌导出。
+
+## 已确认效果归档
+
+2026-09-09 确认并归档「叶芽精灵」白色五官版效果图，保留 16 / 32 / 64 / 128px 图形与横向组合在深浅底色上的展示。图片原样保存，作为本次选定版本的视觉记录。
+
+![叶芽精灵白色五官版：深浅底色与多尺寸效果](assets/brand/2026-09-09-sprout-spirit-white-face-preview.png)
