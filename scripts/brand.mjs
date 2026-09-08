@@ -8,14 +8,26 @@ import { fileURLToPath } from 'node:url';
 const root = fileURLToPath(new URL('../', import.meta.url));
 const brand = join(root, 'public/brand');
 const icons = join(root, 'src-tauri/icons');
+const websiteBrand = join(root, 'website/public/assets/brand');
 const cli = join(root, 'node_modules/@tauri-apps/cli/tauri.js');
 const sizes = [16, 32, 64, 128, 256, 512, 1024];
 const svg = (body, width = 256, height = width) =>
   `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}" fill="none">${body}</svg>\n`;
-const leaf = (green = '#398565', eye = '#F5FAF2', pupil = '#193E32') =>
-  `<path d="M52 213C15 135 64 50 218 32C241 137 193 220 113 226C89 228 69 224 52 213Z" fill="${green}"/><path d="m74 198-34 38" stroke="${green}" stroke-width="17" stroke-linecap="round"/><path d="M70 132Q126 72 186 126Q135 186 70 132Z" fill="${eye}"/><circle cx="129" cy="128" r="22" fill="${pupil}"/>`;
-const sprout = `<path d="M128 105C66 104 37 75 39 32C98 34 126 61 128 105Z" fill="#398565"/><path d="M128 105C133 59 164 39 218 44C209 88 180 109 128 105Z" fill="#69A783"/><rect x="52" y="100" width="152" height="126" rx="60" fill="#193E32"/><path d="M84 151q15-19 30 0m30 0q15-19 30 0" stroke="#F5FAF2" stroke-width="10" stroke-linecap="round"/><path d="M111 187q17 15 34 0" stroke="#F5FAF2" stroke-width="8" stroke-linecap="round"/>`;
-const flutter = `<path d="m32 62 78 161C66 218 17 153 32 62Z" fill="#193E32"/><path d="M112 219C116 104 154 56 228 31C239 133 196 207 112 219Z" fill="#398565"/><path d="m49 47 21-15m8 42 27-10" stroke="#69A783" stroke-width="11" stroke-linecap="round"/>`;
+// Editable vector of the selected 02 sprout spirit, with opaque white eyes and smile.
+const sprout = (pink = '#E15F7D', highlight = '#F6B5BE') =>
+  `<g transform="translate(27.4 16) scale(.336) translate(-321 -193)">
+    <g fill="${pink}">
+      <path d="M696 434C683 397 679 364 656 337C621 295 568 275 514 286C521 355 557 401 623 416C637 419 650 423 667 432C660 400 632 367 596 340C639 359 676 393 691 436Z"/>
+      <path d="M699 435C677 358 695 288 749 248C789 218 851 203 916 194C926 258 920 323 884 370C850 414 792 433 736 454C719 408 767 333 818 292C746 328 710 378 699 435Z"/>
+      <path d="M694 434C626 407 552 416 494 448C443 477 424 515 399 551C375 588 355 607 326 602C309 597 328 633 351 643C365 650 381 653 394 652C377 716 388 777 430 813C475 852 545 861 618 860C716 861 811 840 868 795C900 770 908 735 890 702C877 680 874 670 872 643C866 558 824 490 736 454Z"/>
+    </g>
+    <path d="M421 638C482 622 532 587 558 537C568 584 551 614 521 632C491 651 453 651 421 638Z" fill="${highlight}"/>
+    <g fill="#FFFFFF">
+      <ellipse cx="527" cy="727" rx="20" ry="42" transform="rotate(-9 527 727)"/>
+      <ellipse cx="722" cy="691" rx="20" ry="42" transform="rotate(-9 722 691)"/>
+    </g>
+    <path d="M607 756Q632 773 658 746" stroke="#FFFFFF" stroke-width="14" stroke-linecap="round"/>
+  </g>`;
 // Original geometric letter paths; no font file or third-party logo is embedded.
 const letters = [
   ['M2 6 24 62 46 6', 52],
@@ -40,46 +52,35 @@ function wordmark(color) {
 }
 
 async function main() {
-  await mkdir(join(brand, 'proposals'), { recursive: true });
   await mkdir(join(brand, 'png'), { recursive: true });
   await mkdir(icons, { recursive: true });
-  for (const [name, body] of [
-    ['leaf-eye', leaf()],
-    ['sprout-face', sprout],
-    ['flutter-v', flutter],
-  ]) {
-    await writeFile(join(brand, `proposals/${name}.svg`), svg(body));
-  }
+  await mkdir(websiteBrand, { recursive: true });
   const palettes = {
-    light: ['#398565', '#F5FAF2', '#193E32'],
-    dark: ['#8CCFA6', '#193E32', '#8CCFA6'],
-    mono: ['#193E32', '#FFFFFF', '#193E32'],
+    light: ['#E15F7D', '#F6B5BE'],
+    dark: ['#E15F7D', '#F6B5BE'],
+    mono: ['#493C45', '#FFFFFF'],
   };
   for (const [name, colors] of Object.entries(palettes)) {
-    await writeFile(join(brand, `mark-${name}.svg`), svg(leaf(...colors)));
-    const ink = name === 'dark' ? '#E8F3E9' : '#193E32';
+    await writeFile(join(brand, `mark-${name}.svg`), svg(sprout(...colors)));
+    const ink = name === 'dark' ? '#F6EAF0' : '#493C45';
     await writeFile(join(brand, `wordmark-${name}.svg`), svg(wordmark(ink), 448, 80));
     await writeFile(
       join(brand, `lockup-${name}.svg`),
       svg(
-        `<g transform="translate(0 0) scale(.375)">${leaf(...colors)}</g><g transform="translate(105 8)">${wordmark(ink)}</g>`,
+        `<g transform="translate(0 0) scale(.375)">${sprout(...colors)}</g><g transform="translate(105 8)">${wordmark(ink)}</g>`,
         560,
         96,
       ),
     );
   }
   await copyFile(join(brand, 'mark-light.svg'), join(brand, 'mark.svg'));
-  const board = `<rect width="960" height="960" fill="#F5F5EB"/><text x="55" y="65" font-family="sans-serif" font-size="30" fill="#193E32">VTubeLeaf · three original directions</text>${[
-    ['01 / Leaf eye · provisional default', leaf()],
-    ['02 / Sprout face', sprout],
-    ['03 / Flutter V', flutter],
-  ]
-    .map(
-      ([title, shape], index) =>
-        `<g transform="translate(45 ${105 + index * 278})"><rect width="870" height="254" rx="24" fill="white"/><g transform="translate(15 0) scale(.9)">${shape}</g><text x="270" y="72" font-family="sans-serif" font-size="25" fill="#193E32">${title}</text><g transform="translate(285 110) scale(.0625)">${shape}</g><g transform="translate(340 104) scale(.125)">${shape}</g><g transform="translate(415 88) scale(.25)">${shape}</g><text x="275" y="190" font-family="sans-serif" font-size="16" fill="#546B5B">16 px / 32 px / 64 px · editable vector</text></g>`,
-    )
-    .join('')}`;
-  await writeFile(join(brand, 'proposals.svg'), svg(board, 960));
+  for (const [source, target] of [
+    ['mark.svg', 'mark-rose.svg'],
+    ['lockup-light.svg', 'lockup-rose.svg'],
+    ['lockup-dark.svg', 'lockup-rose-dark.svg'],
+  ]) {
+    await copyFile(join(brand, source), join(websiteBrand, target));
+  }
   const temporary = await mkdtemp(join(tmpdir(), 'vtubeleaf-brand-'));
   const generate = (input, output, args = []) =>
     execFileSync(process.execPath, [cli, 'icon', input, '--output', output, ...args], {
@@ -103,8 +104,6 @@ async function main() {
       join(brand, 'png'),
       sizes.flatMap((size) => ['--png', String(size)]),
     );
-    generate(join(brand, 'proposals.svg'), temporary, ['--png', '960']);
-    await copyFile(join(temporary, '960x960.png'), join(brand, 'proposals.png'));
     for (const size of sizes) {
       const bytes = await readFile(join(brand, 'png', `${size}x${size}.png`));
       assert.equal(bytes.readUInt32BE(16), size);
