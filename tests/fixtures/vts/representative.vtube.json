@@ -1,0 +1,58 @@
+{
+  "Version": 1,
+  "Name": "Compatibility fixture",
+  "FileReferences": {
+    "Model": "sample.model3.json",
+    "IdleAnimation": "idle.motion3.json",
+    "IdleAnimationWhenTrackingLost": ""
+  },
+  "ParameterSettings": [
+    {
+      "Folder": "",
+      "Name": "Face Left/Right Rotation",
+      "Input": "FaceAngleX",
+      "InputRangeLower": -30.0,
+      "InputRangeUpper": 30.0,
+      "OutputRangeLower": -30.0,
+      "OutputRangeUpper": 30.0,
+      "ClampInput": false,
+      "ClampOutput": false,
+      "UseBlinking": false,
+      "UseBreathing": false,
+      "OutputLive2D": "ParamAngleX",
+      "Smoothing": 15,
+      "Minimized": false
+    }
+  ],
+  "HotkeySettings": {
+    "UseKeyboardHotkeys": true
+  },
+  "Hotkeys": [
+    {
+      "Action": "ToggleExpression",
+      "File": "smile.exp3.json",
+      "HandGestureSettings": {
+        "GestureLeft": "",
+        "GestureRight": "",
+        "GestureCombinator": "AND",
+        "AllowMirroredGesture": false,
+        "DeactivateExpWhenGestureNotDetected": false,
+        "SecondsUntilDetection": 0.5,
+        "SecondsDetected": 0.0,
+        "PercentDetected": 0.0
+      },
+      "Triggers": {
+        "Trigger1": "N1",
+        "Trigger2": "",
+        "Trigger3": "",
+        "ScreenButton": -1
+      },
+      "IsGlobal": true,
+      "IsActive": true,
+      "StopsOnLastFrame": false,
+      "DeactivateAfterKeyUp": false,
+      "DeactivateAfterSeconds": false,
+      "FadeSecondsAmount": 0.5
+    }
+  ]
+}
