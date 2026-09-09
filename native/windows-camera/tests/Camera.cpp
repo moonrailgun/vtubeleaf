@@ -70,7 +70,8 @@ int wmain(int argc, wchar_t** argv) {
         ComPtr<IBaseFilter> filter;
         CHECK(SUCCEEDED(factory->CreateInstance(nullptr, IID_PPV_ARGS(&filter))));
         ComPtr<IPin> pin;
-        CHECK(SUCCEEDED(filter->FindPin(L"Capture", &pin)));
+        // CSource identifies its first pin as "1"; "Capture" is its display name.
+        CHECK(SUCCEEDED(filter->FindPin(L"1", &pin)));
         ComPtr<IAMStreamConfig> config;
         CHECK(SUCCEEDED(pin.As(&config)));
         int count = 0, size = 0;
