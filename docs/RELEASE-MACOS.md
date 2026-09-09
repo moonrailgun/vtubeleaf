@@ -9,9 +9,9 @@
 需要有效的 Apple Developer Program 团队账号，使用 Developer ID 在 Mac App Store 之外分发：
 
 1. 创建 **Developer ID Application** 证书，在「钥匙串访问 → 我的证书」中将证书连同私钥导出为有密码的 `.p12`。只有 `.cer` 文件不够。
-2. 为主应用 `com.vtubeleaf.desktop` 创建 App ID，启用 **System Extension** 与 App Groups。
-3. 为扩展 `com.vtubeleaf.desktop.camera` 创建 App ID，启用 App Groups。
-4. 两者都关联 App Group `TEAMID1234.com.vtubeleaf.camera`，将 `TEAMID1234` 换成实际 10 位 Team ID。
+2. 为主应用 `com.moonrailgun.vtubeleaf` 创建 App ID，启用 **System Extension** 与 App Groups。
+3. 为扩展 `com.moonrailgun.vtubeleaf.camera` 创建 App ID，启用 App Groups。
+4. 启用 App Groups 后，新生成的描述文件会使用 `TEAMID1234.*` 授权该团队的 macOS App Group。打包脚本会为两者写入具体的 `TEAMID1234.com.vtubeleaf.camera`，将 `TEAMID1234` 换成实际 10 位 Team ID；无需在开发者后台注册这个 macOS 格式的组名。参见 [Apple 的 macOS App Group 说明](https://developer.apple.com/forums/thread/721701)。
 5. 分别创建并下载这两个 App ID 的 **Developer ID provisioning profile**；不要使用 Development / Mac App Store 描述文件。主应用描述文件必须包含 `com.apple.developer.system-extension.install`。修改能力后重新生成描述文件。
 6. 在 App Store Connect 的「Users and Access → Integrations → App Store Connect API → Team Keys」创建有公证权限的团队 API Key，记录 Key ID、Issuer ID 并下载 `.p8` 私钥。本工作流使用团队密钥，必须有 Issuer ID；不使用 Individual Key。
 
@@ -84,6 +84,6 @@ actionlint .github/workflows/release-macos.yml .github/workflows/check.yml
 - Core 校验失败：重新执行 `npm ci` 和 `npm run setup:assets`；如主动升级依赖，需同步更新固定哈希。
 - 公证返回 `Invalid`：查看该步骤的 Apple 结果与诊断日志；超时则去 Apple 查询该次 submission，再按需重新运行。不会降级为未公证包。
 
-本次工作流尚未配置发行凭据或在 GitHub 远端执行；本地静态检查不代表真实签名、公证、系统安装或会议应用接入已通过。正式发布前仍需用产物在 Intel / Apple Silicon 上按[验收记录](VALIDATION.md)检查。
+本地静态检查不代表真实签名、公证、系统安装或会议应用接入已通过。正式发布前仍需用产物在 Intel / Apple Silicon 上按[验收记录](VALIDATION.md)检查。
 
 参考：[GitHub 证书与描述文件安装](https://docs.github.com/en/actions/how-tos/deploy/deploy-to-third-party-platforms/sign-xcode-applications)、[Apple 分发包签名与公证顺序](https://developer.apple.com/documentation/xcode/packaging-mac-software-for-distribution)、[Apple 公证工作流](https://developer.apple.com/documentation/security/customizing-the-notarization-workflow)、[Tauri macOS 应用包](https://v2.tauri.app/distribute/macos-application-bundle/)。

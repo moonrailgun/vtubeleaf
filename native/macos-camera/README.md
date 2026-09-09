@@ -14,7 +14,7 @@ cargo test --manifest-path src-tauri/Cargo.toml camera::tests --lib
 node --experimental-strip-types --test tests/virtual-camera.test.ts
 ```
 
-The first command compiles arm64 and x86_64 extension executables, combines them, and runs the native frame/queue checks on the current architecture. Output is under the ignored `native/macos-camera/build/` directory. It is unsigned and cannot be installed. `src-tauri/build.rs` separately compiles and links the host bridge for the Rust target architecture. Non-macOS builds skip the Swift bridge. Windows uses its [DirectShow camera](../windows-camera/README.md); other platforms return unsupported camera status.
+The first command checks profile App Group authorization, compiles arm64 and x86_64 extension executables, combines them, and runs the native frame/queue checks on the current architecture. Output is under the ignored `native/macos-camera/build/` directory. It is unsigned and cannot be installed. `src-tauri/build.rs` separately compiles and links the host bridge for the Rust target architecture. Non-macOS builds skip the Swift bridge. Windows uses its [DirectShow camera](../windows-camera/README.md); other platforms return unsupported camera status.
 
 ## Package a distributable app
 
@@ -24,9 +24,9 @@ Build a fresh Tauri app bundle first. The normal Tauri build does **not** embed 
 
 Before packaging, the distributor must explicitly provide an Apple Developer Team ID, a matching Developer ID Application signing identity, and valid provisioning profiles for both IDs:
 
-- Host: `com.vtubeleaf.desktop`, with `com.apple.developer.system-extension.install` enabled.
-- Extension: `com.vtubeleaf.desktop.camera`.
-- Both: the App Group `TEAMID1234.com.vtubeleaf.camera`, replacing `TEAMID1234` with the actual Team ID.
+- Host: `com.moonrailgun.vtubeleaf`, with `com.apple.developer.system-extension.install` enabled.
+- Extension: `com.moonrailgun.vtubeleaf.camera`.
+- Both: App Groups enabled, with profiles authorizing `TEAMID1234.*` or the exact group `TEAMID1234.com.vtubeleaf.camera`. The script signs both bundles with the exact group, replacing `TEAMID1234` with the actual Team ID. This macOS-style group does not need registration in the developer portal; see [Apple's explanation](https://developer.apple.com/forums/thread/721701).
 
 Create/download profiles with these entitlements in the distributor's Apple Developer account. The extension is sandboxed. No physical-camera entitlement is needed for its generated output.
 
@@ -40,7 +40,7 @@ node scripts/build-camera.mjs \
   --extension-profile /absolute/path/camera.provisionprofile
 ```
 
-The script validates profile IDs, Team ID, expiration and required capabilities; matches the extension architecture/version to the host; embeds the extension at `Contents/Library/SystemExtensions/com.vtubeleaf.desktop.camera.systemextension`; signs the extension before the host; and runs `codesign --verify --deep --strict`. It preserves existing host entitlements and adds the supplied profile's entitlements. It never chooses an identity, installs an extension, or notarizes automatically. A pre-existing embedded extension is rejected; rebuild a fresh app before packaging again.
+The script validates profile IDs, Team ID, expiration and required capabilities; matches the extension architecture/version to the host; embeds the extension at `Contents/Library/SystemExtensions/com.moonrailgun.vtubeleaf.camera.systemextension`; signs the extension before the host; and runs `codesign --verify --deep --strict`. It preserves existing host entitlements and adds the supplied profile's entitlements. It never chooses an identity, installs an extension, or notarizes automatically. A pre-existing embedded extension is rejected; rebuild a fresh app before packaging again.
 
 Notarize the final, signed app using the distributor's credentials, then staple the app before creating the final DMG/ZIP. For example, with an already configured explicit notarytool keychain profile:
 

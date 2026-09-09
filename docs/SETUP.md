@@ -54,7 +54,7 @@ npm run setup:assets -- --check
 
 2026-09-07 已在本工作区下载并验证 R4，自带 Haru 模型可用于本地测试：`.local/cubism-sdk-5-r.4/CubismSdkForWeb-5-r.4/Samples/Resources/Haru/Haru.model3.json`。最新 R5 的 Core 移除了当前渲染库读取的 `drawables.renderOrders`，实际绘制失败；当前固定使用 R4，不支持 R5 的新渲染接口。新版变化见 [官方兼容说明](https://docs.live2d.com/en/cubism-sdk-manual/compatibility-with-cubism-5-3/)。
 
-本机已将这份官方免费 Haru 复制到 `~/Library/Application Support/com.vtubeleaf.desktop/models/Haru/`，保留来源与许可文件，并在本机设置中选为启动角色。应用会按现有恢复流程加载它；摄像头仍由「开始跟踪」启动。
+此前本机已将这份官方免费 Haru 复制到旧目录 `~/Library/Application Support/com.vtubeleaf.desktop/models/Haru/`，保留来源与许可文件，并在旧版设置中选为启动角色。Bundle ID 改为 `com.moonrailgun.vtubeleaf` 后，应用使用新的数据目录；旧角色和设置仍保留在旧目录，不会自动迁移，可从旧目录重新导入角色。摄像头仍由「开始跟踪」启动。
 
 资源脚本从已安装的依赖复制 Core 和三份原始许可文件，以固定大小和 SHA-256 校验；`--check` 直接校验运行资源。脚本不下载示例角色，旧的 `--sdk` / `--sdk-version` 参数已移除。
 
@@ -134,7 +134,7 @@ VTUBELEAF_FACE_FIXTURE=/absolute/path/to/face.png npm run test:browser
 
 「角色库」显示方形头像，点击即可切换并恢复该角色的构图、映射及快捷键。优先读取模型入口同目录下的 `icon`、`ico_模型名`、`模型名_icon`、`avatar`、`portrait`、`thumbnail`、`preview` 或模型同名图片，支持 PNG/JPG/WebP（不超过 4 MB），导入时一起保留。没有图片的角色会自动在后台生成头像，无需逐个点击；生成结果缓存到 `avatars/`，下次启动直接读取。当前最多一次拖入 32 个项目，失败项会提示，其余项目继续导入。
 
-「角色文件夹」显示实际保存路径；macOS 默认为 `~/Library/Application Support/com.vtubeleaf.desktop/models/`。应用启动时扫描角色库，损坏角色不会阻止其他角色显示。模型缺少某个常见参数时，该动作可能无法显示；资源已修改时可重新导入更新后的模型。
+「角色文件夹」显示实际保存路径；macOS 默认为 `~/Library/Application Support/com.moonrailgun.vtubeleaf/models/`。应用启动时扫描角色库，损坏角色不会阻止其他角色显示。模型缺少某个常见参数时，该动作可能无法显示；资源已修改时可重新导入更新后的模型。
 
 ## 角色参数、表情与动作
 

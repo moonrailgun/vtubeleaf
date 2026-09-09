@@ -97,8 +97,8 @@ jobs:
             --host-profile "$SIGNING_DIR/host.provisionprofile" \
             --extension-profile "$SIGNING_DIR/camera.provisionprofile"
           executable=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleExecutable' "$APP_PATH/Contents/Info.plist")
-          lipo -verify_arch arm64 x86_64 "$APP_PATH/Contents/MacOS/$executable"
-          lipo -verify_arch arm64 x86_64 "$APP_PATH/Contents/Library/SystemExtensions/com.vtubeleaf.desktop.camera.systemextension/Contents/MacOS/VTubeLeafCamera"
+          lipo "$APP_PATH/Contents/MacOS/$executable" -verify_arch arm64 x86_64
+          lipo "$APP_PATH/Contents/Library/SystemExtensions/com.moonrailgun.vtubeleaf.camera.systemextension/Contents/MacOS/VTubeLeafCamera" -verify_arch arm64 x86_64
       - name: Notarize, staple and create distributable DMG and ZIP
         env:
           APPLE_API_KEY_P8_BASE64: ${{ secrets.APPLE_API_KEY_P8_BASE64 }}

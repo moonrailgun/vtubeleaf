@@ -48,14 +48,14 @@ final class CameraStream: NSObject, CMIOExtensionStreamSource {
     func authorizedToStartStream(for client: CMIOExtensionClient) -> Bool {
         guard sink else { return true }
         guard sinkClient == nil || sinkClient?.clientID == client.clientID,
-              client.signingID == "com.vtubeleaf.desktop",
+              client.signingID == "com.moonrailgun.vtubeleaf",
               let team = Bundle.main.object(forInfoDictionaryKey: "CameraTeamIdentifier") as? String,
               team.range(of: "^[A-Z0-9]{10}$", options: .regularExpression) != nil else { return false }
         var code: SecCode?
         guard SecCodeCopyGuestWithAttributes(nil, [kSecGuestAttributePid: client.pid] as CFDictionary, [], &code) == errSecSuccess,
               let code else { return false }
         var requirement: SecRequirement?
-        let rule = "anchor apple generic and identifier \"com.vtubeleaf.desktop\" and certificate leaf[subject.OU] = \"\(team)\""
+        let rule = "anchor apple generic and identifier \"com.moonrailgun.vtubeleaf\" and certificate leaf[subject.OU] = \"\(team)\""
         guard SecRequirementCreateWithString(rule as CFString, [], &requirement) == errSecSuccess,
               let requirement, SecCodeCheckValidity(code, [], requirement) == errSecSuccess else { return false }
         sinkClient = client

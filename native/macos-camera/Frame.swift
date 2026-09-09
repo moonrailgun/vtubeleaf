@@ -7,8 +7,8 @@ let cameraWidth = 1280
 let cameraHeight = 720
 let cameraBytes = cameraWidth * cameraHeight * 4
 let cameraDuration = CMTime(value: 1, timescale: 30)
-let cameraIdentifier = "com.vtubeleaf.desktop.camera"
-let cameraDeviceUID = "com.vtubeleaf.desktop.camera.device"
+let cameraIdentifier = "com.moonrailgun.vtubeleaf.camera"
+let cameraDeviceUID = "com.moonrailgun.vtubeleaf.camera.device"
 
 func cameraError(_ message: String) -> NSError {
     NSError(domain: cameraIdentifier, code: 1, userInfo: [NSLocalizedDescriptionKey: message])

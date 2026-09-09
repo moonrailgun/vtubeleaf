@@ -1,4 +1,5 @@
 import { execFileSync } from 'node:child_process';
+import assert from 'node:assert/strict';
 import { mkdirSync, writeFileSync, cpSync, existsSync, rmSync } from 'node:fs';
 import { dirname, resolve, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -22,6 +23,24 @@ Signed packaging (after Tauri build; does not install):
   node scripts/build-camera.mjs --app /path/VTubeLeaf.app --team-id TEAMID1234 --identity 'Developer ID Application: ...' --host-profile /path/host.provisionprofile --extension-profile /path/camera.provisionprofile
 Signing uses only the explicitly supplied identity and profiles. No activation or notarization is performed.`);
   process.exit(0);
+}
+const profileAllowsAppGroup = (groups, team) =>
+  Array.isArray(groups) &&
+  (groups.includes(`${team}.com.vtubeleaf.camera`) || groups.includes(`${team}.*`));
+if (values.test) {
+  for (const [groups, allowed] of [
+    [['TEAMID1234.com.vtubeleaf.camera'], true],
+    [['TEAMID1234.*'], true],
+    [['OTHER12345.*'], false],
+    [['TEAMID1234.com.other'], false],
+    [['*'], false],
+    [[], false],
+    [undefined, false],
+    ['TEAMID1234.com.vtubeleaf.camera', false],
+  ]) {
+    assert.equal(profileAllowsAppGroup(groups, 'TEAMID1234'), allowed, JSON.stringify(groups));
+  }
+  console.log('Profile app group checks passed.');
 }
 if (process.platform !== 'darwin')
   throw new Error('Camera Extension builds require macOS and Xcode.');
@@ -59,8 +78,8 @@ if (app) {
     );
   }
   appInfo = readPlist(join(app, 'Contents/Info.plist'));
-  if (appInfo.CFBundleIdentifier !== 'com.vtubeleaf.desktop')
-    throw new Error('The app bundle ID must be com.vtubeleaf.desktop.');
+  if (appInfo.CFBundleIdentifier !== 'com.moonrailgun.vtubeleaf')
+    throw new Error('The app bundle ID must be com.moonrailgun.vtubeleaf.');
   const profile = (path, identifier, host) => {
     const xml = run('security', ['cms', '-D', '-i', resolve(path)]);
     // Profiles contain date/data values that plutil cannot convert to JSON. Decode only
@@ -86,21 +105,17 @@ if (app) {
     ) {
       throw new Error(`Profile does not match ${team}.${identifier}, or has expired.`);
     }
-    if (
-      !entitlements['com.apple.security.application-groups']?.includes(
-        `${team}.com.vtubeleaf.camera`,
-      )
-    ) {
+    if (!profileAllowsAppGroup(entitlements['com.apple.security.application-groups'], team)) {
       throw new Error(
-        'Both provisioning profiles must include the app group TEAMID.com.vtubeleaf.camera.',
+        `Both provisioning profiles must authorize ${team}.com.vtubeleaf.camera or ${team}.*.`,
       );
     }
     if (host && entitlements['com.apple.developer.system-extension.install'] !== true)
       throw new Error('Host profile must allow system-extension.install.');
     return { path: resolve(path), entitlements };
   };
-  hostProfile = profile(values['host-profile'], 'com.vtubeleaf.desktop', true);
-  extensionProfile = profile(values['extension-profile'], 'com.vtubeleaf.desktop.camera', false);
+  hostProfile = profile(values['host-profile'], 'com.moonrailgun.vtubeleaf', true);
+  extensionProfile = profile(values['extension-profile'], 'com.moonrailgun.vtubeleaf.camera', false);
 }
 let arch = values.arch ?? (process.arch === 'arm64' ? 'arm64' : 'x86_64');
 if (app) {
@@ -116,11 +131,11 @@ if (app) {
 }
 if (!['arm64', 'x86_64', 'universal'].includes(arch)) throw new Error('Unsupported --arch.');
 const architectures = arch === 'universal' ? ['arm64', 'x86_64'] : [arch];
-const extension = join(build, 'com.vtubeleaf.desktop.camera.systemextension');
+const extension = join(build, 'com.moonrailgun.vtubeleaf.camera.systemextension');
 rmSync(extension, { recursive: true, force: true });
 mkdirSync(join(extension, 'Contents/MacOS'), { recursive: true });
 const info = readPlist(join(native, 'Info.plist'));
-info.CMIOExtension.CMIOExtensionMachServiceName = `${team}.com.vtubeleaf.desktop.camera`;
+info.CMIOExtension.CMIOExtensionMachServiceName = `${team}.com.moonrailgun.vtubeleaf.camera`;
 info.CameraTeamIdentifier = team;
 if (appInfo) {
   info.CFBundleShortVersionString = appInfo.CFBundleShortVersionString;
@@ -218,7 +233,7 @@ if (app) {
   const destination = join(
     app,
     'Contents/Library/SystemExtensions',
-    'com.vtubeleaf.desktop.camera.systemextension',
+    'com.moonrailgun.vtubeleaf.camera.systemextension',
   );
   // Copying into an existing bundle must not leave a stale signature or executable from a previous version.
   if (existsSync(destination))
