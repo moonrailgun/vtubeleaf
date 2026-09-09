@@ -257,6 +257,10 @@ impl Drop for Tracker {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    // Port probes and release checks must not race with another test's ephemeral bind.
+    static UDP_TEST_LOCK: Mutex<()> = Mutex::new(());
+
     fn packet() -> Vec<u8> {
         let mut packet = vec![0; 1785];
         packet[..8].copy_from_slice(&1_f64.to_le_bytes());
@@ -320,6 +324,7 @@ mod tests {
 
     #[test]
     fn receives_loopback_packets_and_releases_port_when_stopped() {
+        let _guard = UDP_TEST_LOCK.lock().unwrap();
         let available = UdpSocket::bind((Ipv4Addr::LOCALHOST, 0)).unwrap();
         let port = available.local_addr().unwrap().port();
         drop(available);
@@ -351,6 +356,7 @@ mod tests {
     #[cfg(unix)]
     #[test]
     fn stop_terminates_only_the_owned_process() {
+        let _guard = UDP_TEST_LOCK.lock().unwrap();
         let directory = tempfile::tempdir().unwrap();
         let script = directory.path().join("facetracker.py");
         // A bounded test stand-in accepts the same argv but never uses a camera.
@@ -387,6 +393,7 @@ mod tests {
     #[cfg(unix)]
     #[test]
     fn reports_owned_process_exit_and_releases_port() {
+        let _guard = UDP_TEST_LOCK.lock().unwrap();
         let directory = tempfile::tempdir().unwrap();
         let script = directory.path().join("facetracker.py");
         std::fs::write(&script, "exit 7\n").unwrap();

@@ -7,9 +7,8 @@ fn main() {
             Ok("x86_64"),
             "The Windows app currently targets x64"
         );
-        let native = PathBuf::from("../native/windows-camera")
-            .canonicalize()
-            .unwrap();
+        // Keep ordinary Windows paths: CMake/MSBuild mishandles canonicalize's \\?\ prefix.
+        let native = std::path::absolute("../native/windows-camera").unwrap();
         let output = PathBuf::from(env::var_os("OUT_DIR").unwrap()).join("windows-camera");
         for file in [
             "CMakeLists.txt",
