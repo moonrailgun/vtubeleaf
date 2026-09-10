@@ -1,6 +1,6 @@
 import { execFileSync } from 'node:child_process';
 import assert from 'node:assert/strict';
-import { mkdirSync, writeFileSync, cpSync, existsSync, rmSync } from 'node:fs';
+import { mkdirSync, readFileSync, writeFileSync, cpSync, existsSync, rmSync } from 'node:fs';
 import { dirname, resolve, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { parseArgs } from 'node:util';
@@ -115,7 +115,11 @@ if (app) {
     return { path: resolve(path), entitlements };
   };
   hostProfile = profile(values['host-profile'], 'com.moonrailgun.vtubeleaf', true);
-  extensionProfile = profile(values['extension-profile'], 'com.moonrailgun.vtubeleaf.camera', false);
+  extensionProfile = profile(
+    values['extension-profile'],
+    'com.moonrailgun.vtubeleaf.camera',
+    false,
+  );
 }
 let arch = values.arch ?? (process.arch === 'arm64' ? 'arm64' : 'x86_64');
 if (app) {
@@ -203,9 +207,12 @@ if (app) {
     if (signed) throw error;
   }
   const shared = { 'com.apple.security.application-groups': [`${team}.com.vtubeleaf.camera`] };
+  const config = JSON.parse(readFileSync(join(root, 'src-tauri/tauri.conf.json'), 'utf8'));
   const hostEntitlements = {
     ...existing,
     ...hostProfile.entitlements,
+    // Release builds are unsigned until this step, so also load Tauri's host permissions.
+    ...readPlist(join(root, 'src-tauri', config.bundle.macOS.entitlements)),
     ...shared,
     'com.apple.developer.system-extension.install': true,
   };
@@ -254,6 +261,15 @@ if (app) {
     app,
   ]);
   run('codesign', ['--verify', '--deep', '--strict', '--verbose=2', app]);
+  if (values.test) {
+    const xml = run('codesign', ['-d', '--entitlements', ':-', app]);
+    const signed = JSON.parse(
+      run('plutil', ['-convert', 'json', '-o', '-', '--', '-'], { input: xml }).toString(),
+    );
+    assert.equal(signed['com.apple.security.device.camera'], true);
+    assert.equal(signed['com.apple.security.device.audio-input'], true);
+    console.log('Signed camera and microphone permission checks passed.');
+  }
   console.log(
     `Signed camera package: ${app}\nNot installed or activated. Notarize and staple this final app before distribution.`,
   );
