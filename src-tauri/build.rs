@@ -113,6 +113,7 @@ fn main() {
         );
         for framework in [
             "Foundation",
+            "AppKit",
             "CoreMedia",
             "CoreVideo",
             "CoreMediaIO",

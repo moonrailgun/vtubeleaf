@@ -191,6 +191,19 @@ if (values.test) {
     join(build, 'frame-checks'),
   ]);
   console.log(run(join(build, 'frame-checks'), []).toString().trim());
+  run('xcrun', [
+    'swiftc',
+    '-swift-version',
+    '5',
+    '-target',
+    `${process.arch === 'arm64' ? 'arm64' : 'x86_64'}-apple-macos14.0`,
+    join(native, 'Frame.swift'),
+    join(native, 'Host.swift'),
+    join(native, 'tests/HostChecks.swift'),
+    '-o',
+    join(build, 'host-checks'),
+  ]);
+  console.log(run(join(build, 'host-checks'), []).toString().trim());
 }
 if (app) {
   // Preserve existing host entitlements, including those added by Tauri or the distributor.

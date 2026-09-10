@@ -16,6 +16,8 @@ node --experimental-strip-types --test tests/virtual-camera.test.ts
 
 The first command checks profile App Group authorization and the built extension's Mach service prefix, compiles arm64 and x86_64 extension executables, combines them, and runs the native frame/queue checks on the current architecture. Output is under the ignored `native/macos-camera/build/` directory. It is unsigned and cannot be installed. `src-tauri/build.rs` separately compiles and links the host bridge for the Rust target architecture. Non-macOS builds skip the Swift bridge. Windows uses its [DirectShow camera](../windows-camera/README.md); other platforms return unsupported camera status.
 
+The host checks cover enabled-but-missing devices, later device arrival, startup error preservation and disable/re-enable status transitions. If a signed VTubeLeaf Camera is already installed and enabled, `--test` also checks actual device discovery and opening its CMIO sink queue without starting output. Otherwise this device check reports `SKIP`. Run `native/macos-camera/build/host-checks --require-device` to require a real device and fail if it is missing.
+
 ## Package a distributable app
 
 For automated production DMG / ZIP builds, use the [GitHub Actions release workflow and configuration guide](../../docs/RELEASE-MACOS.md). It runs the signing script below, notarizes and staples the final app and DMG, and uploads only completed release packages.
@@ -59,8 +61,10 @@ Do not distribute the earlier unmodified Tauri DMG: it lacks the separately embe
 
 Move the packaged app into `/Applications`, launch that copy, and use its native-camera installation action. macOS owns approval through System Settings. The app uses `OSSystemExtensionRequest`; no privileged helper or legacy DAL plug-in is installed. Updates/removal can require a reboot, which is reported in status. Use the app's uninstall action before deleting it when removal is desired.
 
+When approval is pending, the app shows a dialog linking to System Settings. On macOS 15+, enable VTubeLeaf under **General → Login Items & Extensions → Camera Extensions**; on macOS 14, allow it under **Privacy & Security**. Status distinguishes an enabled extension from a discovered device and updates when the device appears. If an enabled extension is still missing from the app's device list, quit and reopen VTubeLeaf before starting output.
+
 After approval, start camera output and select **VTubeLeaf Camera** in a conferencing app. Check scene-only pixels, background/letterboxing, motion, stop/crash blanking, repeated start/stop, and relaunch. Repeat on Intel and Apple Silicon before claiming both platforms are supported in distribution. Conference-client compatibility requires a real signed installation and client test.
 
-Current automated evidence covers compilation, frame conversion/validation, bounded queue retain transfer, stale-frame policy and frontend backpressure. It does **not** establish signed packaging, OS approval, cross-process sink authorization/delivery, actual camera enumeration, conference acceptance, or sustained CPU/memory behavior.
+Current automated evidence covers compilation, frame conversion/validation, bounded queue retain transfer, stale-frame policy and frontend backpressure. Actual camera enumeration and native sink queue creation are covered only when the installed-device check passes. These checks do **not** establish signed packaging, OS approval, cross-process sink authorization/delivery, conference acceptance, or sustained CPU/memory behavior.
 
 References: [Apple's Camera Extension overview and sink/source model](https://developer.apple.com/videos/play/wwdc2022/10022/), [Creating a camera extension](https://developer.apple.com/documentation/coremediaio/creating-a-camera-extension-with-core-media-i-o), and the Camera Extension template and CoreMediaIO/SystemExtensions headers in the installed Xcode SDK.
