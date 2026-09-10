@@ -14,7 +14,7 @@ cargo test --manifest-path src-tauri/Cargo.toml camera::tests --lib
 node --experimental-strip-types --test tests/virtual-camera.test.ts
 ```
 
-The first command checks profile App Group authorization, compiles arm64 and x86_64 extension executables, combines them, and runs the native frame/queue checks on the current architecture. Output is under the ignored `native/macos-camera/build/` directory. It is unsigned and cannot be installed. `src-tauri/build.rs` separately compiles and links the host bridge for the Rust target architecture. Non-macOS builds skip the Swift bridge. Windows uses its [DirectShow camera](../windows-camera/README.md); other platforms return unsupported camera status.
+The first command checks profile App Group authorization and the built extension's Mach service prefix, compiles arm64 and x86_64 extension executables, combines them, and runs the native frame/queue checks on the current architecture. Output is under the ignored `native/macos-camera/build/` directory. It is unsigned and cannot be installed. `src-tauri/build.rs` separately compiles and links the host bridge for the Rust target architecture. Non-macOS builds skip the Swift bridge. Windows uses its [DirectShow camera](../windows-camera/README.md); other platforms return unsupported camera status.
 
 ## Package a distributable app
 
@@ -27,6 +27,8 @@ Before packaging, the distributor must explicitly provide an Apple Developer Tea
 - Host: `com.moonrailgun.vtubeleaf`, with `com.apple.developer.system-extension.install` enabled.
 - Extension: `com.moonrailgun.vtubeleaf.camera`.
 - Both: App Groups enabled, with profiles authorizing `TEAMID1234.*` or the exact group `TEAMID1234.com.vtubeleaf.camera`. The script signs both bundles with the exact group, replacing `TEAMID1234` with the actual Team ID. This macOS-style group does not need registration in the developer portal; see [Apple's explanation](https://developer.apple.com/forums/thread/721701).
+
+The extension's `CMIOExtensionMachServiceName` uses this same App Group. CoreMediaIO requires that name to be prefixed with an entitled App Group; a mismatch fails activation with `extension category returned error`, even if code signing and notarization pass.
 
 Create/download profiles with these entitlements in the distributor's Apple Developer account. The extension is sandboxed. No physical-camera entitlement is needed for its generated output.
 

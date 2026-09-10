@@ -57,6 +57,7 @@ const writePlist = (path, data) => {
   run('plutil', ['-convert', 'xml1', path]);
 };
 const team = values['team-id'] ?? 'UNSIGNED';
+const appGroup = `${team}.com.vtubeleaf.camera`;
 if (team !== 'UNSIGNED' && !/^[A-Z0-9]{10}$/.test(team))
   throw new Error('--team-id must be a 10-character Apple Team ID.');
 const app = values.app && resolve(values.app);
@@ -139,7 +140,8 @@ const extension = join(build, 'com.moonrailgun.vtubeleaf.camera.systemextension'
 rmSync(extension, { recursive: true, force: true });
 mkdirSync(join(extension, 'Contents/MacOS'), { recursive: true });
 const info = readPlist(join(native, 'Info.plist'));
-info.CMIOExtension.CMIOExtensionMachServiceName = `${team}.com.moonrailgun.vtubeleaf.camera`;
+// CoreMediaIO requires the Mach service name to start with an entitled App Group.
+info.CMIOExtension.CMIOExtensionMachServiceName = appGroup;
 info.CameraTeamIdentifier = team;
 if (appInfo) {
   info.CFBundleShortVersionString = appInfo.CFBundleShortVersionString;
@@ -171,6 +173,12 @@ if (architectures.length === 2)
   ]);
 else cpSync(join(build, `camera-${arch}`), executable);
 if (values.test) {
+  const builtInfo = readPlist(join(extension, 'Contents/Info.plist'));
+  assert.ok(
+    builtInfo.CMIOExtension.CMIOExtensionMachServiceName.startsWith(appGroup),
+    'Camera Mach service name must be prefixed with the signed App Group.',
+  );
+  console.log('Camera Mach service App Group check passed.');
   run('xcrun', [
     'swiftc',
     '-swift-version',
@@ -206,7 +214,7 @@ if (app) {
     }
     if (signed) throw error;
   }
-  const shared = { 'com.apple.security.application-groups': [`${team}.com.vtubeleaf.camera`] };
+  const shared = { 'com.apple.security.application-groups': [appGroup] };
   const config = JSON.parse(readFileSync(join(root, 'src-tauri/tauri.conf.json'), 'utf8'));
   const hostEntitlements = {
     ...existing,

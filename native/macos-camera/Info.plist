@@ -9,6 +9,6 @@
 <key>CFBundleVersion</key><string>1</string>
 <key>LSMinimumSystemVersion</key><string>14.0</string>
 <key>NSSystemExtensionUsageDescription</key><string>将 VTubeLeaf 角色画布作为虚拟摄像头提供给会议软件。</string>
-<key>CMIOExtension</key><dict><key>CMIOExtensionMachServiceName</key><string>UNSIGNED.com.moonrailgun.vtubeleaf.camera</string></dict>
+<key>CMIOExtension</key><dict><key>CMIOExtensionMachServiceName</key><string>UNSIGNED.com.vtubeleaf.camera</string></dict>
 <key>CameraTeamIdentifier</key><string>UNSIGNED</string>
 </dict></plist>
