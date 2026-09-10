@@ -43,6 +43,12 @@ Windows 的 MSVC、WebView2、PowerShell 命令与 `.exe` 安装包构建见 [Wi
 
 使用 `npm run format` 格式化 TypeScript、JavaScript、CSS、HTML、JSON 和 Markdown，`npm run format:check` 检查格式。Prettier 不处理 Rust 和 Python；Rust 使用 `cargo fmt --manifest-path src-tauri/Cargo.toml`。
 
+## 正式版调试
+
+正式安装包保留 DevTools，默认不自动打开。主窗口和独立输出窗口均禁用右键菜单；遇到问题时，按 macOS 的 `Command + Option + I`、Windows / Linux 的 `Ctrl + Shift + I` 打开 DevTools，查看 Console 报错和 Network 请求。
+
+此能力由 `src-tauri/Cargo.toml` 中的 Tauri `devtools` feature 启用，普通 release 构建即可使用，见 [Tauri 调试文档](https://v2.tauri.app/develop/debug/#enable-devtools-feature)。
+
 ## 升级版本
 
 使用 [release-it](https://github.com/release-it/release-it)，配置集中在根目录 `package.json` 的 `release-it` 字段。以根目录 `package.json` 为版本来源；Tauri 直接读取它，`after:bump` 钩子同步 `src-tauri/Cargo.toml`、`Cargo.lock` 并重新生成许可证清单。首次使用需按[第三方许可文档](docs/THIRD_PARTY.md)安装 `cargo-about 0.9.2`，并运行 `npm ci`。
