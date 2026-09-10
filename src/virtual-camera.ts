@@ -24,7 +24,7 @@ export class VirtualCamera {
   private control: Promise<void> = Promise.resolve();
   private poll?: ReturnType<typeof setInterval>;
   private destroyed = false;
-  private stopping = false;
+  private stopping = 0;
   private onStatus: (status: CameraStatus) => void;
 
   constructor(onStatus: (status: CameraStatus) => void) {
@@ -58,18 +58,14 @@ export class VirtualCamera {
     this.update({ ...this.current, active: false, message: String(error) });
   }
 
-  async refresh(): Promise<void> {
-    if (this.destroyed || !isTauri()) return;
-    try {
-      this.update(await invoke<CameraStatus>('plugin:virtual-camera|status'));
-    } catch (error) {
-      this.fail(error);
-    }
+  refresh(): Promise<void> {
+    return this.command('status');
   }
 
   private command(action: string): Promise<void> {
     if (!isTauri() || this.destroyed) return Promise.resolve();
-    if (action === 'stop' || action === 'uninstall') this.stopping = true;
+    const stopping = action === 'stop' || action === 'uninstall';
+    if (stopping) this.stopping++;
     this.control = this.control.then(async () => {
       if (this.destroyed) return;
       try {
@@ -79,7 +75,7 @@ export class VirtualCamera {
       } catch (error) {
         this.fail(error);
       } finally {
-        this.stopping = false;
+        if (stopping) this.stopping--;
       }
     });
     return this.control;
@@ -149,7 +145,6 @@ export class VirtualCamera {
   destroy(): void {
     if (this.destroyed) return;
     this.destroyed = true;
-    this.stopping = true;
     clearInterval(this.poll);
     if (isTauri()) {
       void this.control

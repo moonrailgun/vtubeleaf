@@ -1140,7 +1140,7 @@ export function App() {
                 Windows / macOS · 720p / 30 FPS
               </span>
             </div>
-            <p role="status" className="truncate" title={view.virtualCamera.message}>
+            <p role="status" className="break-words" title={view.virtualCamera.message}>
               {view.virtualCamera.message}
             </p>
             <div className="grid grid-cols-2 gap-2">
