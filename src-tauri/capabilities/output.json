@@ -1,7 +1,7 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "output",
-  "description": "Clean output synchronization only",
+  "description": "Clean output synchronization and window closing",
   "windows": ["output"],
-  "permissions": ["core:event:default"]
+  "permissions": ["core:event:default", "core:window:allow-destroy"]
 }
