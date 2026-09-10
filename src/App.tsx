@@ -1134,10 +1134,14 @@ export function App() {
           </section>
           <section id="meeting" className="panel" hidden={tab !== 'meeting'}>
             <div className="section-title">
-              <h2>内置虚拟摄像头</h2>
-              <span>Windows / macOS · 720p / 30 FPS</span>
+              <h2 className="shrink-0 whitespace-nowrap">内置虚拟摄像头</h2>
+              <span className="truncate" title="Windows / macOS · 720p / 30 FPS">
+                Windows / macOS · 720p / 30 FPS
+              </span>
             </div>
-            <p role="status">{view.virtualCamera.message}</p>
+            <p role="status" className="truncate" title={view.virtualCamera.message}>
+              {view.virtualCamera.message}
+            </p>
             <div className="grid grid-cols-2 gap-2">
               <Button
                 variant="outline"
