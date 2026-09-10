@@ -1169,14 +1169,14 @@ export function App() {
               </Button>
             </div>
             <p className="hint">
-              Windows 安装到当前用户；macOS 首次安装需按系统提示允许摄像头扩展。启动后，在飞书、Zoom
-              或其他会议软件中选择 VTubeLeaf
-              Camera。只输出角色、道具和背景；麦克风由会议软件单独选择。
+              Windows 安装到当前用户；macOS
+              首次安装需按系统提示允许摄像头扩展。启动后，在直播或视频软件中选择 VTubeLeaf
+              Camera。只输出角色、道具和背景；麦克风在所用软件中单独选择。
             </p>
             <div className="divider" />
             <div className="section-title">
-              <h2>接入你的会议</h2>
-              <span>OBS → 飞书</span>
+              <h2>接入直播或视频软件</h2>
+              <span>OBS → 直播 / 视频</span>
             </div>
             <ol className="guide">
               {[
@@ -1189,7 +1189,10 @@ export function App() {
                   '选择 VTubeLeaf 主窗口。Windows 使用「窗口捕获」；macOS 使用「macOS 屏幕捕获」并授予屏幕录制权限。裁掉系统标题栏。',
                 ],
                 ['启动虚拟摄像头', '在 OBS 点击「启动虚拟摄像头」。可在场景中添加背景或使用色键。'],
-                ['在飞书选择摄像头', '选择 OBS Virtual Camera；麦克风仍使用你原来的设备。'],
+                [
+                  '在直播或视频软件中选择摄像头',
+                  '选择 OBS Virtual Camera；麦克风仍使用你原来的设备。',
+                ],
               ].map(([title, text]) => (
                 <li key={title}>
                   <b>{title}</b>
