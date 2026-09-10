@@ -123,5 +123,10 @@ fn main() {
         }
         println!("cargo:rustc-link-arg=-Wl,-rpath,/usr/lib/swift");
     }
-    tauri_build::build()
+    tauri_build::try_build(tauri_build::Attributes::new().plugin(
+        "virtual-camera",
+        tauri_build::InlinedPlugin::new()
+            .commands(&["status", "install", "uninstall", "start", "stop", "submit"]),
+    ))
+    .expect("Could not build Tauri permissions")
 }
