@@ -4,7 +4,7 @@
 
 ## 环境
 
-- Node.js 22.18+，或兼容的更新 LTS；本次脚本检查使用 Node.js 24.20.0。当前 Vite 7 的 Node.js 要求高于早期 Node 20，项目测试也使用 Node 的 TypeScript 支持。
+- Node.js 24 LTS（或 22.21+ LTS）；本次脚本检查使用 Node.js 24.20.0。release-it 21 要求 Node.js 22.21+ 或 24+，项目测试也使用 Node 的 TypeScript 支持。
 - Rust 稳定工具链和各平台的 [Tauri 2 prerequisites](https://v2.tauri.app/start/prerequisites/)。macOS 需要 Xcode Command Line Tools；Windows 和 Linux 的 WebView、编译工具与系统库按该页面安装。
 - 当前打包配置要求 macOS 14.0+，作为禁用后台节流的候选基线；本次仅在 macOS 15.7.4 arm64 编译，最低版本运行表现尚未验证。
 - 一台可用摄像头；Windows 与 macOS 都是主要支持目标，必须分别验收系统 WebView、设备权限、全局快捷键、后台运行及会议输出。Linux 暂未验证。

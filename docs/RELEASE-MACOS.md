@@ -62,7 +62,7 @@ Cubism Core R4 已固定为仓库内的 npm 依赖，由 `npm ci` 安装；工�
 ## 3. 运行和下载
 
 1. 将工作流、脚本及应用源码提交到仓库；手动运行入口要求工作流文件已存在于默认分支。
-2. 提交现有改动后，运行 `npm run release:patch` 或 `npm run release:minor`。命令统一更新 npm / Rust 版本和许可证清单，自动提交并创建版本 tag；Tauri 直接读取根目录 `package.json`。随后推送提交和对应 tag，例如 `git push`、`git push origin v0.1.1`。首次使用的依赖要求见 [升级版本](../README.md#升级版本)。
+2. 提交现有改动后，运行 `npm run release:patch` 或 `npm run release:minor`。release-it 统一更新 npm / Rust 版本和许可证清单，自动提交、创建版本 tag 并推送；Tauri 直接读取根目录 `package.json`。首次使用的依赖要求和预览命令见 [升级版本](../README.md#升级版本)。
 3. 打开 **Actions → Package macOS release → Run workflow**，选择准备发行的可信分支；要精确构建版本 tag，可运行 `gh workflow run release-macos.yml --ref v0.1.1`（替换为实际版本）。不要在未审核的代码上运行带签名凭据的工作流。
 4. 成功后下载该次运行的 **VTubeLeaf-macos-universal-运行序号** Artifact。内含 `VTubeLeaf-版本-macos-universal.dmg`、同名 `.zip` 和 `SHA256SUMS.txt`，保留 30 天。
 5. 解压外层 Artifact 后可执行 `shasum -a 256 -c SHA256SUMS.txt`。DMG 内提供拖到 Applications 的入口；ZIP 内为已公证并附加票据的 `.app`。

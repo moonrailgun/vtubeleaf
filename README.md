@@ -8,7 +8,7 @@
 
 ## 开发启动
 
-准备 Node.js 22.18+（或兼容的更新 LTS）、Rust 和目标平台的 [Tauri 构建依赖](https://v2.tauri.app/start/prerequisites/)。Cubism Core 固定为仓库内的 R4 npm 依赖，随 `npm ci` 安装；来源及原始许可见 [vendor](vendor/README.md)。
+准备 Node.js 24 LTS（或 22.21+ LTS）、Rust 和目标平台的 [Tauri 构建依赖](https://v2.tauri.app/start/prerequisites/)。Cubism Core 固定为仓库内的 R4 npm 依赖，随 `npm ci` 安装；来源及原始许可见 [vendor](vendor/README.md)。
 
 ```sh
 npm ci
@@ -45,18 +45,19 @@ Windows 的 MSVC、WebView2、PowerShell 命令与 `.exe` 安装包构建见 [Wi
 
 ## 升级版本
 
-以根目录 `package.json` 为版本来源；Tauri 直接读取它，npm 的 `version` 钩子同步 `src-tauri/Cargo.toml`、`Cargo.lock` 并重新生成许可证清单。首次使用需按[第三方许可文档](docs/THIRD_PARTY.md)安装 `cargo-about 0.9.2`，并运行 `npm ci`。
+使用 [release-it](https://github.com/release-it/release-it)，配置集中在根目录 `package.json` 的 `release-it` 字段。以根目录 `package.json` 为版本来源；Tauri 直接读取它，`after:bump` 钩子同步 `src-tauri/Cargo.toml`、`Cargo.lock` 并重新生成许可证清单。首次使用需按[第三方许可文档](docs/THIRD_PARTY.md)安装 `cargo-about 0.9.2`，并运行 `npm ci`。
 
 ```sh
-npm run release:patch      # 0.1.0 → 0.1.1
-npm run release:minor      # 0.1.0 → 0.2.0
-npm run release -- major   # 0.1.0 → 1.0.0
+npm run release:patch      # 0.1.1 → 0.1.2
+npm run release:minor      # 0.1.1 → 0.2.0
+npm run release -- major   # 0.1.1 → 1.0.0
 npm run release -- 1.2.3   # 指定版本；以上命令任选其一
+npm run release -- patch --dry-run  # 仅预览，不改文件、提交或推送
 ```
 
-运行前先提交现有改动，npm 会检查工作区是否干净。命令会同时更新 `package-lock.json`，将 Rust 版本和许可证文件纳入同一次 Git 提交（如 `chore(release): 0.1.1`），并创建对应 tag（如 `v0.1.1`）。提交和 tag 只保存在本地；推送后再运行发行工作流，命令本身不推送、打包或发布。
+运行前先提交现有改动，并确保当前分支已设置 upstream、能够推送。release-it 会检查工作区是否干净，更新 `package-lock.json`，将 Rust 版本和许可证文件纳入同一次 Git 提交（如 `chore(release): 0.1.2`），创建对应 tag（如 `v0.1.2`），并推送提交和 tag。命令使用 `--ci` 无交互执行；完成后再手动运行[发行工作流](docs/RELEASE-MACOS.md)打包，不发布 npm 包或创建 GitHub Release。
 
-如果许可证生成失败，修复报错后运行 `npm run version` 重试同步、生成并暂存相关文件，然后手动完成该版本的提交和 tag，无需再次递增版本。`website/package.json` 属于独立官网，不随桌面应用升级。
+如果同步或许可证生成失败，版本文件可能已经更新。修复报错后运行 `node scripts/sync-version.mjs` 和 `npm run licenses:generate`，检查 `git diff`，再手动完成该版本的提交、tag 和推送，无需再次递增版本。`website/package.json` 属于独立官网，不随桌面应用升级。
 
 ## 可选 OpenSeeFace
 

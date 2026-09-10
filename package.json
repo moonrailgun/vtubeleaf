@@ -15,12 +15,23 @@
     "test": "node --experimental-strip-types --test tests/*.test.ts",
     "test:browser": "npm run build && playwright test",
     "tauri": "tauri",
-    "release": "npm version -m \"chore(release): %s\"",
+    "release": "release-it --ci",
     "release:patch": "npm run release -- patch",
     "release:minor": "npm run release -- minor",
-    "version": "node scripts/sync-version.mjs && npm run licenses:generate && git add -u -- src-tauri/Cargo.toml src-tauri/Cargo.lock public/licenses",
     "setup:assets": "node scripts/setup-assets.mjs",
     "setup:openseeface": "node scripts/setup-openseeface.mjs"
+  },
+  "release-it": {
+    "git": {
+      "commitMessage": "chore(release): ${version}",
+      "tagName": "v${version}"
+    },
+    "npm": {
+      "publish": false
+    },
+    "hooks": {
+      "after:bump": "node scripts/sync-version.mjs && npm run licenses:generate"
+    }
   },
   "dependencies": {
     "@mediapipe/tasks-vision": "0.10.32",
@@ -51,6 +62,7 @@
     "@types/react-dom": "^19.2.7",
     "@vitejs/plugin-react": "^5.2.0",
     "prettier": "3.9.6",
+    "release-it": "^21.0.2",
     "tailwindcss": "^4.3.3",
     "typescript": "~5.9.3",
     "vite": "7.3.6"

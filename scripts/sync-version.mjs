@@ -3,7 +3,7 @@ import { readFileSync, writeFileSync } from 'node:fs';
 
 const root = new URL('../', import.meta.url);
 const { version } = JSON.parse(readFileSync(new URL('package.json', root), 'utf8'));
-// npm version validates and increments the version before invoking this hook.
+// release-it updates package.json before invoking this after:bump hook.
 const updates = ['src-tauri/Cargo.toml', 'src-tauri/Cargo.lock'].map((path) => {
   const file = new URL(path, root);
   const text = readFileSync(file, 'utf8');
