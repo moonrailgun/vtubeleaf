@@ -15,6 +15,10 @@
     "test": "node --experimental-strip-types --test tests/*.test.ts",
     "test:browser": "npm run build && playwright test",
     "tauri": "tauri",
+    "release": "npm version -m \"chore(release): %s\"",
+    "release:patch": "npm run release -- patch",
+    "release:minor": "npm run release -- minor",
+    "version": "node scripts/sync-version.mjs && npm run licenses:generate && git add -u -- src-tauri/Cargo.toml src-tauri/Cargo.lock public/licenses",
     "setup:assets": "node scripts/setup-assets.mjs",
     "setup:openseeface": "node scripts/setup-openseeface.mjs"
   },
