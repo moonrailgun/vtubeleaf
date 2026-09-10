@@ -1,6 +1,48 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { readComposition, readScenes, snapshotScene } from '../src/scenes.ts';
+import { readSettings } from '../src/state.ts';
+
+test('built-in backgrounds survive settings and scene reloads without allowing arbitrary sources', () => {
+  for (const backgroundImage of [
+    'builtin:beach',
+    'builtin:meeting-room',
+    'builtin:office',
+    'builtin:home',
+    'builtin:bedroom',
+    'builtin:cafe',
+    'builtin:gaming-room',
+    'a'.repeat(32) + '.png',
+  ]) {
+    const composition = { backgroundImage, items: [] };
+    const scene = snapshotScene(
+      'room',
+      'Room',
+      '',
+      '#123456',
+      { x: 0, y: 0, zoom: 1, rotation: 0, modelVisible: true },
+      composition,
+    );
+    const restored = readSettings(JSON.parse(JSON.stringify({ composition, scenes: [scene] })));
+    assert.equal(restored.composition.backgroundImage, backgroundImage);
+    assert.equal(restored.scenes[0].composition.backgroundImage, backgroundImage);
+  }
+  for (const backgroundImage of [
+    'builtin:unknown',
+    'builtin:../beach',
+    '/backgrounds/beach.jpg',
+    'https://example.com/beach.jpg',
+    '../../beach.jpg',
+    null,
+  ]) {
+    assert.equal(readComposition({ backgroundImage }).backgroundImage, '');
+  }
+  assert.equal(
+    readComposition({ items: [{ id: 'item', kind: 'image', source: 'builtin:beach' }] }).items
+      .length,
+    0,
+  );
+});
 
 test('scene documents bound untrusted values and snapshots do not share items', () => {
   const composition = readComposition({

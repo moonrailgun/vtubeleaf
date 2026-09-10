@@ -3,6 +3,7 @@ import { Button } from './components/ui/button';
 import { Input } from './components/ui/input';
 import { NativeSelect as Select } from './components/ui/native-select';
 import type { Studio, StudioView } from './studio';
+import { builtinBackgrounds } from './scenes';
 
 export function SceneControls({
   view,
@@ -19,7 +20,41 @@ export function SceneControls({
   const scene = s.scenes.find((scene) => scene.id === sceneId);
   const run = a.run;
   return (
-    <fieldset disabled={view.sceneBusy || view.modelLoading} className="scene-controls min-w-0">
+    <fieldset
+      disabled={!view.ready || view.sceneBusy || view.modelLoading}
+      className="scene-controls min-w-0"
+    >
+      <div className="divider" />
+      <h2 id="builtin-backgrounds">内置背景</h2>
+      <div
+        role="group"
+        aria-labelledby="builtin-backgrounds"
+        className="mt-3 grid grid-cols-2 gap-2"
+      >
+        {builtinBackgrounds.map((background) => (
+          <Button
+            key={background.id}
+            variant="outline"
+            className="h-auto min-w-0 flex-col gap-0 overflow-hidden p-0 aria-pressed:border-primary aria-pressed:ring-1 aria-pressed:ring-primary"
+            aria-pressed={s.composition.backgroundImage === background.id}
+            onClick={() => run(() => a.setBackground(background.id))}
+          >
+            <img
+              src={background.src}
+              alt=""
+              loading="lazy"
+              className="aspect-video w-full object-cover"
+            />
+            <span className="py-1.5 text-xs">{background.name}</span>
+          </Button>
+        ))}
+      </div>
+      <p className="hint">点击切换背景，支持离线使用，也可导入自己的背景图。</p>
+      {s.composition.backgroundImage && (
+        <Button variant="ghost" onClick={() => run(() => a.setBackground())}>
+          移除背景图
+        </Button>
+      )}
       <div className="divider" />
       <h2>道具与场景</h2>
       <div className="two-fields">
@@ -30,11 +65,6 @@ export function SceneControls({
           选择背景图
         </Button>
       </div>
-      {s.composition.backgroundImage && (
-        <Button variant="ghost" onClick={() => run(a.clearBackground)}>
-          移除背景图
-        </Button>
-      )}
       <label htmlFor="item-model">Live2D 道具</label>
       <div className="two-fields">
         <Select id="item-model" value={modelPath} onChange={(e) => setModelPath(e.target.value)}>

@@ -565,8 +565,8 @@ export function createStudio(
         publish();
       }
     },
-    async clearBackground() {
-      if (!sceneBusy) await setComposition({ ...settings.composition, backgroundImage: '' });
+    async setBackground(backgroundImage = '') {
+      if (!sceneBusy) await setComposition({ ...settings.composition, backgroundImage });
     },
     async addLive2DItem(path: string) {
       if (sceneBusy || !path) return;

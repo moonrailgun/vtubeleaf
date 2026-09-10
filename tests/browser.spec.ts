@@ -638,6 +638,89 @@ test('studio renders under production CSP, saves settings, and never auto-captur
   await expect(page.locator('#stop')).toBeDisabled();
 });
 
+test('built-in backgrounds switch, persist, recall, and clear under production CSP', async ({
+  page,
+}, testInfo) => {
+  await serveProduction(page, '**/');
+  await page.route('**/backgrounds/*', (route) =>
+    route.fulfill({
+      path: resolve('dist/backgrounds', basename(new URL(route.request().url()).pathname)),
+    }),
+  );
+  await page.goto('/');
+  await expect(page.locator('#start')).toBeEnabled();
+  await page.getByRole('button', { name: '画面', exact: true }).click();
+  for (const [name, id] of [
+    ['海滩', 'beach'],
+    ['会议室', 'meeting-room'],
+    ['办公室', 'office'],
+    ['家居', 'home'],
+    ['卧室', 'bedroom'],
+    ['咖啡馆', 'cafe'],
+    ['游戏房', 'gaming-room'],
+  ]) {
+    const button = page.getByRole('button', { name, exact: true });
+    await button.click();
+    await expect(button).toHaveAttribute('aria-pressed', 'true');
+    await expect
+      .poll(() => button.locator('img').evaluate((image: HTMLImageElement) => image.naturalWidth))
+      .toBeGreaterThan(0);
+    await expect
+      .poll(() =>
+        page.evaluate(
+          () =>
+            JSON.parse(localStorage.getItem('vtubeleaf-preview') || '{}').composition
+              ?.backgroundImage,
+        ),
+      )
+      .toBe(`builtin:${id}`);
+    await expect(page.locator('#notice')).not.toHaveClass(/error/);
+  }
+  await page.screenshot({ path: testInfo.outputPath('built-in-backgrounds.png') });
+  await page.locator('#scene-name').fill('游戏直播');
+  await page.getByRole('button', { name: '保存为新场景', exact: true }).click();
+  await page.getByRole('button', { name: '海滩', exact: true }).click();
+  await expect(page.getByRole('button', { name: '海滩', exact: true })).toHaveAttribute(
+    'aria-pressed',
+    'true',
+  );
+  await page.locator('#saved-scene').selectOption({ label: '游戏直播' });
+  await page.getByRole('button', { name: '切换场景', exact: true }).click();
+  await expect(page.getByRole('button', { name: '游戏房', exact: true })).toHaveAttribute(
+    'aria-pressed',
+    'true',
+  );
+  await expect
+    .poll(() =>
+      page.evaluate(
+        () =>
+          JSON.parse(localStorage.getItem('vtubeleaf-preview') || '{}').composition
+            ?.backgroundImage,
+      ),
+    )
+    .toBe('builtin:gaming-room');
+  await page.reload();
+  await page.getByRole('button', { name: '画面', exact: true }).click();
+  await expect(page.getByRole('button', { name: '游戏房', exact: true })).toHaveAttribute(
+    'aria-pressed',
+    'true',
+  );
+  await page.getByRole('button', { name: '移除背景图', exact: true }).click();
+  await expect(page.getByRole('button', { name: '游戏房', exact: true })).toHaveAttribute(
+    'aria-pressed',
+    'false',
+  );
+  await expect
+    .poll(() =>
+      page.evaluate(
+        () =>
+          JSON.parse(localStorage.getItem('vtubeleaf-preview') || '{}').composition
+            ?.backgroundImage,
+      ),
+    )
+    .toBe('');
+});
+
 test('React controls preserve keyboard edits across status updates and reload', async ({
   page,
 }) => {

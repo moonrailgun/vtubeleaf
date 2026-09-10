@@ -14,6 +14,15 @@ export type SceneItem = {
   attach: 'stage' | 'model';
 };
 export type Composition = { backgroundImage: string; items: SceneItem[] };
+export const builtinBackgrounds = [
+  { id: 'builtin:beach', name: '海滩', src: '/backgrounds/beach.jpg' },
+  { id: 'builtin:meeting-room', name: '会议室', src: '/backgrounds/meeting-room.jpg' },
+  { id: 'builtin:office', name: '办公室', src: '/backgrounds/office.jpg' },
+  { id: 'builtin:home', name: '家居', src: '/backgrounds/home.jpg' },
+  { id: 'builtin:bedroom', name: '卧室', src: '/backgrounds/bedroom.jpg' },
+  { id: 'builtin:cafe', name: '咖啡馆', src: '/backgrounds/cafe.jpg' },
+  { id: 'builtin:gaming-room', name: '游戏房', src: '/backgrounds/gaming-room.jpg' },
+];
 export type Placement = {
   x: number;
   y: number;
@@ -40,7 +49,11 @@ export const assetId = (v: unknown): v is string =>
 export function readComposition(v: unknown): Composition {
   const result: Composition = { backgroundImage: '', items: [] };
   if (!object(v)) return result;
-  if (assetId(v.backgroundImage)) result.backgroundImage = v.backgroundImage;
+  if (
+    typeof v.backgroundImage === 'string' &&
+    (assetId(v.backgroundImage) || builtinBackgrounds.some((b) => b.id === v.backgroundImage))
+  )
+    result.backgroundImage = v.backgroundImage;
   if (!Array.isArray(v.items)) return result;
   for (const item of v.items.slice(0, 32)) {
     if (

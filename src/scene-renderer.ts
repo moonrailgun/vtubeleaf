@@ -1,7 +1,7 @@
 import * as PIXI from 'pixi.js';
 import { invoke } from '@tauri-apps/api/core';
 import { parseGIF, decompressFrames } from 'gifuct-js';
-import type { SceneItem, Composition } from './scenes';
+import { builtinBackgrounds, type SceneItem, type Composition } from './scenes';
 import type { Settings } from './state';
 import type { AvatarStage, ModelInfo } from './renderer';
 
@@ -22,7 +22,13 @@ type Visual = {
 };
 
 async function imageAsset(id: string): Promise<Visual> {
-  const bytes = await invoke<ArrayBuffer>('read_asset', { id });
+  const background = builtinBackgrounds.find((b) => b.id === id);
+  const bytes = background
+    ? await fetch(background.src).then((response) => {
+        if (!response.ok) throw new Error(`内置背景「${background.name}」加载失败`);
+        return response.arrayBuffer();
+      })
+    : await invoke<ArrayBuffer>('read_asset', { id });
   let texture: PIXI.Texture;
   let update = (_dt: number, _frame?: SceneFrame) => {};
   let capture = (): SceneFrame => ({});
