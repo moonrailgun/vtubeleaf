@@ -43,6 +43,21 @@ Windows 的 MSVC、WebView2、PowerShell 命令与 `.exe` 安装包构建见 [Wi
 
 使用 `npm run format` 格式化 TypeScript、JavaScript、CSS、HTML、JSON 和 Markdown，`npm run format:check` 检查格式。Prettier 不处理 Rust 和 Python；Rust 使用 `cargo fmt --manifest-path src-tauri/Cargo.toml`。
 
+## 升级版本
+
+以根目录 `package.json` 为版本来源；Tauri 直接读取它，npm 的 `version` 钩子同步 `src-tauri/Cargo.toml`、`Cargo.lock` 并重新生成许可证清单。首次使用需按[第三方许可文档](docs/THIRD_PARTY.md)安装 `cargo-about 0.9.2`，并运行 `npm ci`。
+
+```sh
+npm run release:patch      # 0.1.0 → 0.1.1
+npm run release:minor      # 0.1.0 → 0.2.0
+npm run release -- major   # 0.1.0 → 1.0.0
+npm run release -- 1.2.3   # 指定版本；以上命令任选其一
+```
+
+运行前先提交现有改动，npm 会检查工作区是否干净。命令会同时更新 `package-lock.json`，将 Rust 版本和许可证文件纳入同一次 Git 提交（如 `chore(release): 0.1.1`），并创建对应 tag（如 `v0.1.1`）。提交和 tag 只保存在本地；推送后再运行发行工作流，命令本身不推送、打包或发布。
+
+如果许可证生成失败，修复报错后运行 `npm run version` 重试同步、生成并暂存相关文件，然后手动完成该版本的提交和 tag，无需再次递增版本。`website/package.json` 属于独立官网，不随桌面应用升级。
+
 ## 可选 OpenSeeFace
 
 使用 Python 3.10 和 Git，按固定上游提交安装到项目的 `.local/`：
