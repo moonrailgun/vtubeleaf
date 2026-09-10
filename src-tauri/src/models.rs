@@ -7,8 +7,8 @@ use std::{
     path::{Path, PathBuf},
 };
 
-const MAX_FILE_BYTES: u64 = 64 * 1024 * 1024;
-const MAX_TOTAL_BYTES: u64 = 256 * 1024 * 1024;
+const MAX_FILE_BYTES: u64 = 128 * 1024 * 1024;
+const MAX_TOTAL_BYTES: u64 = 512 * 1024 * 1024;
 const MAX_ENTRIES: usize = 2048;
 const MAX_ICON_BYTES: u64 = 4 * 1024 * 1024;
 
@@ -239,7 +239,7 @@ fn copy_model(source: &Model, destination: &Path) -> Result<Model, String> {
         let bytes = read_bounded(&input, MAX_FILE_BYTES)?;
         total += bytes.len() as u64;
         if total > MAX_TOTAL_BYTES {
-            return Err("模型资源总大小超过 256 MB".into());
+            return Err("模型资源总大小超过 512 MB".into());
         }
         let target = staging.path().join(resource);
         fs::create_dir_all(target.parent().ok_or("资源路径无效")?)
@@ -320,7 +320,7 @@ fn checked_resource(root: &Path, resource: &str) -> Result<PathBuf, String> {
     }
     let metadata = fs::metadata(&path).map_err(|_| "无法检查模型资源")?;
     if !metadata.is_file() || metadata.len() > MAX_FILE_BYTES {
-        return Err("模型资源不是普通文件或超过 64 MB".into());
+        return Err("模型资源不是普通文件或超过 128 MB".into());
     }
     Ok(path)
 }
@@ -446,7 +446,7 @@ fn validate_model(path: &Path) -> Result<Model, String> {
         let file = checked_resource(&root, resource)?;
         total += fs::metadata(file).map_err(|_| "无法检查模型资源")?.len();
         if total > MAX_TOTAL_BYTES {
-            return Err("模型资源总大小超过 256 MB".into());
+            return Err("模型资源总大小超过 512 MB".into());
         }
     }
     Ok(Model {
@@ -506,7 +506,7 @@ fn find_icon(root: &Path, entry: &Path, resources: &BTreeSet<String>) -> Option<
 fn import_zip(archive: &Path, destination: &Path) -> Result<Model, String> {
     let file = File::open(archive).map_err(|_| "无法读取 ZIP 文件")?;
     if file.metadata().map_err(|_| "无法检查 ZIP 文件")?.len() > MAX_TOTAL_BYTES {
-        return Err("ZIP 文件超过 256 MB".into());
+        return Err("ZIP 文件超过 512 MB".into());
     }
     let mut archive = zip::ZipArchive::new(file).map_err(|_| "不是有效的 ZIP 文件")?;
     if archive.len() > MAX_ENTRIES {
