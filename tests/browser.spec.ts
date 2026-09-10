@@ -19,6 +19,62 @@ async function serveProduction(page: Page, entry: string) {
   );
 }
 
+test('bundled Haru, Hiyori and Mao render previews and can be selected from the empty stage', async ({
+  page,
+}, testInfo) => {
+  const resources = new Map<string, string>();
+  const models = ['Haru', 'Hiyori', 'Mao'].map((name) => {
+    const root = resolve('vendor/models', name);
+    const files = readdirSync(root, { recursive: true, withFileTypes: true })
+      .filter((entry) => entry.isFile())
+      .map((entry) => {
+        const path = resolve(entry.parentPath, entry.name);
+        const resource = path.slice(root.length + 1).replaceAll('\\', '/');
+        resources.set(`${name}/${resource}`, path);
+        return resource;
+      });
+    return {
+      id: name,
+      name,
+      path: `${root}/${name}.model3.json`,
+      entry: `${name}.model3.json`,
+      files,
+    };
+  });
+  await page.route('**/builtin-fixture/**', (route) => {
+    const resource = decodeURIComponent(
+      new URL(route.request().url()).pathname.slice('/builtin-fixture/'.length),
+    );
+    const path = resources.get(resource);
+    return path ? route.fulfill({ path }) : route.abort();
+  });
+  await page.route('**/src/main.tsx*', async (route) => {
+    const response = await route.fetch();
+    const bootstrap = `import { mockIPC, mockWindows } from '/node_modules/@tauri-apps/api/mocks.js';
+      window.isTauri = true; mockWindows('main');
+      const models = ${JSON.stringify(models)};
+      const previews = {};
+      mockIPC(async (cmd, args) => {
+        if (cmd === 'load_settings' || cmd === 'read_model_vts_config') return null;
+        if (cmd === 'list_models') return { models, directory: '/managed/models', errors: [] };
+        if (cmd === 'load_model') return models.find((model) => model.path === args.path);
+        if (cmd === 'read_model_preview') return new Uint8Array(previews[args.id] ?? []).buffer;
+        if (cmd === 'save_model_preview') { previews[args.id] = args.png; return; }
+        if (cmd === 'read_model_resource') return (await fetch('/builtin-fixture/' + args.id + '/' + encodeURI(args.resource))).arrayBuffer();
+      }, { shouldMockEvents: true });\n`;
+    await route.fulfill({ response, body: bootstrap + (await response.text()) });
+  });
+  await page.goto('/');
+  await page.getByRole('button', { name: '选择内置或已有角色', exact: true }).click();
+  await expect(page.locator('.model-card img')).toHaveCount(3);
+  for (const model of models) {
+    await page.getByRole('button', { name: `切换到 ${model.name}`, exact: true }).click();
+    await expect(page.locator('#model-name')).toHaveText(model.name);
+    await expect(page.locator('#notice')).not.toHaveClass(/error/);
+    await page.screenshot({ path: testInfo.outputPath(`builtin-${model.name}.png`) });
+  }
+});
+
 test('official Cubism Core renders a supplied model and applies head, body, eye, and mouth parameters', async ({
   page,
 }, testInfo) => {

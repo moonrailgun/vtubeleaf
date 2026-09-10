@@ -4,9 +4,11 @@
 
 ## Live2D
 
-当前渲染适配使用 `pixi-live2d-display@0.4.0` 的 Cubism 路径，需要单独的 Cubism Core。Core R4 与原始许可已封装为仓库内固定 npm 依赖；不附带完整 SDK 或示例模型。
+当前渲染适配使用 `pixi-live2d-display@0.4.0` 的 Cubism 路径，需要单独的 Cubism Core。Core R4 与原始许可已封装为仓库内固定 npm 依赖；另附带同版 SDK 的 Haru、Hiyori、Mao 示例模型。
 
-固定依赖采用 [Cubism SDK for Web 5 R4 官方压缩包](https://cubism.live2d.com/sdk-web/bin/CubismSdkForWeb-5-r.4.zip)，压缩包 SHA-256 为 `d78904d908bd232b800219e01732e4ea2f0562b5e9f35a2670742a1c16d22942`，Core SHA-256 为 `25ae938cb4fe282ce189b357bcc97e603d1e1f7ec78bf04150d401c23cdc792f`。Core 与原始 `LICENSE.md`、`Core/LICENSE.md`、`Core/RedistributableFiles.txt` 封装在 [仓库内 npm 依赖](../vendor/README.md)，版本及完整性由 `package-lock.json` 固定；不包含 SDK 示例模型。SDK 自带 Haru 用于本地开发测试，并已复制到本机应用数据目录、设为启动角色；其条款见压缩包许可文件及 [官方示例模型条款](https://www.live2d.com/en/learn/sample/model-terms/)。模型未打进应用包。
+固定依赖采用 [Cubism SDK for Web 5 R4 官方压缩包](https://cubism.live2d.com/sdk-web/bin/CubismSdkForWeb-5-r.4.zip)，压缩包 SHA-256 为 `d78904d908bd232b800219e01732e4ea2f0562b5e9f35a2670742a1c16d22942`，Core SHA-256 为 `25ae938cb4fe282ce189b357bcc97e603d1e1f7ec78bf04150d401c23cdc792f`。Core 与原始 `LICENSE.md`、`Core/LICENSE.md`、`Core/RedistributableFiles.txt` 封装在 [仓库内 npm 依赖](../vendor/README.md)，版本及完整性由 `package-lock.json` 固定。
+
+Haru、Hiyori、Mao 的运行资源和 SDK 原始许可说明保存在 [vendor/models](../vendor/models/README.md)，由 Tauri 随包提供，并在首次读取角色库时复制到用户数据目录。角色素材适用 [Live2D Free Material License](https://www.live2d.com/eula/live2d-free-material-license-agreement_en.html) 及 [官方示例模型条款](https://www.live2d.com/en/learn/sample/model-terms/)；Hiyori 的角色设计不得修改。Haru 的语音文件及对应动作中的 `Sound` 引用已移除，其余保留文件未修改。随包声明包含：This content uses sample data owned and copyrighted by Live2D Inc.
 
 - 官方获取：[Cubism SDK for Web](https://www.live2d.com/en/sdk/download/web/)。
 - 扩展性应用条款：[Expandable Applications](https://www.live2d.com/en/sdk/license/expandable/)。本项目允许用户导入自己的 Live2D 模型，需向 Live2D 核实其适用的 SDK 发行条件；不能因应用免费、源码开放就推断免许可或允许公开发行。
@@ -69,9 +71,9 @@ npm run licenses:check
 
 ## 模型、品牌和外部软件
 
-- **角色模型：** 用户自行提供；使用权、修改权和再分发权分别核实。加载到应用并不表示可公开分发该角色，仓库目前不提供演示模型。
+- **角色模型：** 内置 Haru、Hiyori、Mao 的来源与条款见上文；用户另行导入的模型，其使用权、修改权和再分发权仍需分别核实。加载到应用并不表示可公开分发该角色。
 - **品牌：** 当前 SVG 图形和 VTubeLeaf 几何字标为本项目新绘制路径，没有嵌入第三方字体或图标文件。提案板文字使用系统 sans-serif 渲染；不随包分发字体。尚未做完整名称或商标检索，详见 [BRAND.md](BRAND.md)。
 - **OBS Studio：** 可选的外部输出方式，单独安装和使用，不随应用分发。其源码许可为 GPL-2.0-or-later，见 [OBS 官方仓库](https://github.com/obsproject/obs-studio)。VTubeLeaf 内置摄像头不依赖 OBS。
 - **飞书及操作系统组件：** 外部运行环境，本项目不再分发，也不据可接入就表示得到厂商背书。
 
-公开发行前仍需确认 Live2D 适用许可；已准备 [Live2D 咨询草稿](LIVE2D-LICENSE-REQUEST.md)。如以后随包提供示例模型、OpenSeeFace 或 Python 环境，需按实际内容重新核实并扩展声明。
+公开发行前仍需确认 Live2D 适用许可；已准备 [Live2D 咨询草稿](LIVE2D-LICENSE-REQUEST.md)。如以后更换示例模型或随包提供 OpenSeeFace、Python 环境，需按实际内容重新核实并扩展声明。

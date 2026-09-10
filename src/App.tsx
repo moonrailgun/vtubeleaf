@@ -458,17 +458,19 @@ export function App() {
               <p className="eyebrow">HELLO, LITTLE YOU</p>
               <h2>你的舞台，等你登场</h2>
               <p>
-                导入 Live2D 角色，
+                选择或导入 Live2D 角色，
                 <br />
                 让转头、眨眼和笑容一起动起来。
               </p>
               <Button
                 id="import-empty"
                 disabled={busy}
-                onClick={() => run(() => a?.importModel('directory'))}
+                onClick={() =>
+                  view.library.length ? setTab('library') : run(() => a?.importModel('directory'))
+                }
               >
                 <Plus aria-hidden="true" />
-                选择模型目录
+                {view.library.length ? '选择内置或已有角色' : '选择模型目录'}
               </Button>
               <span className="file-note">支持 .model3.json 与完整资源目录</span>
             </div>

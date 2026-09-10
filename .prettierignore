@@ -2,4 +2,5 @@ package-lock.json
 
 # Preserve upstream license originals and deterministic generated notices.
 public/licenses/
+vendor/models/
 LICENSE

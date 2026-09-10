@@ -95,6 +95,36 @@ impl Registry {
         Ok(info)
     }
 
+    pub fn list_with_builtins(
+        &mut self,
+        data_dir: &Path,
+        bundled_dir: &Path,
+    ) -> Result<Library, String> {
+        let directory = data_dir.join("models");
+        fs::create_dir_all(&directory).map_err(|_| "无法创建角色文件夹")?;
+        let mut errors = Vec::new();
+        for name in ["Haru", "Hiyori", "Mao"] {
+            let destination = directory.join(format!("builtin-{name}"));
+            if destination.exists() {
+                continue;
+            }
+            let result = validate_model(&bundled_dir.join(name))
+                .and_then(|source| copy_model(&source, &directory))
+                .and_then(|model| {
+                    fs::rename(&model.root, &destination).map_err(|_| {
+                        let _ = fs::remove_dir_all(&model.root);
+                        "无法保存内置角色".to_owned()
+                    })
+                });
+            if let Err(error) = result {
+                errors.push(format!("内置角色 {name}：{error}"));
+            }
+        }
+        let mut library = self.list(data_dir)?;
+        library.errors.extend(errors);
+        Ok(library)
+    }
+
     pub fn list(&mut self, data_dir: &Path) -> Result<Library, String> {
         let directory = data_dir.join("models");
         fs::create_dir_all(&directory).map_err(|_| "无法创建角色文件夹")?;
@@ -595,6 +625,70 @@ mod tests {
         fs::write(root.join("leaf.moc3"), b"MOC3").unwrap();
         fs::write(root.join("texture.png"), b"texture").unwrap();
         fs::write(root.join("private.txt"), b"unreferenced").unwrap();
+    }
+
+    #[test]
+    fn bundled_models_populate_the_library_once_and_preserve_user_data() {
+        let bundled = Path::new(env!("CARGO_MANIFEST_DIR")).join("../vendor/models");
+        let data = tempfile::tempdir().unwrap();
+        let mut registry = Registry::default();
+        let library = registry.list_with_builtins(data.path(), &bundled).unwrap();
+        assert!(library.errors.is_empty(), "{:?}", library.errors);
+        assert_eq!(
+            library
+                .models
+                .iter()
+                .map(|model| model.name.as_str())
+                .collect::<Vec<_>>(),
+            ["Haru", "Hiyori", "Mao"]
+        );
+        for model in &library.models {
+            for resource in &model.files {
+                assert_eq!(
+                    registry.read(&model.id, resource).unwrap(),
+                    fs::read(bundled.join(&model.name).join(resource)).unwrap()
+                );
+                assert!(!resource.ends_with(".wav"));
+            }
+        }
+        let haru = &library.models[0];
+        let png = b"\x89PNG\r\n\x1a\n\0\0\0\x0dIHDR\0\0\x01\0\0\0\x01\0";
+        registry.save_preview(&haru.id, data.path(), png).unwrap();
+        let entry = Path::new(&haru.path);
+        let original = fs::read_to_string(entry).unwrap();
+        let edited = format!("{original}\n");
+        fs::write(entry, &edited).unwrap();
+        let repeated = registry.list_with_builtins(data.path(), &bundled).unwrap();
+        assert!(repeated.errors.is_empty());
+        assert_eq!(repeated.models.len(), 3);
+        assert_eq!(repeated.models[0].id, haru.id);
+
+        let source = tempfile::tempdir().unwrap();
+        fixture(source.path());
+        registry.load(source.path(), data.path()).unwrap();
+        let mut restarted = Registry::default();
+        let library = restarted.list_with_builtins(data.path(), &bundled).unwrap();
+        assert!(library.errors.is_empty());
+        assert_eq!(library.models.len(), 4);
+        assert_eq!(library.models[0].path, haru.path);
+        assert_eq!(fs::read_to_string(entry).unwrap(), edited);
+        assert_eq!(
+            restarted
+                .read_preview(&library.models[0].id, data.path())
+                .unwrap(),
+            png
+        );
+
+        // Missing bundle files must not prevent existing or imported models from loading.
+        fs::remove_dir_all(data.path().join("models/builtin-Mao")).unwrap();
+        let missing = data.path().join("missing-bundle");
+        let library = restarted.list_with_builtins(data.path(), &missing).unwrap();
+        assert_eq!(library.models.len(), 3);
+        assert_eq!(library.errors.len(), 1);
+        assert!(library.errors[0].contains("Mao"));
+        let restored = restarted.list_with_builtins(data.path(), &bundled).unwrap();
+        assert!(restored.errors.is_empty());
+        assert_eq!(restored.models.len(), 4);
     }
 
     #[test]

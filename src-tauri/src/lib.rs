@@ -150,12 +150,17 @@ async fn load_model(
 async fn list_models(window: WebviewWindow, app: tauri::AppHandle) -> Result<Library, String> {
     require_main(&window)?;
     tauri::async_runtime::spawn_blocking(move || {
+        let bundled_dir = app
+            .path()
+            .resource_dir()
+            .map_err(|_| "无法定位内置角色目录")?
+            .join("models");
         let state = app.state::<AppState>();
         let result = state
             .models
             .lock()
             .map_err(|_| "模型状态不可用")?
-            .list(&state.data_dir);
+            .list_with_builtins(&state.data_dir, &bundled_dir);
         result
     })
     .await
