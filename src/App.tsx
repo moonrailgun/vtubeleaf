@@ -34,6 +34,7 @@ import {
 import type { MotionMode } from './renderer';
 import { SceneControls } from './SceneControls';
 import { vowels } from './lipsync';
+import { version } from '../package.json';
 
 function Fold({ title, children }: { title: string; children: ReactNode }) {
   return (
@@ -1235,7 +1236,7 @@ export function App() {
           </section>
           <footer className="panel-footer">
             <Sparkles className="leaf-dot" aria-hidden="true" />
-            VTubeLeaf<span>v0.1</span>
+            VTubeLeaf<span>v{version}</span>
           </footer>
         </aside>
       </main>
