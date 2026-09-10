@@ -2,8 +2,10 @@ name: Desktop checks
 
 on:
   push:
+    branches: ['**']
   pull_request:
   workflow_dispatch:
+  workflow_call:
 
 permissions:
   contents: read
@@ -53,3 +55,12 @@ jobs:
             ctest --test-dir $output -C Release --output-on-failure
             if ($LASTEXITCODE) { exit $LASTEXITCODE }
           }
+      - name: Upload Windows release installer
+        if: runner.os == 'Windows' && startsWith(github.ref, 'refs/tags/v')
+        uses: actions/upload-artifact@v7
+        with:
+          name: VTubeLeaf-windows-${{ github.run_number }}
+          path: src-tauri/target/release/bundle/nsis/*-setup.exe
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 30

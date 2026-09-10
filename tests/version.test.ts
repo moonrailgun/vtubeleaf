@@ -37,3 +37,38 @@ test('version sync updates only the app and rejects an unrecognized lockfile bef
     rmSync(root, { recursive: true, force: true });
   }
 });
+
+test('release validates the tag and identifies prereleases before building', () => {
+  const workflow = readFileSync(
+    new URL('../.github/workflows/release.yml', import.meta.url),
+    'utf8',
+  );
+  const script = workflow.split("<<'NODE'\n")[1]?.split('\n          NODE')[0];
+  assert.ok(script, 'Release workflow must contain its version check');
+  const root = mkdtempSync(join(tmpdir(), 'vtubeleaf-release-'));
+  const output = join(root, 'output');
+  try {
+    for (const [version, ref, expected] of [
+      ['1.2.3', 'refs/tags/v1.2.3', 'false'],
+      ['1.2.3-beta.1', 'refs/tags/v1.2.3-beta.1', 'true'],
+      ['1.2.3+build-1', 'refs/tags/v1.2.3+build-1', 'false'],
+      ['1.2.3', 'refs/tags/v1.2.4', null],
+      ['1.2.3', 'refs/heads/main', null],
+    ] as const) {
+      writeFileSync(join(root, 'package.json'), JSON.stringify({ version }));
+      writeFileSync(output, '');
+      const result = spawnSync(process.execPath, ['--input-type=module', '--eval', script], {
+        cwd: root,
+        encoding: 'utf8',
+        env: { ...process.env, GITHUB_REF: ref, GITHUB_OUTPUT: output },
+      });
+      assert.equal(result.status === 0, expected !== null, result.stderr);
+      assert.equal(
+        readFileSync(output, 'utf8'),
+        expected === null ? '' : `prerelease=${expected}\n`,
+      );
+    }
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});

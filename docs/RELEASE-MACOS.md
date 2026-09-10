@@ -1,6 +1,6 @@
 # GitHub Actions macOS 正式打包
 
-[Package macOS release](../.github/workflows/release-macos.yml) 手动构建 **macOS 14+、Intel / Apple Silicon 通用的 Release 应用**，包含 Cubism Core R4、MediaPipe 本地资源、许可声明和内置 Camera Extension。
+[Package macOS release](../.github/workflows/release-macos.yml) 构建 **macOS 14+、Intel / Apple Silicon 通用的 Release 应用**，包含 Cubism Core R4、MediaPipe 本地资源、许可声明和内置 Camera Extension。推送 `v*` tag 后由 [Release 工作流](../.github/workflows/release.yml) 自动调用，也可手动运行。
 
 流程为：检查必需配置 → 测试 → 校验并准备资源 → Tauri release 构建 → 嵌入摄像头扩展 → Developer ID 签名 → Apple 公证应用并附加票据 → 生成 ZIP / DMG → 签名、公证 DMG 并附加票据 → 校验签名与 Gatekeeper → 上传产物。任何签名、公证或资源检查失败都会终止，不上传未完成的包。
 
@@ -55,19 +55,21 @@ base64 -i /path/camera.provisionprofile | pbcopy
 base64 -i /path/AuthKey_ABC1234567.p8 | pbcopy
 ```
 
-`.p12` 密码、Key ID 与 Issuer ID 直接填原文。临时钥匙串密码由 runner 随机生成，无需配置；上传 Actions 产物使用 GitHub 提供的令牌，无需个人 PAT。
+`.p12` 密码、Key ID 与 Issuer ID 直接填原文。临时钥匙串密码由 runner 随机生成，无需配置；上传 Actions 产物和发布 GitHub Release 使用 GitHub 提供的令牌，无需个人 PAT，只有发布 job 申请 `contents: write` 权限。
 
 Cubism Core R4 已固定为仓库内的 npm 依赖，由 `npm ci` 安装；工作流从依赖复制 Core 和原始许可文件，不下载整份 SDK，也不需要 `LIVE2D_SDK_URL` 或 `LIVE2D_SDK_SHA256`。版本、来源和完整性记录见 [vendor](../vendor/README.md)，公开分发条件见 [第三方许可](THIRD_PARTY.md)。
 
 ## 3. 运行和下载
 
-1. 将工作流、脚本及应用源码提交到仓库；手动运行入口要求工作流文件已存在于默认分支。
+1. 将工作流、脚本及应用源码提交到仓库，确保版本 tag 包含发行工作流；手动运行入口要求工作流文件已存在于默认分支。
 2. 提交现有改动后，运行 `npm run release:patch` 或 `npm run release:minor`。release-it 统一更新 npm / Rust 版本和许可证清单，自动提交、创建版本 tag 并推送；Tauri 直接读取根目录 `package.json`。首次使用的依赖要求和预览命令见 [升级版本](../README.md#升级版本)。
-3. 打开 **Actions → Package macOS release → Run workflow**，选择准备发行的可信分支；要精确构建版本 tag，可运行 `gh workflow run release-macos.yml --ref v0.1.1`（替换为实际版本）。不要在未审核的代码上运行带签名凭据的工作流。
-4. 成功后下载该次运行的 **VTubeLeaf-macos-universal-运行序号** Artifact。内含 `VTubeLeaf-版本-macos-universal.dmg`、同名 `.zip` 和 `SHA256SUMS.txt`，保留 30 天。
-5. 解压外层 Artifact 后可执行 `shasum -a 256 -c SHA256SUMS.txt`。DMG 内提供拖到 Applications 的入口；ZIP 内为已公证并附加票据的 `.app`。
+3. 推送 `v*` tag 自动启动 **Actions → Release**，先校验 tag 与应用版本一致，再执行两端检查和 macOS 正式打包。全部成功后创建对应 GitHub Release，自动生成发行说明，并上传 Windows `.exe`、macOS 通用 `.dmg` / `.zip` 和覆盖三种安装包的 `SHA256SUMS.txt`。预发布版本会标记为 prerelease。
+4. 从仓库 **Releases** 下载文件。Actions 同时保留 **VTubeLeaf-windows-运行序号** 和 **VTubeLeaf-macos-universal-运行序号** Artifact 30 天。
+5. 将 Release 的三个安装包和 `SHA256SUMS.txt` 下载到同一目录，可执行 `shasum -a 256 -c SHA256SUMS.txt`。DMG 内提供拖到 Applications 的入口；ZIP 内为已公证并附加票据的 `.app`。
 
-工作流只生成正式发行文件，不自动创建或发布 GitHub Release。不会通过 push / PR 自动使用发行凭据。安装后从 `/Applications/VTubeLeaf.app` 启动并按系统提示批准摄像头扩展。
+构建失败可在 Actions 重跑；也可用 `gh workflow run release.yml --ref v0.1.2` 对已有 tag 重新启动完整发行（替换为实际版本）。已存在同名 Release 时，发布步骤会报错，不覆盖已发布文件。
+
+如只需手动构建 macOS 包，打开 **Actions → Package macOS release → Run workflow**，或运行 `gh workflow run release-macos.yml --ref v0.1.2`，完成后从该次运行的 Artifact 下载；这个入口不创建 GitHub Release。普通分支 push / PR 不使用发行凭据，版本 tag 和手动发行会使用。仅为可信代码创建发行 tag。安装后从 `/Applications/VTubeLeaf.app` 启动并按系统提示批准摄像头扩展。
 
 ## 验证与排错
 
@@ -75,7 +77,7 @@ Cubism Core R4 已固定为仓库内的 npm 依赖，由 `npm ci` 安装；工�
 
 ```sh
 node scripts/check-macos-release.mjs --self-test
-actionlint .github/workflows/release-macos.yml .github/workflows/check.yml
+actionlint .github/workflows/*.yml
 ```
 
 - `Missing …`：检查放在 Secrets / Variables 的位置及名称是否一致。

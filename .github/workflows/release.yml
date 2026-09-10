@@ -1,0 +1,67 @@
+name: Release
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  version:
+    runs-on: ubuntu-latest
+    outputs:
+      prerelease: ${{ steps.version.outputs.prerelease }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - name: Verify version tag
+        id: version
+        shell: bash
+        run: |
+          node --input-type=module <<'NODE'
+          import assert from 'node:assert/strict';
+          import { appendFileSync, readFileSync } from 'node:fs';
+          const { version } = JSON.parse(readFileSync('package.json', 'utf8'));
+          assert.equal(process.env.GITHUB_REF, `refs/tags/v${version}`, 'Release requires a tag matching package.json');
+          appendFileSync(process.env.GITHUB_OUTPUT, `prerelease=${version.split('+')[0].includes('-')}\n`);
+          NODE
+
+  checks:
+    needs: version
+    uses: ./.github/workflows/check.yml
+
+  macos:
+    needs: version
+    uses: ./.github/workflows/release-macos.yml
+    secrets: inherit
+
+  publish:
+    needs: [version, checks, macos]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v8
+        with:
+          pattern: VTubeLeaf-*
+          merge-multiple: true
+          path: packages
+      - name: Verify packages and publish GitHub Release
+        working-directory: packages
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          RELEASE_TAG: ${{ github.ref_name }}
+          PRERELEASE: ${{ needs.version.outputs.prerelease }}
+        run: |
+          sha256sum --check SHA256SUMS.txt
+          sha256sum ./*.dmg ./*.zip ./*.exe > SHA256SUMS.txt
+          gh release create "$RELEASE_TAG" ./*.dmg ./*.zip ./*.exe SHA256SUMS.txt \
+            --verify-tag --title "$RELEASE_TAG" --generate-notes --prerelease="$PRERELEASE"

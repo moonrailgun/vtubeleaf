@@ -39,7 +39,7 @@ npm run build
 
 `npm run dev` 是浏览器开发页面；本地文件、设置、输出窗口和 OpenSeeFace 进程功能需要通过 `npm run tauri dev` 使用。
 
-Windows 的 MSVC、WebView2、PowerShell 命令与 `.exe` 安装包构建见 [Windows 开发与打包](docs/SETUP.md#windows-开发与打包)。`Desktop checks` 只检查编译与打包，不发布安装包，包含固定版本的 Cubism Core。macOS 正式包使用独立的 [GitHub Actions 发行工作流](docs/RELEASE-MACOS.md)，配置 Apple 发行凭据后生成带内置摄像头、签名和公证的通用 DMG / ZIP。
+Windows 的 MSVC、WebView2、PowerShell 命令与 `.exe` 安装包构建见 [Windows 开发与打包](docs/SETUP.md#windows-开发与打包)。`Desktop checks` 检查两端编译与打包，包含固定版本的 Cubism Core。推送版本 tag 后，[Release 工作流](.github/workflows/release.yml) 自动构建 Windows 安装包与 macOS 通用 DMG / ZIP，全部成功后上传到对应 GitHub Release；macOS 包包含内置摄像头、签名和公证，需要先配置 [Apple 发行凭据](docs/RELEASE-MACOS.md)。
 
 使用 `npm run format` 格式化 TypeScript、JavaScript、CSS、HTML、JSON 和 Markdown，`npm run format:check` 检查格式。Prettier 不处理 Rust 和 Python；Rust 使用 `cargo fmt --manifest-path src-tauri/Cargo.toml`。
 
@@ -61,7 +61,7 @@ npm run release -- 1.2.3   # 指定版本；以上命令任选其一
 npm run release -- patch --dry-run  # 仅预览，不改文件、提交或推送
 ```
 
-运行前先提交现有改动，并确保当前分支已设置 upstream、能够推送。release-it 会检查工作区是否干净，更新 `package-lock.json`，将 Rust 版本和许可证文件纳入同一次 Git 提交（如 `chore(release): 0.1.2`），创建对应 tag（如 `v0.1.2`），并推送提交和 tag。命令使用 `--ci` 无交互执行；完成后再手动运行[发行工作流](docs/RELEASE-MACOS.md)打包，不发布 npm 包或创建 GitHub Release。
+运行前先提交现有改动，并确保当前分支已设置 upstream、能够推送。release-it 会检查工作区是否干净，更新 `package-lock.json`，将 Rust 版本和许可证文件纳入同一次 Git 提交（如 `chore(release): 0.1.2`），创建对应 tag（如 `v0.1.2`），并推送提交和 tag。命令使用 `--ci` 无交互执行，不发布 npm 包；推送 `v*` tag 后自动触发 [Release 工作流](.github/workflows/release.yml)，校验 tag 与应用版本一致，待两端检查和 macOS 签名、公证全部成功后创建 GitHub Release，上传 Windows `.exe`、macOS `.dmg` / `.zip` 与 `SHA256SUMS.txt`，并自动生成发行说明。预发布版本（如 `v0.2.0-beta.1`）会标记为 prerelease。命令结束表示 tag 已推送，实际打包和发布进度需在 Actions 查看。
 
 如果同步或许可证生成失败，版本文件可能已经更新。修复报错后运行 `node scripts/sync-version.mjs` 和 `npm run licenses:generate`，检查 `git diff`，再手动完成该版本的提交、tag 和推送，无需再次递增版本。`website/package.json` 属于独立官网，不随桌面应用升级。
 
