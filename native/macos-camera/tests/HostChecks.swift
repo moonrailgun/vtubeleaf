@@ -7,7 +7,9 @@ private final class StartingCameraHost: CameraHost {
     var submitted: [OSSystemExtensionRequest] = []
     var streamStarts = 0
     var streamError: Error?
+    var availableDevice: CMIODeviceID? = 1
 
+    override func findDevice() -> CMIODeviceID? { availableDevice }
     override func submitRequest(_ request: OSSystemExtensionRequest) {
         submitted.append(request)
     }
@@ -19,6 +21,24 @@ private final class StartingCameraHost: CameraHost {
 
 @main struct HostChecks {
     static func main() throws {
+        let delayed = StartingCameraHost()
+        delayed.extensionBundleURL = FileManager.default.temporaryDirectory
+        delayed.availableDevice = nil
+        try delayed.start()
+        delayed.request(delayed.submitted[0], didFinishWithResult: .completed)
+        assert(delayed.streamStarts == 0 && delayed.startAfterActivation, "Activation success must wait for device arrival and retain the requested start")
+        try delayed.start()
+        delayed.request("install")
+        _ = delayed.snapshot()
+        assert(delayed.submitted.count == 1, "Waiting for a device must not submit duplicate activations or status requests")
+        let delayedStatus = OSSystemExtensionRequest.propertiesRequest(forExtensionWithIdentifier: cameraIdentifier, queue: .main)
+        delayed.requests[ObjectIdentifier(delayedStatus)] = "status"
+        delayed.request(delayedStatus, foundProperties: [])
+        assert(delayed.installed && delayed.startAfterActivation && delayed.message.contains("等待"), "Stale status must not replace device-wait progress")
+        delayed.availableDevice = 1
+        _ = delayed.snapshot()
+        assert(delayed.streamStarts == 1 && !delayed.startAfterActivation, "A device arriving after activation must start output without another click")
+
         let starting = StartingCameraHost()
         starting.installed = true
         starting.extensionBundleURL = FileManager.default.temporaryDirectory
@@ -40,6 +60,18 @@ private final class StartingCameraHost: CameraHost {
         starting.request(activation, didFinishWithResult: .completed)
         assert(starting.streamStarts == 1, "A completed request must not start twice")
 
+        let lateStatusHost = StartingCameraHost()
+        lateStatusHost.extensionBundleURL = FileManager.default.temporaryDirectory
+        lateStatusHost.request("status")
+        let lateStatus = lateStatusHost.submitted[0]
+        try lateStatusHost.start()
+        lateStatusHost.request(lateStatusHost.submitted.last!, didFinishWithResult: .completed)
+        lateStatusHost.request(lateStatus, foundProperties: [])
+        assert(lateStatusHost.installed && lateStatusHost.streamStarts == 1, "A pre-activation status response arriving after startup must not disable the camera")
+        lateStatusHost.request("status")
+        lateStatusHost.request(lateStatusHost.submitted.last!, foundProperties: [])
+        assert(!lateStatusHost.installed, "A fresh status response must still detect a disabled extension")
+
         try starting.start()
         starting.stop()
         starting.request(starting.submitted.last!, didFinishWithResult: .completed)
@@ -47,7 +79,9 @@ private final class StartingCameraHost: CameraHost {
         try starting.start()
         starting.request("uninstall")
         starting.request(starting.submitted.last!, didFinishWithResult: .completed)
-        assert(starting.streamStarts == 1, "Uninstalling during activation must not unexpectedly start output")
+        assert(starting.streamStarts == 1 && starting.requests.values.contains("uninstall"), "Uninstalling during activation must cancel output and submit uninstall when activation finishes")
+        starting.request(starting.submitted.last!, didFinishWithResult: .completed)
+        assert(!starting.installed && starting.requests.isEmpty, "Deferred uninstall must complete without another click")
 
         try starting.start()
         starting.request(starting.submitted.last!, didFailWithError: cameraError("activation rejected"))
@@ -75,11 +109,49 @@ private final class StartingCameraHost: CameraHost {
         assert(missingBundle.submitted.isEmpty && missingBundle.streamStarts == 0 && missingBundle.message.contains("缺少"), "Missing packaged extensions must fail before activation or streaming")
         print("PASS: activation before start, duplicate clicks, stale polling, cancellation, failures and reboot handling")
 
+        func waitingHost() throws -> StartingCameraHost {
+            let host = StartingCameraHost()
+            host.extensionBundleURL = FileManager.default.temporaryDirectory
+            host.availableDevice = nil
+            try host.start()
+            host.request(host.submitted[0], didFinishWithResult: .completed)
+            return host
+        }
+        let timedOut = try waitingHost()
+        timedOut.advanceStart(now: 0)
+        assert(timedOut.startAfterActivation && timedOut.streamStarts == 0, "Device arrival must get a grace period")
+        timedOut.advanceStart(now: .max)
+        timedOut.advanceStart(now: .max)
+        assert(timedOut.submitted.count == 1 && timedOut.installed && timedOut.requests.isEmpty, "A device timeout must leave the extension installed without submitting deactivation")
+        assert(!timedOut.startAfterActivation && timedOut.streamStarts == 0 && timedOut.message.contains("稍后重试"), "A device timeout must end the pending start with retry feedback")
+        timedOut.updateInstallation(enabled: true, deviceAvailable: false)
+        assert(timedOut.message.contains("稍后重试"), "Status polling must preserve device-unavailable feedback")
+        timedOut.availableDevice = 1
+        timedOut.advanceStart(now: .max)
+        assert(timedOut.streamStarts == 0, "A timed-out request must not start unexpectedly when a device later appears")
+        try timedOut.start()
+        timedOut.request(timedOut.submitted.last!, didFinishWithResult: .completed)
+        assert(timedOut.streamStarts == 1, "A new start after timeout must still activate and start normally")
+
+        let cancelledWait = try waitingHost()
+        cancelledWait.stop()
+        cancelledWait.availableDevice = 1
+        cancelledWait.advanceStart(now: .max)
+        assert(cancelledWait.installed && cancelledWait.submitted.count == 1 && cancelledWait.streamStarts == 0, "Stopping during device wait must cancel output and preserve the installation")
+
+        let removedWait = try waitingHost()
+        removedWait.request("uninstall")
+        removedWait.request("uninstall")
+        removedWait.request(removedWait.submitted.last!, didFinishWithResult: .completed)
+        removedWait.advanceStart(now: .max)
+        assert(!removedWait.installed && removedWait.submitted.count == 2 && removedWait.requests.isEmpty && removedWait.streamStarts == 0, "Explicit uninstall during device wait must cancel output and coalesce repeated uninstall clicks")
+        print("PASS: delayed device start, non-destructive timeout, retry, cancellation and explicit uninstall")
+
         let host = CameraHost()
         host.message = "等待系统设置中的摄像头扩展批准"
         host.updateInstallation(enabled: true, deviceAvailable: false)
         assert(host.installed && host.stream == 0)
-        assert(host.message.contains("已启用") && host.message.contains("重新打开"), "An enabled extension without a device must explain recovery instead of claiming readiness")
+        assert(host.message.contains("已启用") && host.message.contains("尚未提供设备"), "An enabled extension without a device must not claim readiness")
         host.updateInstallation(enabled: true, deviceAvailable: true)
         assert(host.message == "摄像头已安装，可以启动输出", "Device arrival must clear the stale approval or restart message")
         host.message = "无法启动摄像头输入流：-4"

@@ -5,8 +5,8 @@ import SystemExtensions
 
 private let hostQueue = DispatchQueue(label: "com.vtubeleaf.camera.host", qos: .userInteractive)
 private let cameraHost = CameraHost()
-private let cameraDeviceUnavailable = "摄像头扩展已启用，但设备尚未出现在当前应用中，请退出并重新打开 VTubeLeaf 后重试"
-private let cameraRebootRequired = "系统扩展变更将在重启后完成"
+private let cameraDeviceUnavailable = "摄像头扩展已启用，macOS 尚未提供设备，请稍后重试"
+private let cameraRebootRequired = "macOS 要求重启以完成摄像头扩展变更；请保存工作并重启 Mac"
 
 func objectIDs(_ object: CMIOObjectID, _ selector: CMIOObjectPropertySelector, scope: CMIOObjectPropertyScope = CMIOObjectPropertyScope(kCMIOObjectPropertyScopeGlobal)) -> [CMIOObjectID] {
     var address = CMIOObjectPropertyAddress(mSelector: selector, mScope: scope, mElement: CMIOObjectPropertyElement(kCMIOObjectPropertyElementMain))
@@ -49,6 +49,8 @@ class CameraHost: NSObject, OSSystemExtensionRequestDelegate {
     var waitingForDevice = false
     var startAfterActivation = false
     var needsReboot = false
+    var deviceWaitDeadline: UInt64?
+    var uninstallAfterRequest = false
     var extensionBundleURL = Bundle.main.bundleURL.appendingPathComponent("Contents/Library/SystemExtensions/\(cameraIdentifier).systemextension")
 
     func showApprovalPrompt() {
@@ -66,7 +68,7 @@ class CameraHost: NSObject, OSSystemExtensionRequestDelegate {
         DispatchQueue.main.async {
             let alert = NSAlert()
             alert.messageText = "需要启用 VTubeLeaf Camera"
-            alert.informativeText = instructions + "。开启后回到应用；若仍找不到设备，请退出并重新打开 VTubeLeaf。"
+            alert.informativeText = instructions + "。开启后回到应用，待处理的启动会自动继续。"
             alert.addButton(withTitle: "打开系统设置")
             alert.addButton(withTitle: "稍后")
             if alert.runModal() == .alertFirstButtonReturn {
@@ -81,7 +83,7 @@ class CameraHost: NSObject, OSSystemExtensionRequestDelegate {
     func updateInstallation(enabled: Bool, deviceAvailable: Bool) {
         let wasInstalled = installed
         installed = enabled
-        guard !needsReboot else { return }
+        guard !needsReboot, !startAfterActivation else { return }
         if !installed && wasInstalled {
             stop()
             waitingForDevice = false
@@ -92,25 +94,34 @@ class CameraHost: NSObject, OSSystemExtensionRequestDelegate {
         }
     }
     func snapshot() -> [String: Any] {
+        let now = DispatchTime.now().uptimeNanoseconds
+        advanceStart(now: now)
         if stream != 0 && findDevice() != device {
             stop()
             message = "虚拟摄像头已断开，请重新启动输出"
         }
-        let now = DispatchTime.now().uptimeNanoseconds
-        if now - lastRefresh > 2_000_000_000 && requests.isEmpty {
+        if now - lastRefresh > 2_000_000_000 && requests.isEmpty && !startAfterActivation {
             lastRefresh = now
             request("status")
         }
         return ["supported": true, "installed": installed, "active": stream != 0, "message": message]
     }
     func request(_ kind: String) {
-        if kind == "uninstall" { stop() }
+        if kind == "install" && startAfterActivation { return }
+        if kind == "uninstall" {
+            guard !requests.values.contains("uninstall") else { return }
+            stop()
+        }
         if kind != "status" && requests.values.contains(where: { $0 != "status" }) {
-            if kind != "start" { message = "系统扩展请求正在处理中，请完成后重试" }
+            if kind == "uninstall" {
+                uninstallAfterRequest = true
+                message = "当前请求完成后将自动卸载摄像头扩展"
+            } else if kind != "start" { message = "系统扩展请求正在处理中，请完成后重试" }
             return
         }
         if kind == "install" || kind == "start" {
             guard FileManager.default.fileExists(atPath: extensionBundleURL.path) else {
+                startAfterActivation = false
                 message = "安装包缺少摄像头扩展，请先完成签名打包"; return
             }
             approvalPromptShown = false
@@ -119,6 +130,8 @@ class CameraHost: NSObject, OSSystemExtensionRequestDelegate {
             startAfterActivation = true
             waitingForDevice = false
         }
+        // Pre-change status results are obsolete even if they arrive after this request finishes.
+        if kind != "status" { requests = requests.filter { $0.value != "status" } }
         let request: OSSystemExtensionRequest
         switch kind {
         case "install", "start": request = .activationRequest(forExtensionWithIdentifier: cameraIdentifier, queue: hostQueue)
@@ -141,8 +154,24 @@ class CameraHost: NSObject, OSSystemExtensionRequestDelegate {
     func start() throws {
         if stream != 0 { return }
         guard !needsReboot else { message = cameraRebootRequired; return }
+        guard !startAfterActivation,
+              !requests.values.contains(where: { $0 != "status" }) else { return }
         // Activation also checks/replaces an installed version; never open its stream first.
         request("start")
+    }
+    func advanceStart(now: UInt64) {
+        guard startAfterActivation, let deadline = deviceWaitDeadline else { return }
+        if findDevice() != nil {
+            deviceWaitDeadline = nil
+            startAfterActivation = false
+            waitingForDevice = false
+            do { try startStream() }
+            catch { message = error.localizedDescription }
+        } else if now >= deadline {
+            deviceWaitDeadline = nil
+            startAfterActivation = false
+            message = cameraDeviceUnavailable
+        }
     }
     func startStream() throws {
         if stream != 0 { return }
@@ -164,6 +193,7 @@ class CameraHost: NSObject, OSSystemExtensionRequestDelegate {
     }
     func stop() {
         startAfterActivation = false
+        deviceWaitDeadline = nil
         if stream != 0 { CMIODeviceStopStream(device, stream) }
         // CMIO owns buffers after enqueue; do not race its consumer by draining/resetting its queue.
         queue = nil; frames = nil; stream = 0; device = 0; lastEnqueue = 0
@@ -191,6 +221,7 @@ class CameraHost: NSObject, OSSystemExtensionRequestDelegate {
         lastEnqueue = now
     }
     func requestNeedsUserApproval(_ request: OSSystemExtensionRequest) {
+        guard requests[ObjectIdentifier(request)] != nil, !uninstallAfterRequest else { return }
         showApprovalPrompt()
     }
     func request(_ request: OSSystemExtensionRequest, actionForReplacingExtension existing: OSSystemExtensionProperties, withExtension ext: OSSystemExtensionProperties) -> OSSystemExtensionRequest.ReplacementAction { .replace }
@@ -199,29 +230,54 @@ class CameraHost: NSObject, OSSystemExtensionRequestDelegate {
         if result == .willCompleteAfterReboot {
             startAfterActivation = false
             needsReboot = true
+        }
+        if uninstallAfterRequest {
+            uninstallAfterRequest = false
+            self.request("uninstall")
+            return
+        }
+        if kind == "install" || kind == "start" {
+            updateInstallation(enabled: true, deviceAvailable: findDevice() != nil)
+        }
+        if kind == "uninstall" { updateInstallation(enabled: false, deviceAvailable: false); message = "摄像头已卸载" }
+        if needsReboot {
             message = cameraRebootRequired
             return
         }
-        needsReboot = false
-        if kind == "install" || kind == "start" { updateInstallation(enabled: true, deviceAvailable: findDevice() != nil) }
         if kind == "start" && startAfterActivation {
-            startAfterActivation = false
-            do { try startStream() }
-            catch { message = error.localizedDescription }
+            let now = DispatchTime.now().uptimeNanoseconds
+            deviceWaitDeadline = now + 8_000_000_000
+            waitingForDevice = true
+            message = "正在等待摄像头设备就绪，将自动启动输出"
+            advanceStart(now: now)
         }
-        if kind == "uninstall" { updateInstallation(enabled: false, deviceAvailable: false); message = "摄像头已卸载" }
     }
     func request(_ request: OSSystemExtensionRequest, didFailWithError error: Error) {
         guard let kind = requests.removeValue(forKey: ObjectIdentifier(request)) else { return }
-        if kind == "start" { startAfterActivation = false }
-        guard !requests.values.contains(where: { $0 != "status" }), !needsReboot else { return }
+        if kind != "status" {
+            startAfterActivation = false
+            deviceWaitDeadline = nil
+            waitingForDevice = false
+            if uninstallAfterRequest {
+                uninstallAfterRequest = false
+                self.request("uninstall")
+                return
+            }
+        }
+        if needsReboot {
+            message = kind == "status" ? cameraRebootRequired : "系统扩展：\(error.localizedDescription)。\(cameraRebootRequired)"
+            return
+        }
+        guard !requests.values.contains(where: { $0 != "status" }),
+              !startAfterActivation else { return }
         // A bare development executable may not be entitled to inspect system extensions.
         if kind != "status" || !installed { message = "系统扩展：\(error.localizedDescription)" }
     }
     func request(_ request: OSSystemExtensionRequest, foundProperties properties: [OSSystemExtensionProperties]) {
-        requests.removeValue(forKey: ObjectIdentifier(request))
+        guard requests.removeValue(forKey: ObjectIdentifier(request)) == "status" else { return }
         // A status request submitted before activation must not replace update/approval feedback.
-        guard !requests.values.contains(where: { $0 != "status" }), !needsReboot else { return }
+        guard !requests.values.contains(where: { $0 != "status" }), !needsReboot,
+              !startAfterActivation else { return }
         updateInstallation(enabled: properties.contains { $0.isEnabled && !$0.isUninstalling }, deviceAvailable: findDevice() != nil)
         if !installed && properties.contains(where: { $0.isAwaitingUserApproval }) { showApprovalPrompt() }
         else if !installed && properties.contains(where: { $0.isUninstalling }) { message = "摄像头正在卸载，可能需要重启" }
