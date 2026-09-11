@@ -1201,6 +1201,7 @@ export function createStudio(
     frames = 0,
     since = before;
   let timer = 0;
+  let failedRevision = -1;
   function tick() {
     if (disposed) return;
     const now = performance.now(),
@@ -1216,7 +1217,14 @@ export function createStudio(
         ...face,
         ...audio.read(settings.micGain, settings.micNoiseGate, settings.voiceTemplates),
       };
-    stage?.draw(mapper.map(face, stage?.parameters ?? [], settings, dt / 1000), dt);
+    if (stage && failedRevision !== modelRevision) {
+      try {
+        stage.draw(mapper.map(face, stage.parameters, settings, dt / 1000), dt);
+      } catch (error) {
+        failedRevision = modelRevision;
+        report(error instanceof Error ? `模型渲染失败：${error.message}` : error);
+      }
+    }
     if (stage) virtualCamera.submit(stage.canvas, settings.background);
     recording.capture(stage?.frame ?? {}, now);
     if (native && outputOpen && !frameSending) {

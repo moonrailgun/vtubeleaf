@@ -5,6 +5,7 @@ import type { Live2DModel, Cubism4InternalModel } from 'pixi-live2d-display/cubi
 import { type Parameter, type Settings } from './state';
 import { SceneLayers, type SceneFrames } from './scene-renderer';
 import { physicsGroupsFromJson, wrapPhysics, type PhysicsGroup } from './physics';
+import { layoutMasks, maskBufferSize } from './masks';
 
 install(PIXI);
 
@@ -41,6 +42,30 @@ async function runtime() {
   const lib = await import('pixi-live2d-display/cubism4');
   lib.config.logLevel = lib.config.LOG_LEVEL_NONE;
   lib.config.sound = false;
+  type ClippingContext = {
+    _layoutChannelNo: number;
+    _layoutBounds: { x: number; y: number; width: number; height: number };
+  };
+  // Runtime export omitted from pixi-live2d-display's declarations.
+  const { CubismClippingManager_WebGL } = lib as unknown as {
+    CubismClippingManager_WebGL: {
+      prototype: {
+        _clippingContextListForMask: ClippingContext[];
+        setupLayoutBounds(usingClipCount: number): void;
+      };
+    };
+  };
+  const manager = CubismClippingManager_WebGL.prototype;
+  manager.setupLayoutBounds = function (usingClipCount: number) {
+    layoutMasks(usingClipCount).forEach((cell, index) => {
+      const context = this._clippingContextListForMask[index];
+      context._layoutChannelNo = cell.channel;
+      context._layoutBounds.x = cell.x;
+      context._layoutBounds.y = cell.y;
+      context._layoutBounds.width = cell.width;
+      context._layoutBounds.height = cell.height;
+    });
+  };
   return lib;
 }
 
@@ -203,6 +228,12 @@ export class AvatarStage {
         throw new Error(
           'Cubism Core 版本不兼容：当前渲染库请使用官方 Cubism 5 SDK for Web R4 的 Core。',
         );
+      const renderer = internal.renderer as unknown as {
+        _clippingManager: { _clippingContextListForMask: unknown[] };
+        setClippingMaskBufferSize(size: number): void;
+      };
+      const masks = renderer._clippingManager._clippingContextListForMask.length;
+      if (maskBufferSize(masks) !== 256) renderer.setClippingMaskBufferSize(maskBufferSize(masks));
       this.model?.destroy({ children: true, texture: true, baseTexture: true });
       this.urls.forEach(URL.revokeObjectURL);
       this.urls = urls;
