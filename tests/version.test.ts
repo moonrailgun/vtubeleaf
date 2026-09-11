@@ -42,7 +42,7 @@ test('release validates the tag and identifies prereleases before building', () 
   const workflow = readFileSync(
     new URL('../.github/workflows/release.yml', import.meta.url),
     'utf8',
-  );
+  ).replace(/\r\n/g, '\n');
   const script = workflow.split("<<'NODE'\n")[1]?.split('\n          NODE')[0];
   assert.ok(script, 'Release workflow must contain its version check');
   const root = mkdtempSync(join(tmpdir(), 'vtubeleaf-release-'));
