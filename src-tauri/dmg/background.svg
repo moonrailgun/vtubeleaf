@@ -1,0 +1,23 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="720" height="440" viewBox="0 0 720 440" fill="none">
+  <defs>
+    <linearGradient id="paper" x1="0" y1="0" x2="720" y2="440" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#FFFDFC"/>
+      <stop offset="1" stop-color="#FBEFF3"/>
+    </linearGradient>
+  </defs>
+  <rect width="720" height="440" fill="url(#paper)"/>
+  <circle cx="716" cy="0" r="176" fill="#F8E1E9" opacity=".45"/>
+  <circle cx="0" cy="440" r="130" fill="#F8E1E9" opacity=".35"/>
+  <g font-family="-apple-system, BlinkMacSystemFont, 'Helvetica Neue', 'PingFang SC', sans-serif">
+    <text x="48" y="64" fill="#493C45" font-size="28" font-weight="600" letter-spacing="-.8">VTubeLeaf</text>
+    <text x="48" y="89" fill="#7E6572" font-size="13">Your own little stage.</text>
+    <rect x="554" y="43" width="118" height="26" rx="13" fill="#F7E3EA"/>
+    <text x="613" y="60" text-anchor="middle" fill="#9C3E58" font-size="10" font-weight="600" letter-spacing="1.4">FOR macOS</text>
+    <rect x="96" y="138" width="168" height="174" rx="28" fill="#FFFFFF" fill-opacity=".72" stroke="#F0DDE5"/>
+    <rect x="456" y="138" width="168" height="174" rx="28" fill="#FFFFFF" fill-opacity=".72" stroke="#F0DDE5"/>
+    <circle cx="360" cy="210" r="25" fill="#F8E1E9"/>
+    <path d="M347 210H373M364 201L373 210L364 219" stroke="#BD4C6D" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+    <text x="360" y="362" text-anchor="middle" fill="#493C45" font-size="17" font-weight="500">Drag VTubeLeaf to Applications</text>
+    <text x="360" y="389" text-anchor="middle" fill="#7E6572" font-size="13">拖动 VTubeLeaf 到 Applications 文件夹，即可安装</text>
+  </g>
+</svg>

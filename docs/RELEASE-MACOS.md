@@ -2,7 +2,7 @@
 
 [Package macOS release](../.github/workflows/release-macos.yml) 构建 **macOS 14+、Intel / Apple Silicon 通用的 Release 应用**，包含 Cubism Core R4、MediaPipe 本地资源、许可声明和内置 Camera Extension。推送 `v*` tag 后由 [Release 工作流](../.github/workflows/release.yml) 自动调用，也可手动运行。
 
-流程为：检查必需配置 → 测试 → 校验并准备资源 → Tauri release 构建 → 嵌入摄像头扩展 → Developer ID 签名 → Apple 公证应用并附加票据 → 生成 ZIP / DMG → 签名、公证 DMG 并附加票据 → 校验签名与 Gatekeeper → 上传产物。任何签名、公证或资源检查失败都会终止，不上传未完成的包。
+流程为：检查必需配置 → 测试 → 校验并准备资源 → Tauri release 构建 → 嵌入摄像头扩展 → Developer ID 签名 → Apple 公证应用并附加票据 → 生成 ZIP / dmgbuild 布局 DMG → 签名、公证 DMG 并附加票据 → 校验签名与 Gatekeeper → 上传产物。任何签名、公证或资源检查失败都会终止，不上传未完成的包。
 
 ## 1. 准备 Apple 发行资料
 
@@ -70,6 +70,23 @@ Cubism Core R4 已固定为仓库内的 npm 依赖，由 `npm ci` 安装；工�
 构建失败可在 Actions 重跑；也可用 `gh workflow run release.yml --ref v0.1.2` 对已有 tag 重新启动完整发行（替换为实际版本）。已存在同名 Release 时，发布步骤会报错，不覆盖已发布文件。
 
 如只需手动构建 macOS 包，打开 **Actions → Package macOS release → Run workflow**，或运行 `gh workflow run release-macos.yml --ref v0.1.2`，完成后从该次运行的 Artifact 下载；这个入口不创建 GitHub Release。普通分支 push / PR 不使用发行凭据，版本 tag 和手动发行会使用。仅为可信代码创建发行 tag。安装后从 `/Applications/VTubeLeaf.app` 启动并按系统提示批准摄像头扩展。
+
+## DMG 布局与本地预览
+
+正式打包使用 [dmgbuild](https://dmgbuild.readthedocs.io/en/latest/usage.html) 1.6.7，布局配置在 [`scripts/dmg-settings.py`](../scripts/dmg-settings.py)：720 × 440 窗口、玫瑰粉浅色背景、左侧应用和右侧 Applications 入口，隐藏工具栏与侧栏，并提供中英文拖拽提示。背景源文件为 [`background.svg`](../src-tauri/dmg/background.svg)；配套 PNG 分别为 720 × 440 和 1440 × 880，dmgbuild 自动合并 `@2x` 版本以支持 Retina。修改 SVG 后需同步导出两个 PNG。
+
+在 macOS 的仓库根目录运行以下命令，可给已有 `.app` 生成同款 DMG（首次构建应用可先执行 `npm run tauri -- build --bundles app`）：
+
+```sh
+python3 -m venv .local/dmgbuild-venv
+.local/dmgbuild-venv/bin/python -m pip install dmgbuild==1.6.7
+.local/dmgbuild-venv/bin/python tests/dmg.test.py
+.local/dmgbuild-venv/bin/python -m dmgbuild -s scripts/dmg-settings.py \
+  -D app=src-tauri/target/release/bundle/macos/VTubeLeaf.app \
+  VTubeLeaf .local/VTubeLeaf-preview.dmg
+```
+
+这个本地命令只生成 DMG，不执行签名或公证。正式流程在应用公证并附加票据后调用相同配置，再对 DMG 签名、公证并校验。不要启用 `hide_extensions`：它会修改应用的 Finder 元数据，导致严格签名校验失败；上述冒烟测试会检查打包后的应用签名。
 
 ## 验证与排错
 

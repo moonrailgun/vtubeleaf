@@ -32,6 +32,11 @@ jobs:
         with:
           node-version: 24
           cache: npm
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+      - name: Install DMG layout builder
+        run: python -m pip install dmgbuild==1.6.7
       - name: Require production signing credentials
         env:
           MACOS_CERTIFICATE_P12_BASE64: ${{ secrets.MACOS_CERTIFICATE_P12_BASE64 }}
@@ -55,6 +60,7 @@ jobs:
       - name: Check code and packaging prerequisites
         run: |
           npm test
+          python tests/dmg.test.py
           node scripts/check-macos-release.mjs --self-test
           node scripts/setup-assets.mjs --self-test
           cargo test --locked --manifest-path src-tauri/Cargo.toml
@@ -134,12 +140,10 @@ jobs:
 
           version=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$APP_PATH/Contents/Info.plist")
           name="VTubeLeaf-${version}-macos-universal"
-          mkdir -p "$RELEASE_DIR" "$RUNNER_TEMP/dmg-content"
+          mkdir -p "$RELEASE_DIR"
           ditto -c -k --keepParent "$APP_PATH" "$RELEASE_DIR/$name.zip"
-          ditto "$APP_PATH" "$RUNNER_TEMP/dmg-content/VTubeLeaf.app"
-          ln -s /Applications "$RUNNER_TEMP/dmg-content/Applications"
-          hdiutil create -volname VTubeLeaf -srcfolder "$RUNNER_TEMP/dmg-content" \
-            -format UDZO "$RELEASE_DIR/$name.dmg"
+          python -m dmgbuild -s scripts/dmg-settings.py -D "app=$APP_PATH" \
+            VTubeLeaf "$RELEASE_DIR/$name.dmg"
           codesign --force --timestamp --sign "$APPLE_SIGNING_IDENTITY" "$RELEASE_DIR/$name.dmg"
           notarize "$RELEASE_DIR/$name.dmg"
           xcrun stapler staple "$RELEASE_DIR/$name.dmg"
