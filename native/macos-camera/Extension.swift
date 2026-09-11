@@ -2,9 +2,11 @@ import Foundation
 import CoreMediaIO
 import IOKit.audio
 import Security
+import OSLog
 
 // Provider callbacks, consumption completions and the timer use this serial queue.
 let cameraQueue = DispatchQueue(label: "com.vtubeleaf.camera.extension", qos: .userInteractive)
+private let cameraAuthorizationLog = Logger(subsystem: "com.moonrailgun.vtubeleaf.camera", category: "authorization")
 
 final class CameraStream: NSObject, CMIOExtensionStreamSource {
     var stream: CMIOExtensionStream!
@@ -47,18 +49,44 @@ final class CameraStream: NSObject, CMIOExtensionStreamSource {
     }
     func authorizedToStartStream(for client: CMIOExtensionClient) -> Bool {
         guard sink else { return true }
-        guard sinkClient == nil || sinkClient?.clientID == client.clientID,
-              client.signingID == "com.moonrailgun.vtubeleaf",
-              let team = Bundle.main.object(forInfoDictionaryKey: "CameraTeamIdentifier") as? String,
-              team.range(of: "^[A-Z0-9]{10}$", options: .regularExpression) != nil else { return false }
+        let configuredTeam = Bundle.main.object(forInfoDictionaryKey: "CameraTeamIdentifier") as? String
+        let version = Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? "<missing>"
+        // Only process/signing metadata is public; no frame data or user paths are logged.
+        let context = "pid=\(client.pid) clientID=\(client.clientID.uuidString) signingID=\(client.signingID ?? "<missing>") team=\(configuredTeam ?? "<missing>") activeClientID=\(sinkClient?.clientID.uuidString ?? "<none>") activePID=\(sinkClient.map { String($0.pid) } ?? "<none>") running=\(running) extensionVersion=\(version)"
+        cameraAuthorizationLog.notice("Sink authorization requested: \(context, privacy: .public)")
+        guard sinkClient == nil || sinkClient?.clientID == client.clientID else {
+            cameraAuthorizationLog.error("Sink authorization rejected: stage=client-busy \(context, privacy: .public)")
+            return false
+        }
+        guard client.signingID == "com.moonrailgun.vtubeleaf" else {
+            cameraAuthorizationLog.error("Sink authorization rejected: stage=signing-id \(context, privacy: .public)")
+            return false
+        }
+        guard let team = configuredTeam,
+              team.range(of: "^[A-Z0-9]{10}$", options: .regularExpression) != nil else {
+            cameraAuthorizationLog.error("Sink authorization rejected: stage=team-id \(context, privacy: .public)")
+            return false
+        }
         var code: SecCode?
-        guard SecCodeCopyGuestWithAttributes(nil, [kSecGuestAttributePid: client.pid] as CFDictionary, [], &code) == errSecSuccess,
-              let code else { return false }
+        let lookupStatus = SecCodeCopyGuestWithAttributes(nil, [kSecGuestAttributePid: client.pid] as CFDictionary, [], &code)
+        guard lookupStatus == errSecSuccess, let code else {
+            cameraAuthorizationLog.error("Sink authorization rejected: stage=guest-code osStatus=\(lookupStatus) codePresent=\(code != nil) \(context, privacy: .public)")
+            return false
+        }
         var requirement: SecRequirement?
         let rule = "anchor apple generic and identifier \"com.moonrailgun.vtubeleaf\" and certificate leaf[subject.OU] = \"\(team)\""
-        guard SecRequirementCreateWithString(rule as CFString, [], &requirement) == errSecSuccess,
-              let requirement, SecCodeCheckValidity(code, [], requirement) == errSecSuccess else { return false }
+        let requirementStatus = SecRequirementCreateWithString(rule as CFString, [], &requirement)
+        guard requirementStatus == errSecSuccess, let requirement else {
+            cameraAuthorizationLog.error("Sink authorization rejected: stage=requirement osStatus=\(requirementStatus) requirementPresent=\(requirement != nil) \(context, privacy: .public)")
+            return false
+        }
+        let validityStatus = SecCodeCheckValidity(code, [], requirement)
+        guard validityStatus == errSecSuccess else {
+            cameraAuthorizationLog.error("Sink authorization rejected: stage=signature osStatus=\(validityStatus) \(context, privacy: .public)")
+            return false
+        }
         sinkClient = client
+        cameraAuthorizationLog.notice("Sink authorization accepted: \(context, privacy: .public)")
         return true
     }
     func startStream() throws {

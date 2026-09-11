@@ -67,4 +67,17 @@ After approval, start camera output and select **VTubeLeaf Camera** in a confere
 
 Current automated evidence covers compilation, frame conversion/validation, bounded queue retain transfer, stale-frame policy and frontend backpressure. Actual camera enumeration and native sink queue creation are covered only when the installed-device check passes. These checks do **not** establish signed packaging, OS approval, cross-process sink authorization/delivery, conference acceptance, or sustained CPU/memory behavior.
 
+## Diagnose input stream authorization failures
+
+For `Unable to start camera input stream: -4` / `无法启动摄像头输入流：-4` with `Refusing streaming request`, collect the extension's authorization log after reproducing the failure:
+
+```sh
+/usr/bin/log show --last 10m --style compact \
+  --predicate 'subsystem == "com.moonrailgun.vtubeleaf.camera" AND category == "authorization"'
+```
+
+Rebuild/sign the app and activate its bundled extension first; updating the app alone may leave an older extension running. Confirm the active version with `systemextensionsctl list`. The diagnostic entries include `extensionVersion`, the requesting PID/client ID/signing ID, the configured Team ID, and the existing sink client/running count. These fields are public so unified logging does not redact the evidence. No frame data or user paths are logged.
+
+Each rejected request names its `stage`: `client-busy`, `signing-id`, `team-id`, `guest-code` (process lookup), `requirement` (signature rule creation), or `signature` (running process validation). Security API failures retain their original `osStatus`; lookup and rule creation also record whether an object was returned. `Sink authorization accepted` confirms only authorization, so continue checking frame delivery and conferencing output separately. Logs are emitted per authorization request, never per frame.
+
 References: [Apple's Camera Extension overview and sink/source model](https://developer.apple.com/videos/play/wwdc2022/10022/), [Creating a camera extension](https://developer.apple.com/documentation/coremediaio/creating-a-camera-extension-with-core-media-i-o), and the Camera Extension template and CoreMediaIO/SystemExtensions headers in the installed Xcode SDK.
