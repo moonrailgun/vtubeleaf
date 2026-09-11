@@ -19,6 +19,17 @@ async function serveProduction(page: Page, entry: string) {
   );
 }
 
+// Pause has no button; bind it to a local hotkey, return to the capture tab, and return a press helper.
+async function bindPauseHotkey(page: Page) {
+  await page.getByRole('button', { name: '角色', exact: true }).click();
+  await page.getByRole('button', { name: '全局快捷键', exact: true }).click();
+  await page.locator('#hotkey-action').selectOption('pause-tracking');
+  await page.locator('#hotkey-binding').fill('Control+Shift+P');
+  await page.locator('#save-hotkey').click();
+  await page.getByRole('button', { name: '面捕', exact: true }).click();
+  return () => page.keyboard.press('Control+Shift+P');
+}
+
 test('bundled Haru, Hiyori and Mao render previews and can be selected from the empty stage', async ({
   page,
 }, testInfo) => {
@@ -712,7 +723,7 @@ test('studio renders under production CSP, saves settings, and never auto-captur
   await page.getByRole('button', { name: '开始跟踪', exact: true }).click();
   await expect(page.locator('#notice')).toContainText('摄像头权限被拒绝');
   await expect(page.locator('#start')).toBeEnabled();
-  await expect(page.locator('#stop')).toBeDisabled();
+  await expect(page.locator('#start')).toHaveText('开始跟踪');
 });
 
 test('built-in backgrounds switch, persist, recall, and clear under production CSP', async ({
@@ -924,7 +935,8 @@ test('local MediaPipe runs with a synthetic camera and stop releases every track
   await page.keyboard.press('Escape');
   await expect(page.locator('#tracking-status')).toHaveText('正在跟踪');
   await expect(page.locator('#camera-video')).toBeVisible();
-  await page.getByRole('button', { name: '暂停', exact: true }).click();
+  const pressPause = await bindPauseHotkey(page);
+  await pressPause();
   await expect(page.locator('#tracking-status')).toHaveText('已暂停');
   expect(
     await page.evaluate(() =>
@@ -933,7 +945,7 @@ test('local MediaPipe runs with a synthetic camera and stop releases every track
         .every((track: MediaStreamTrack) => track.readyState === 'live'),
     ),
   ).toBe(true);
-  await page.getByRole('button', { name: '停止', exact: true }).click();
+  await page.getByRole('button', { name: '停止跟踪', exact: true }).click();
   await expect(page.locator('#tracking-status')).toHaveText('尚未开始');
   expect(
     await page.evaluate(() =>
@@ -1475,9 +1487,10 @@ test('face preview hides the camera by default, toggles it independently and cle
   await expect.poll(drawnPixels).toBeGreaterThan(1000);
   await page.getByRole('switch', { name: '镜像摄像头预览', exact: true }).click();
   expect(await mesh.evaluate((canvas) => getComputedStyle(canvas).transform)).toBe('none');
-  await page.locator('#pause').click();
+  const pressPause = await bindPauseHotkey(page);
+  await pressPause();
   await expect.poll(drawnPixels).toBe(0);
-  await page.locator('#pause').click();
+  await pressPause();
   await expect.poll(drawnPixels).toBeGreaterThan(1000);
   await page.evaluate(() => {
     clearInterval((window as any).faceDrawing);
@@ -1488,7 +1501,7 @@ test('face preview hides the camera by default, toggles it independently and cle
     }, 1000 / 24);
   });
   await expect.poll(drawnPixels).toBe(0);
-  await page.locator('#stop').click();
+  await page.locator('#start').click();
   await expect(mesh).toBeHidden();
   await expect.poll(drawnPixels).toBe(0);
   await page.evaluate(() => clearInterval((window as any).faceDrawing));
@@ -2191,7 +2204,7 @@ test('quality settings preserve privacy and calibration samples cancel on stop',
   );
   expect(neutral.yaw).toBeLessThan(8.6);
   await page.locator('#calibrate').click();
-  await page.locator('#stop').click();
+  await page.locator('#start').click();
   await expect(page.locator('#tracking-status')).toHaveText('尚未开始');
   await page.evaluate(() => clearInterval((window as any).qualityTimer));
   await page.getByText('眼睛、嘴部与丢脸恢复', { exact: true }).click();

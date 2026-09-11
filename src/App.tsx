@@ -498,28 +498,13 @@ export function App() {
                   {view.calibrating ? '校准中…' : '校准中立姿态'}
                 </Button>
                 <Button
-                  variant="outline"
-                  id="pause"
-                  disabled={!['running', 'paused'].includes(view.tracking)}
-                  onClick={() => run(() => a?.pause())}
-                >
-                  {view.tracking === 'paused' ? '继续' : '暂停'}
-                </Button>
-                <Button
-                  variant="outline"
-                  id="stop"
-                  disabled={!active}
-                  onClick={() => run(() => a?.stop())}
-                >
-                  停止
-                </Button>
-                <Button
                   id="start"
-                  disabled={active || !view.ready}
-                  onClick={() => run(() => a?.start())}
+                  variant={active ? 'outline' : 'default'}
+                  disabled={!active && !view.ready}
+                  onClick={() => run(() => (active ? a?.stop() : a?.start()))}
                 >
                   <Video aria-hidden="true" />
-                  开始跟踪
+                  {active ? '停止跟踪' : '开始跟踪'}
                 </Button>
               </div>
             </div>

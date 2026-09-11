@@ -761,7 +761,7 @@ export function createStudio(
       lastFace = null;
       notify(
         tracking === 'paused'
-          ? '已暂停跟踪，角色回到中立姿态。点击停止可释放摄像头。'
+          ? '已暂停跟踪，角色回到中立姿态。点击停止跟踪可释放摄像头。'
           : '已继续跟踪。',
       );
     },
