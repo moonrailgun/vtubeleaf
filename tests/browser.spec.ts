@@ -53,11 +53,17 @@ test('bundled Haru, Hiyori and Mao render previews and can be selected from the 
     const bootstrap = `import { mockIPC, mockWindows } from '/node_modules/@tauri-apps/api/mocks.js';
       window.isTauri = true; mockWindows('main');
       const models = ${JSON.stringify(models)};
+      const imported = { ...models[2], name: 'Imported Mao', path: '/managed/models/imported/Mao.model3.json' };
       const previews = {};
       mockIPC(async (cmd, args) => {
-        if (cmd === 'load_settings' || cmd === 'read_model_vts_config') return null;
-        if (cmd === 'list_models') return { models, directory: '/managed/models', errors: [] };
-        if (cmd === 'load_model') return models.find((model) => model.path === args.path);
+        if (cmd === 'load_settings') return JSON.parse(localStorage.getItem('test-settings') ?? 'null');
+        if (cmd === 'save_settings') { localStorage.setItem('test-settings', JSON.stringify(args.settings)); return; }
+        if (cmd === 'read_model_vts_config') return null;
+        if (cmd === 'list_models') return { models: localStorage.getItem('test-imported') ? [imported, ...models] : models, directory: '/managed/models', errors: [] };
+        if (cmd === 'load_model') {
+          if (args.path === '/dropped/Mao.zip') { localStorage.setItem('test-imported', 'true'); return imported; }
+          return [imported, ...models].find((model) => model.path === args.path);
+        }
         if (cmd === 'read_model_preview') return new Uint8Array(previews[args.id] ?? []).buffer;
         if (cmd === 'save_model_preview') { previews[args.id] = args.png; return; }
         if (cmd === 'read_model_resource') return (await fetch('/builtin-fixture/' + args.id + '/' + encodeURI(args.resource))).arrayBuffer();
@@ -71,8 +77,23 @@ test('bundled Haru, Hiyori and Mao render previews and can be selected from the 
     await page.getByRole('button', { name: `切换到 ${model.name}`, exact: true }).click();
     await expect(page.locator('#model-name')).toHaveText(model.name);
     await expect(page.locator('#notice')).not.toHaveClass(/error/);
+    await expect(page.locator('.model-card-name')).toHaveText(['Haru', 'Hiyori', 'Mao']);
     await page.screenshot({ path: testInfo.outputPath(`builtin-${model.name}.png`) });
   }
+  await page.evaluate(async () => {
+    const { emit } = await import('/node_modules/@tauri-apps/api/event.js');
+    await emit('tauri://drag-drop', { paths: ['/dropped/Mao.zip'], position: { x: 300, y: 300 } });
+  });
+  await expect(page.locator('#notice')).toContainText('已加入 1 个角色');
+  const order = ['Imported Mao', 'Haru', 'Hiyori', 'Mao'];
+  await expect(page.locator('.model-card-name')).toHaveText(order);
+  await page.getByRole('button', { name: '切换到 Haru', exact: true }).click();
+  await expect(page.locator('#model-name')).toHaveText('Haru');
+  await expect(page.locator('.model-card-name')).toHaveText(order);
+  await page.reload();
+  await expect(page.locator('#model-name')).toHaveText('Haru');
+  await page.getByRole('button', { name: '角色库', exact: true }).click();
+  await expect(page.locator('.model-card-name')).toHaveText(order);
 });
 
 test('official Cubism Core renders a supplied model and applies head, body, eye, and mouth parameters', async ({

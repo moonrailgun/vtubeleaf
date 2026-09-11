@@ -403,6 +403,11 @@ export function createStudio(
       vtsImportReport: [result.summary, ...result.warnings],
     });
   }
+  function updateLibrary(next: ModelInfo) {
+    library = library.some((entry) => entry.path === next.path)
+      ? library.map((entry) => (entry.path === next.path ? next : entry))
+      : [next, ...library];
+  }
   async function useModel(next: ModelInfo, operation: number) {
     if (disposed || operation !== modelOperation) return;
     if (!stage) throw new Error('WebGL 渲染不可用。请检查显卡驱动或重新启动应用。');
@@ -410,7 +415,7 @@ export function createStudio(
     await stopAudio();
     voiceCalibration = null;
     notify('正在加载角色资源…');
-    library = [...library.filter((entry) => entry.path !== next.path), next];
+    updateLibrary(next);
     publish();
     await readPreview(next);
     if (disposed || operation !== modelOperation) return;
@@ -684,7 +689,7 @@ export function createStudio(
         recording.stop();
         mapper.reset();
         if (model) {
-          library = [...library.filter((entry) => entry.path !== model!.path), model];
+          updateLibrary(model);
           settings.recentModels = [
             { name: model.name, path: model.path },
             ...settings.recentModels.filter((m) => m.path !== model!.path),

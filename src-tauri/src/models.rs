@@ -1,6 +1,7 @@
 use serde::Serialize;
 use serde_json::Value;
 use std::{
+    cmp::Reverse,
     collections::{BTreeMap, BTreeSet},
     fs::{self, File, OpenOptions},
     io::{self, Read, Write},
@@ -133,8 +134,19 @@ impl Registry {
             models: Vec::new(),
             errors: Vec::new(),
         };
-        for entry in fs::read_dir(&directory).map_err(|_| "无法读取角色文件夹")? {
-            let entry = entry.map_err(|_| "无法读取角色目录")?;
+        let mut entries = fs::read_dir(&directory)
+            .map_err(|_| "无法读取角色文件夹")?
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(|_| "无法读取角色目录")?;
+        // Managed directories are created on import; selecting a model does not change this time.
+        entries.sort_by_cached_key(|entry| {
+            let added = entry
+                .metadata()
+                .and_then(|metadata| metadata.created().or_else(|_| metadata.modified()))
+                .ok();
+            (Reverse(added), entry.file_name())
+        });
+        for entry in entries {
             if !entry.file_type().map_err(|_| "无法检查角色目录")?.is_dir() {
                 continue;
             }
@@ -145,9 +157,6 @@ impl Registry {
                     .push(format!("{}：{error}", entry.file_name().to_string_lossy())),
             }
         }
-        library
-            .models
-            .sort_by(|a, b| a.name.cmp(&b.name).then(a.path.cmp(&b.path)));
         Ok(library)
     }
 
@@ -628,6 +637,42 @@ mod tests {
     }
 
     #[test]
+    fn library_lists_newest_imports_first_after_reload() {
+        let source = tempfile::tempdir().unwrap();
+        let data = tempfile::tempdir().unwrap();
+        let mut registry = Registry::default();
+        let mut paths = Vec::new();
+        for name in ["Alpha", "Zulu", "Middle"] {
+            let root = source.path().join(name);
+            fs::create_dir(&root).unwrap();
+            fixture(&root);
+            fs::rename(
+                root.join("leaf.model3.json"),
+                root.join(format!("{name}.model3.json")),
+            )
+            .unwrap();
+            paths.push(registry.load(&root, data.path()).unwrap().path);
+            std::thread::sleep(std::time::Duration::from_millis(20));
+        }
+        // Selecting an old model and saving its preview must not change its position.
+        let oldest = registry.load(Path::new(&paths[0]), data.path()).unwrap();
+        let png = b"\x89PNG\r\n\x1a\n\0\0\0\x0dIHDR\0\0\x01\0\0\0\x01\0";
+        registry.save_preview(&oldest.id, data.path(), png).unwrap();
+        for mut registry in [registry, Registry::default()] {
+            let library = registry.list(data.path()).unwrap();
+            assert!(library.errors.is_empty());
+            assert_eq!(
+                library
+                    .models
+                    .iter()
+                    .map(|model| model.name.as_str())
+                    .collect::<Vec<_>>(),
+                ["Middle", "Zulu", "Alpha"]
+            );
+        }
+    }
+
+    #[test]
     fn bundled_models_populate_the_library_once_and_preserve_user_data() {
         let bundled = Path::new(env!("CARGO_MANIFEST_DIR")).join("../vendor/models");
         let data = tempfile::tempdir().unwrap();
@@ -639,8 +684,8 @@ mod tests {
                 .models
                 .iter()
                 .map(|model| model.name.as_str())
-                .collect::<Vec<_>>(),
-            ["Haru", "Hiyori", "Mao"]
+                .collect::<BTreeSet<_>>(),
+            BTreeSet::from(["Haru", "Hiyori", "Mao"])
         );
         for model in &library.models {
             for resource in &model.files {
@@ -651,7 +696,11 @@ mod tests {
                 assert!(!resource.ends_with(".wav"));
             }
         }
-        let haru = &library.models[0];
+        let haru = library
+            .models
+            .iter()
+            .find(|model| model.name == "Haru")
+            .unwrap();
         let png = b"\x89PNG\r\n\x1a\n\0\0\0\x0dIHDR\0\0\x01\0\0\0\x01\0";
         registry.save_preview(&haru.id, data.path(), png).unwrap();
         let entry = Path::new(&haru.path);
@@ -661,20 +710,25 @@ mod tests {
         let repeated = registry.list_with_builtins(data.path(), &bundled).unwrap();
         assert!(repeated.errors.is_empty());
         assert_eq!(repeated.models.len(), 3);
-        assert_eq!(repeated.models[0].id, haru.id);
+        assert!(repeated.models.iter().any(|model| model.id == haru.id));
 
         let source = tempfile::tempdir().unwrap();
         fixture(source.path());
-        registry.load(source.path(), data.path()).unwrap();
+        let imported = registry.load(source.path(), data.path()).unwrap();
         let mut restarted = Registry::default();
         let library = restarted.list_with_builtins(data.path(), &bundled).unwrap();
         assert!(library.errors.is_empty());
         assert_eq!(library.models.len(), 4);
-        assert_eq!(library.models[0].path, haru.path);
+        assert_eq!(library.models[0].path, imported.path);
+        let restored_haru = library
+            .models
+            .iter()
+            .find(|model| model.path == haru.path)
+            .unwrap();
         assert_eq!(fs::read_to_string(entry).unwrap(), edited);
         assert_eq!(
             restarted
-                .read_preview(&library.models[0].id, data.path())
+                .read_preview(&restored_haru.id, data.path())
                 .unwrap(),
             png
         );
