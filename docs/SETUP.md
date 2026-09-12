@@ -7,7 +7,7 @@
 - Node.js 24 LTS（或 22.21+ LTS）；本次脚本检查使用 Node.js 24.20.0。release-it 21 要求 Node.js 22.21+ 或 24+，项目测试也使用 Node 的 TypeScript 支持。
 - Rust 稳定工具链和各平台的 [Tauri 2 prerequisites](https://v2.tauri.app/start/prerequisites/)。macOS 需要 Xcode Command Line Tools；Windows 和 Linux 的 WebView、编译工具与系统库按该页面安装。
 - 当前打包配置要求 macOS 14.0+，作为禁用后台节流的候选基线；本次仅在 macOS 15.7.4 arm64 编译，最低版本运行表现尚未验证。
-- 一台可用摄像头；Windows 与 macOS 都是主要支持目标，必须分别验收系统 WebView、设备权限、全局快捷键、后台运行及会议输出。Linux 暂未验证。
+- 一台可用摄像头；Windows 与 macOS 都是主要支持目标，必须分别验收系统 WebView、设备权限、应用快捷键、后台运行及会议输出。Linux 暂未验证。
 - 你有权使用的 Live2D 模型。Core R4 已固定为项目依赖，模型需自行准备。
 - Windows 普通构建包含内置摄像头。macOS 内置摄像头需要完整 Xcode、Camera Extension 签名和系统批准。两个平台也可使用另装的 OBS Studio 输出，见下方说明。
 
@@ -39,7 +39,7 @@ cargo test --locked --manifest-path src-tauri/Cargo.toml
 
 Windows 的浏览器测试环境变量使用 PowerShell 语法，例如 `$env:VTUBELEAF_MODEL_FIXTURE = "C:\Models\Haru\Haru.model3.json"`，再运行 `npm run test:browser`。构建时自动编译并携带 64 位、32 位内置摄像头 DLL，供相应位数的桌面会议客户端加载。
 
-[Desktop checks](../.github/workflows/check.yml) 在 Windows 与 macOS runner 上执行 Node 测试、资源脚本自检、固定 Cubism Core 和 MediaPipe 资源校验、Tauri 安装包构建和 Rust 测试；Windows 另运行 x64/x86 摄像头 CTest。CI 从项目依赖取得 Core，不下载整份 Cubism SDK、不发布安装包；构建结果不代表真实摄像头、全局快捷键或会议接入验收通过。新增工作流尚未在远端执行。
+[Desktop checks](../.github/workflows/check.yml) 在 Windows 与 macOS runner 上执行 Node 测试、资源脚本自检、固定 Cubism Core 和 MediaPipe 资源校验、Tauri 安装包构建和 Rust 测试；Windows 另运行 x64/x86 摄像头 CTest。CI 从项目依赖取得 Core，不下载整份 Cubism SDK、不发布安装包；构建结果不代表真实摄像头、应用快捷键或会议接入验收通过。新增工作流尚未在远端执行。
 
 ## 准备本地运行资源
 
@@ -115,7 +115,7 @@ npm run tauri build
 VTUBELEAF_FACE_FIXTURE=/absolute/path/to/face.png npm run test:browser
 ```
 
-可同时设置 `VTUBELEAF_MODEL_FIXTURE=/absolute/path/to/Haru.model3.json`，检查真实 Core、模型和纹理在生产 CSP 下渲染，验证参数驱动、表情叠加、动作播放和最终画面参数同步，并导出截图到 `test-results/`。另有界面流程检查覆盖按模型恢复映射、快捷键注册请求和录制导出请求。没有提供模型时这些项目跳过；相关 IPC 使用测试替身，不代表原生导入、全局快捷键或保存对话框通过。
+可同时设置 `VTUBELEAF_MODEL_FIXTURE=/absolute/path/to/Haru.model3.json`，检查真实 Core、模型和纹理在生产 CSP 下渲染，验证参数驱动、表情叠加、动作播放和最终画面参数同步，并导出截图到 `test-results/`。另有界面流程检查覆盖按模型恢复映射、应用快捷键触发和录制导出请求。没有提供模型时这些项目跳过；相关 IPC 使用测试替身，不代表原生导入或保存对话框通过。
 
 额外设置 `VTUBELEAF_ALT_MODEL_FIXTURE=/absolute/path/to/Wanko.model3.json` 可检查没有标准参数和表情的 Wanko：自定义参数映射、动作播放和渲染均可继续工作。
 
@@ -146,7 +146,7 @@ MediaPipe 提供眼神、眉毛、嘴部左右和头部位移输入。OpenSeeFac
 
 模型入口声明的表情可通过按钮叠加，再次点击关闭。动作支持单次、循环和保持末帧；「停止动作」释放动作占用的参数，使其恢复面捕驱动。待机动作可选择或关闭，有面捕输入时以跟踪为先；主动播放的动作优先控制其声明的参数，表情随后叠加，模型物理继续参与最终绘制。自动眨眼可单独开关。
 
-「全局快捷键」中选择表情、动作或停止操作，再填写 `Control+Shift+1` 等组合键并应用。快捷键默认不绑定，冲突或无效组合会提示；切换模型会更换绑定。浏览器开发页只支持当前页面内的快捷键，原生应用使用系统全局快捷键接口，后台触发仍需实际验收。
+「应用快捷键」中选择表情、动作或停止操作，再填写 `Space`、`A` 或 `Control+Shift+1` 等按键并应用。快捷键默认不绑定，冲突或无效组合会提示；切换模型会更换绑定。桌面版和浏览器开发页都只在应用窗口或页面获得焦点时响应，编辑输入框时不触发；不会注册系统全局快捷键，也不会占用其他应用的按键。
 
 「动作录制」只在手动开始后记录角色最终参数，最长 60 秒、每秒最多 30 帧；停止后保存为 Cubism `.motion3.json`。不记录摄像头画面或声音，开始新录制会替换未保存的上一段。导出的文件可用于支持该格式的工具；重新用于模型时需要在模型入口中声明动作并重新导入。输出窗口同步最终参数及部件透明度，包含表情、动作和物理结果。
 
@@ -253,9 +253,9 @@ macOS 捕获权限、OBS 虚拟摄像头安装或会议端无法识别时，按 
 
 选择道具后可在舞台拖动或滚轮缩放；取消选择后操作主角色。锁定道具后不能拖动或缩放。「保存为新场景」保存主角色、构图、背景和全部道具；可更新、重命名、删除和切换。载入素材失败保留原场景。独立输出窗口同步道具和动画的最终状态。
 
-「角色 → 全局快捷键」可绑定跟踪启停、暂停/恢复、校准、麦克风口型、虚拟摄像头启停、角色显隐、复位、打开输出、切换场景和显隐道具，也保留表情及动作控制。通用操作的绑定跨角色保留，表情和动作绑定按角色保存。桌面版通过系统快捷键注册，在应用后台也会接收；冲突会提示。浏览器开发页仅在当前页面接收。原生系统注册仍需桌面验收。
+「角色 → 应用快捷键」可绑定跟踪启停、暂停/恢复、校准、麦克风口型、虚拟摄像头启停、角色显隐、复位、打开输出、切换场景和显隐道具，也保留表情及动作控制。通用操作的绑定跨角色保留，表情和动作绑定按角色保存。所有绑定仅在应用窗口或页面获得焦点时生效，切换到其他应用后停止响应；冲突会提示。
 
-加载角色后点击「导入 VTube Studio 配置」，选择该角色的 `.vtube.json`。只合并可对应的映射、快捷键和待机设置；导入结果和兼容性提示按模型保存。完整边界见 [VTS-COMPATIBILITY.md](VTS-COMPATIBILITY.md)。
+加载角色后点击「导入 VTube Studio 配置」，选择该角色的 `.vtube.json`。只合并可对应的映射、快捷键和待机设置；导入结果和兼容性提示按模型保存。旧配置及 VTS 中标记为全局的绑定也按应用快捷键处理，保留表情松开恢复、定时恢复及动作播放行为。完整边界见 [VTS-COMPATIBILITY.md](VTS-COMPATIBILITY.md)。
 
 ## Windows 内置虚拟摄像头
 

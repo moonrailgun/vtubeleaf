@@ -389,7 +389,7 @@ function readProfile(v: unknown): ModelProfile {
     for (const id of Object.keys(p.hotkeys)) {
       const value = v.hotkeyOptions[id];
       if (!record(value) || !['local', 'global'].includes(value.scope as string)) continue;
-      const option: HotkeyOptions = { scope: value.scope as HotkeyOptions['scope'] };
+      const option: HotkeyOptions = { scope: 'local' };
       if (id.startsWith('expression:')) {
         if (value.release === true) option.release = true;
         if (

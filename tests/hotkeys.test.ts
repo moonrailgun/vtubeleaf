@@ -2,6 +2,8 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { mockIPC } from '@tauri-apps/api/mocks';
 import { Hotkeys } from '../src/hotkeys.ts';
+import { importVtsConfig } from '../src/vts.ts';
+import { readSettings } from '../src/state.ts';
 
 function environment(t, native = false) {
   const window = Object.assign(new EventTarget(), { crypto: globalThis.crypto });
@@ -73,70 +75,88 @@ test('browser shortcuts normalize conflicts and ignore editing, repeat, inactive
   assert.equal(actions.length, 2);
 });
 
-test('native updates serialize, isolate failed bindings, suppress repeated Pressed and unregister only owned shortcuts', async (t) => {
-  const env = environment(t, true),
-    calls: string[] = [],
-    actions: string[] = [],
+test('desktop shortcuts stay inside the focused app, including legacy global and imported Space bindings', async (t) => {
+  const env = environment(t, true);
+  const nativeCalls: string[] = [],
     errors: string[] = [];
-  const handlers = new Map();
-  let releaseFirst: () => void;
-  mockIPC(async (command, payload) => {
-    const shortcut = payload.shortcuts[0];
-    calls.push(`${command}:${shortcut}`);
-    if (command.endsWith('|register')) {
-      if (shortcut === 'Control+KeyX') throw new Error('occupied');
-      handlers.set(shortcut, payload.handler.onmessage);
-      if (shortcut === 'Control+KeyA')
-        await new Promise<void>((resolve) => {
-          releaseFirst = resolve;
-        });
-    }
+  const actions: [string, boolean][] = [];
+  mockIPC((command) => {
+    nativeCalls.push(command);
   });
   const hotkeys = new Hotkeys(
-    (action, pressed) => {
-      if (pressed) actions.push(action);
-    },
+    (action, pressed) => actions.push([action, pressed]),
     (error) => errors.push(error),
   );
-  const first = hotkeys.set({ old: 'Ctrl+A' });
-  await new Promise((resolve) => setImmediate(resolve));
-  const second = hotkeys.set({ occupied: 'Ctrl+X', new: 'Ctrl+B' });
-  assert.equal(calls.length, 1);
-  releaseFirst!();
-  await Promise.all([first, second]);
-  assert.deepEqual(
-    calls.map((call) => call.split('|')[1]),
-    [
-      'register:Control+KeyA',
-      'unregister:Control+KeyA',
-      'register:Control+KeyX',
-      'register:Control+KeyB',
-    ],
-  );
-  const handler = handlers.get('Control+KeyB');
-  handler({ state: 'Pressed' });
-  handler({ state: 'Pressed' });
-  handler({ state: 'Released' });
-  env.document.activeElement = new env.Element();
-  handler({ state: 'Pressed' });
-  handler({ state: 'Released' });
+  const saved = readSettings({
+    hotkeys: { 'clear-expressions': 'Space' },
+    hotkeyOptions: { 'clear-expressions': { scope: 'global' } },
+    globalHotkeys: { 'toggle-model': 'Shift+A' },
+  });
+  await hotkeys.set({ ...saved.globalHotkeys, ...saved.hotkeys });
+  const key = (type: string, properties = {}) => {
+    const event = new Event(type, { cancelable: true });
+    Object.assign(event, { code: 'Space' }, properties);
+    env.window.dispatchEvent(event);
+    return event;
+  };
+  assert.equal(key('keydown').defaultPrevented, true);
+  key('keydown');
+  key('keydown', { repeat: true });
+  assert.deepEqual(actions, [['clear-expressions', true]]);
   env.document.hasFocus = () => false;
-  handler({ state: 'Pressed' });
-  assert.deepEqual(actions, ['new', 'new']);
-  assert.equal(errors.length, 1);
-  const pending = hotkeys.set({ pending: 'Ctrl+C' });
-  await hotkeys.destroy();
-  await pending;
-  handler({ state: 'Released' });
-  handler({ state: 'Pressed' });
+  env.window.dispatchEvent(new Event('blur'));
+  assert.deepEqual(actions.at(-1), ['clear-expressions', false]);
+  assert.equal(key('keydown').defaultPrevented, false);
+  key('keydown', { code: 'KeyA', shiftKey: true });
   assert.equal(actions.length, 2);
-  assert.ok(calls.at(-1)?.endsWith('unregister:Control+KeyB'));
-  assert.ok(
-    !calls.some(
-      (call) =>
-        call.includes('unregister_all') ||
-        call.includes('unregister:Control+KeyX') ||
-        call.includes('KeyC'),
-    ),
+  env.document.hasFocus = () => true;
+  env.document.hidden = true;
+  assert.equal(key('keydown').defaultPrevented, false);
+  env.document.hidden = false;
+  assert.equal(key('keydown', { isComposing: true }).defaultPrevented, false);
+  const editable = new Event('keydown', { cancelable: true });
+  Object.assign(editable, { code: 'Space' });
+  Object.defineProperty(editable, 'target', { value: new env.Element() });
+  env.window.dispatchEvent(editable);
+  assert.equal(editable.defaultPrevented, false);
+  assert.equal(actions.length, 2);
+
+  key('keydown', { code: 'KeyA', shiftKey: true });
+  key('keyup', { code: 'ShiftLeft', shiftKey: false });
+  assert.deepEqual(actions.slice(-2), [
+    ['toggle-model', true],
+    ['toggle-model', false],
+  ]);
+  key('keydown');
+  const { profile } = importVtsConfig(
+    {
+      Version: 1,
+      ParameterSettings: [],
+      Hotkeys: [
+        {
+          Action: 'RemoveAllExpressions',
+          IsActive: true,
+          IsGlobal: true,
+          Triggers: { Trigger1: 'Space', Trigger2: '', Trigger3: '' },
+        },
+      ],
+    },
+    { parameters: [], expressions: [], motions: [] },
   );
+  await hotkeys.set(profile.hotkeys!);
+  assert.deepEqual(actions.at(-1), ['clear-expressions', false]);
+  key('keydown');
+  key('keyup');
+  assert.deepEqual(actions.slice(-2), [
+    ['clear-expressions', true],
+    ['clear-expressions', false],
+  ]);
+  key('keydown');
+  await hotkeys.destroy();
+  assert.deepEqual(actions.at(-1), ['clear-expressions', false]);
+  assert.equal(key('keydown').defaultPrevented, false);
+  await hotkeys.set({ destroyed: 'Space' });
+  assert.equal(key('keydown').defaultPrevented, false);
+  assert.deepEqual(nativeCalls, []);
+  assert.deepEqual(errors, []);
 });

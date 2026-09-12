@@ -12,8 +12,6 @@
     "core:window:allow-set-focus",
     "core:window:allow-close",
     "core:window:allow-destroy",
-    "global-shortcut:allow-register",
-    "global-shortcut:allow-unregister",
     "virtual-camera:allow-status",
     "virtual-camera:allow-install",
     "virtual-camera:allow-uninstall",

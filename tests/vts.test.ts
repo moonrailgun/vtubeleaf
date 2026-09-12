@@ -150,7 +150,7 @@ test('malformed flags skip entries and unknown settings remain visible', () => {
   assert.ok(warnings.some((w) => w.includes('UnknownFutureSettings')));
 });
 
-test('imports scope, expression release/timer and motion playback independently of studio defaults', () => {
+test('imports application shortcuts, expression release/timer and motion playback independently of studio defaults', () => {
   const raw = fixture();
   Object.assign(raw.Hotkeys[0], {
     IsGlobal: false,
@@ -171,7 +171,7 @@ test('imports scope, expression release/timer and motion playback independently 
   const { profile } = importVtsConfig(raw, model);
   assert.deepEqual(profile.hotkeyOptions, {
     'expression:smile': { scope: 'local', release: true, seconds: 2.5 },
-    'motion:Idle:0': { scope: 'global', motionMode: 'hold' },
+    'motion:Idle:0': { scope: 'local', motionMode: 'hold' },
   });
   raw.Hotkeys[0].DeactivateAfterSecondsAmount = -1;
   assert.equal(importVtsConfig(raw, model).profile.hotkeys?.['expression:smile'], undefined);

@@ -1445,9 +1445,10 @@ function ModelControls({ view, actions: a }: { view: StudioView; actions: Studio
         checked={view.settings.autoBlink}
         onChange={(value) => a.setSetting('autoBlink', value)}
       />
-      <Fold title="全局快捷键">
+      <Fold title="应用快捷键">
         <p className="hint">
-          选择动作后填写组合键，如 Control+Shift+1。桌面版在后台也能触发；表情再次触发会关闭。
+          选择动作后填写按键，如 Space 或
+          Control+Shift+1。仅在应用窗口激活时生效，输入文字时不触发；表情再次触发会关闭。
         </p>
         <label htmlFor="hotkey-action">操作</label>
         <Select id="hotkey-action" value={hotkeyId} onChange={(e) => setHotkey(e.target.value)}>

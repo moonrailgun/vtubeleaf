@@ -317,7 +317,7 @@ export function importVtsConfig(raw: unknown, model: Model): VtsImportResult {
       continue;
     }
     hotkeys[action] = shortcut;
-    const options: HotkeyOptions = { scope: item.IsGlobal === false ? 'local' : 'global' };
+    const options: HotkeyOptions = { scope: 'local' };
     if (item.Action === 'ToggleExpression') {
       if (item.DeactivateAfterKeyUp) options.release = true;
       if (item.DeactivateAfterSeconds)

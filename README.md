@@ -4,7 +4,7 @@
 
 面向 **Windows 和 macOS** 的免费、本地 Live2D 桌面面捕工具，使用 Tauri 2、React、TypeScript 和 Rust。默认采用 MediaPipe Face Landmarker 与 Pose Landmarker Lite，并提供可选的 OpenSeeFace 本地跟踪入口。已实现 Windows 内置 DirectShow 虚拟摄像头和 macOS Camera Extension；Windows 尚待系统运行验证，macOS 尚待签名安装验证，也可选择 OBS 输出。
 
-当前是开发中的桌面版本：支持拖入模型到本地角色库、预览卡片切换、自定义参数映射、按模型保存校准与构图、眼神/眉毛/位移与可选手指输入、多帧校准和双眼联动、本地麦克风口型、模型物理调节、表情叠加与全局快捷键、动作播放与待机、手动录制导出，以及全窗口舞台、直播模式和可选独立输出窗口。还支持 PNG/JPEG/GIF 与 Live2D 道具、图层变换、场景保存/切换及 `.vtube.json` 配置导入。官方 Haru 模型已通过浏览器渲染、动作/表情和输出同步检查；实际摄像头、原生快捷键、后台运行及会议接入仍需按[验收记录](docs/VALIDATION.md)验证。Windows 与 macOS 是主要支持目标，已配置两端 CI 测试和打包检查；Windows runner 尚未执行，桌面实测也未完成。Linux 保留为后续验证目标。
+当前是开发中的桌面版本：支持拖入模型到本地角色库、预览卡片切换、自定义参数映射、按模型保存校准与构图、眼神/眉毛/位移与可选手指输入、多帧校准和双眼联动、本地麦克风口型、模型物理调节、表情叠加与应用快捷键、动作播放与待机、手动录制导出，以及全窗口舞台、直播模式和可选独立输出窗口。还支持 PNG/JPEG/GIF 与 Live2D 道具、图层变换、场景保存/切换及 `.vtube.json` 配置导入。官方 Haru 模型已通过浏览器渲染、动作/表情和输出同步检查；实际摄像头、桌面窗口快捷键、后台运行及会议接入仍需按[验收记录](docs/VALIDATION.md)验证。Windows 与 macOS 是主要支持目标，已配置两端 CI 测试和打包检查；Windows runner 尚未执行，桌面实测也未完成。Linux 保留为后续验证目标。
 
 ## 开发启动
 

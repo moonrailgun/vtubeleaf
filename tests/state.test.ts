@@ -608,7 +608,7 @@ test('imported hotkey behavior survives model profiles and rejects invalid optio
   });
   assert.deepEqual(s.hotkeyOptions, {
     'expression:smile': { scope: 'local', release: true, seconds: 2 },
-    'motion:Idle:0': { scope: 'global', motionMode: 'hold' },
+    'motion:Idle:0': { scope: 'local', motionMode: 'hold' },
   });
   const other = state.switchProfile(s, '/b');
   assert.deepEqual(other.hotkeyOptions, {});

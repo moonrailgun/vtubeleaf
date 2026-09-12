@@ -5,6 +5,7 @@ import { getCurrentWindow } from '@tauri-apps/api/window';
 import { AvatarStage, type ModelInfo } from './renderer';
 import { defaults, readSettings, type Settings } from './state';
 import type { SceneFrames } from './scene-renderer';
+import { Hotkeys } from './hotkeys';
 
 export type OutputState = {
   model: ModelInfo | null;
@@ -37,6 +38,8 @@ export function Output() {
     let stateOperation = 0;
     let pendingState: OutputState | undefined;
     let applyingState = false;
+    let hotkeySignature = '';
+    let hotkeyEvents = Promise.resolve();
     const unlisteners: UnlistenFn[] = [];
     const report = () => {
       if (native && !disposed)
@@ -51,6 +54,16 @@ export function Output() {
       if (disposed) unlisten();
       else unlisteners.push(unlisten);
     };
+    const hotkeys = new Hotkeys(
+      (action, pressed) => {
+        hotkeyEvents = hotkeyEvents
+          .then(() => emitTo('main', 'output-hotkey', { action, pressed }))
+          .catch(() => {});
+      },
+      (message) => {
+        void emitTo('main', 'output-error', message).catch(() => {});
+      },
+    );
     try {
       stage = new AvatarStage(container.current!, report, true);
       stage.display(defaults);
@@ -62,7 +75,14 @@ export function Output() {
       await own(
         listen<OutputState>('output-state', async ({ payload }) => {
           if (disposed) return;
-          pendingState = payload;
+          const settings = readSettings(payload.settings);
+          const bindings = { ...settings.globalHotkeys, ...settings.hotkeys };
+          const signature = JSON.stringify([payload.revision, bindings, settings.hotkeyOptions]);
+          if (signature !== hotkeySignature) {
+            hotkeySignature = signature;
+            void hotkeys.set(bindings);
+          }
+          pendingState = { ...payload, settings };
           ++stateOperation;
           if (applyingState) return;
           applyingState = true;
@@ -71,7 +91,7 @@ export function Output() {
               const payload = pendingState;
               pendingState = undefined;
               const operation = stateOperation;
-              const settings = readSettings(payload.settings);
+              const settings = payload.settings;
               const next = payload.model;
               let candidate: AvatarStage | undefined;
               try {
@@ -113,8 +133,10 @@ export function Output() {
       );
       if (disposed) return;
       await own(
-        getCurrentWindow().onCloseRequested(() => {
-          void emitTo('main', 'output-closed').catch(() => {});
+        getCurrentWindow().onCloseRequested(async () => {
+          await hotkeys.destroy();
+          await hotkeyEvents;
+          await emitTo('main', 'output-closed').catch(() => {});
         }),
       );
       if (!disposed) await emitTo('main', 'output-ready');
@@ -132,6 +154,7 @@ export function Output() {
     }, 1000 / 30);
     return () => {
       disposed = true;
+      void hotkeys.destroy();
       window.clearInterval(timer);
       unlisteners.forEach((unlisten) => unlisten());
       stage?.destroy();

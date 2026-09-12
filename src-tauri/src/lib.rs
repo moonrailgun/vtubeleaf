@@ -378,9 +378,6 @@ pub fn run() {
         .plugin(tauri_plugin_dialog::init())
         .plugin(camera::init())
         .setup(|app| {
-            #[cfg(desktop)]
-            app.handle()
-                .plugin(tauri_plugin_global_shortcut::Builder::new().build())?;
             app.manage(AppState {
                 data_dir: app.path().app_data_dir()?,
                 models: Mutex::default(),

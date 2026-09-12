@@ -1,7 +1,3 @@
-import type { HotkeyOptions } from './state.ts';
-import { isTauri } from '@tauri-apps/api/core';
-import { register, unregister } from '@tauri-apps/plugin-global-shortcut';
-
 const keyNames = [
   'Space',
   'Enter',
@@ -94,16 +90,11 @@ function editing(target: EventTarget | null): boolean {
   );
 }
 
-/** Native global bindings use the OS; local/preview bindings stay in the active window. */
+/** Shortcuts belong to the focused application window, never the OS. */
 export class Hotkeys {
-  private native = isTauri();
   private bindings = new Map<string, string>();
-  private owned = new Set<string>();
   private pressed = new Map<string, string>();
-  private local = new Set<string>();
-  private operation: Promise<void> = Promise.resolve();
   private destroyed = false;
-  private revision = 0;
   private run: (action: string, pressed: boolean) => void;
   private onError: (message: string) => void;
 
@@ -126,6 +117,16 @@ export class Hotkeys {
       editing(event.target)
     )
       return;
+    // Keep Space/Enter activation working for focused controls.
+    if (
+      !event.ctrlKey &&
+      !event.altKey &&
+      !event.metaKey &&
+      ['Space', 'Enter'].includes(event.code) &&
+      event.target instanceof Element &&
+      event.target.closest('button, a[href], summary, [role="button"]')
+    )
+      return;
     const shortcut = [
       event.ctrlKey && 'Control',
       event.altKey && 'Alt',
@@ -136,7 +137,7 @@ export class Hotkeys {
       .filter(Boolean)
       .join('+');
     const action = this.bindings.get(shortcut);
-    if (action && this.local.has(shortcut) && !this.pressed.has(shortcut)) {
+    if (action && !this.pressed.has(shortcut)) {
       event.preventDefault();
       this.pressed.set(shortcut, action);
       this.run(action, true);
@@ -150,7 +151,7 @@ export class Hotkeys {
   }
 
   private keyup = (event: KeyboardEvent) => {
-    for (const shortcut of this.local) {
+    for (const shortcut of this.pressed.keys()) {
       const parts = shortcut.split('+');
       if (
         parts.at(-1) === event.code ||
@@ -164,99 +165,40 @@ export class Hotkeys {
   };
 
   private blur = () => {
-    for (const shortcut of this.local) this.releasePressed(shortcut);
+    for (const shortcut of this.pressed.keys()) this.releasePressed(shortcut);
   };
 
-  private queue(task: () => Promise<void>): Promise<void> {
-    this.operation = this.operation.catch(() => {}).then(task);
-    return this.operation;
+  private release() {
+    this.blur();
+    this.bindings.clear();
   }
 
-  private async release() {
-    this.revision++;
-    for (const shortcut of this.pressed.keys()) this.releasePressed(shortcut);
-    this.bindings.clear();
-    this.local.clear();
-    for (const shortcut of this.owned) {
+  async set(bindings: Record<string, string>): Promise<void> {
+    if (this.destroyed) return;
+    this.release();
+    for (const [action, raw] of Object.entries(bindings)) {
+      if (typeof raw !== 'string' || !raw.trim()) continue;
+      let shortcut: string;
       try {
-        await unregister(shortcut);
-        this.owned.delete(shortcut);
+        shortcut = normalize(raw);
       } catch (error) {
-        this.onError(`无法注销快捷键 ${shortcut}：${String(error)}`);
+        this.onError(`${action}：${error instanceof Error ? error.message : String(error)}`);
+        continue;
       }
+      const previous = this.bindings.get(shortcut);
+      if (previous) {
+        this.onError(`${action} 与 ${previous} 的快捷键重复：${raw}`);
+        continue;
+      }
+      this.bindings.set(shortcut, action);
     }
   }
 
-  set(
-    bindings: Record<string, string>,
-    options: Record<string, HotkeyOptions> = {},
-  ): Promise<void> {
-    const entries = Object.entries(bindings).map(
-      ([action, raw]) => [action, raw, options[action]?.scope] as const,
-    );
-    return this.queue(async () => {
-      if (this.destroyed) return;
-      await this.release();
-      const conflicts = new Map<string, string>();
-      for (const [action, raw, scope] of entries) {
-        if (this.destroyed) break;
-        if (typeof raw !== 'string' || !raw.trim()) continue;
-        let shortcut: string;
-        try {
-          shortcut = normalize(raw);
-        } catch (error) {
-          this.onError(`${action}：${error instanceof Error ? error.message : String(error)}`);
-          continue;
-        }
-        const previous = conflicts.get(shortcut);
-        if (previous) {
-          this.onError(`${action} 与 ${previous} 的快捷键重复：${raw}`);
-          continue;
-        }
-        conflicts.set(shortcut, action);
-        if (this.owned.has(shortcut)) {
-          this.onError(`${action} 的旧快捷键尚未注销，请重试：${raw}`);
-          continue;
-        }
-        if (this.native && scope !== 'local') {
-          try {
-            const revision = this.revision;
-            await register(shortcut, (event) => {
-              if (revision !== this.revision) return;
-              if (event.state !== 'Pressed') {
-                this.releasePressed(shortcut);
-                return;
-              }
-              if (this.pressed.has(shortcut)) return;
-              const current = this.bindings.get(shortcut);
-              if (
-                !this.destroyed &&
-                current &&
-                !(document.hasFocus() && editing(document.activeElement))
-              ) {
-                this.pressed.set(shortcut, current);
-                this.run(current, true);
-              }
-            });
-            this.owned.add(shortcut);
-          } catch (error) {
-            this.onError(`${action} 的快捷键注册失败（可能已被占用）：${raw}；${String(error)}`);
-            continue;
-          }
-        }
-        if (!this.destroyed) {
-          this.bindings.set(shortcut, action);
-          if (!this.native || scope === 'local') this.local.add(shortcut);
-        }
-      }
-    });
-  }
-
-  destroy(): Promise<void> {
+  async destroy(): Promise<void> {
     this.destroyed = true;
     window.removeEventListener('keydown', this.keydown);
     window.removeEventListener('keyup', this.keyup);
     window.removeEventListener('blur', this.blur);
-    return this.queue(() => this.release());
+    this.release();
   }
 }

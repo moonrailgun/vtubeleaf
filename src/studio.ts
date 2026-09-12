@@ -225,8 +225,18 @@ export function createStudio(
     cameraStatus = status;
     if (ready) publish();
   });
-  const bindHotkeys = () =>
-    hotkeys.set({ ...settings.globalHotkeys, ...settings.hotkeys }, settings.hotkeyOptions);
+  const outputPressed = new Set<string>();
+  function releaseOutputHotkeys() {
+    for (const id of outputPressed) void run(() => shortcutAction(id, false));
+    outputPressed.clear();
+  }
+  const bindHotkeys = async () => {
+    releaseOutputHotkeys();
+    await hotkeys.set({ ...settings.globalHotkeys, ...settings.hotkeys });
+    await syncOutput().catch(() => {
+      outputOpen = false;
+    });
+  };
   const heldExpressions = new Set<string>();
   async function shortcutAction(id: string, pressed: boolean) {
     const options = settings.hotkeyOptions[id];
@@ -454,9 +464,6 @@ export function createStudio(
     await bindHotkeys();
     if (disposed || operation !== modelOperation) return;
     await save();
-    await syncOutput().catch(() => {
-      outputOpen = false;
-    });
     if (!previews[next.path]) {
       try {
         await savePreview(next, stage.thumbnail());
@@ -1146,6 +1153,30 @@ export function createStudio(
       await own(
         listen('output-closed', () => {
           outputOpen = false;
+          releaseOutputHotkeys();
+        }),
+      );
+      if (disposed) return;
+      await own(
+        listen<{ action: string; pressed: boolean }>('output-hotkey', ({ payload }) => {
+          if (
+            !payload ||
+            typeof payload.action !== 'string' ||
+            typeof payload.pressed !== 'boolean'
+          )
+            return;
+          const { action, pressed } = payload;
+          if (pressed) {
+            if (
+              !outputOpen ||
+              outputPressed.has(action) ||
+              (!Object.hasOwn(settings.globalHotkeys, action) &&
+                !Object.hasOwn(settings.hotkeys, action))
+            )
+              return;
+            outputPressed.add(action);
+          } else if (!outputPressed.delete(action)) return;
+          void run(() => shortcutAction(action, pressed));
         }),
       );
       if (disposed) return;

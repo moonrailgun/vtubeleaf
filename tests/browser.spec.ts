@@ -22,7 +22,7 @@ async function serveProduction(page: Page, entry: string) {
 // Pause has no button; bind it to a local hotkey, return to the capture tab, and return a press helper.
 async function bindPauseHotkey(page: Page) {
   await page.getByRole('button', { name: '角色', exact: true }).click();
-  await page.getByRole('button', { name: '全局快捷键', exact: true }).click();
+  await page.getByRole('button', { name: '应用快捷键', exact: true }).click();
   await page.locator('#hotkey-action').selectOption('pause-tracking');
   await page.locator('#hotkey-binding').fill('Control+Shift+P');
   await page.locator('#save-hotkey').click();
@@ -1810,7 +1810,7 @@ test('model controls save profiles, expressions, shortcuts and a manual motion r
             { OutputLive2D: 'ParamAngleZ', Input: 'UnsupportedInput' }
           ], Hotkeys: [{ Action: 'RemoveAllExpressions', Triggers: { Trigger1: 'LeftShift', Trigger2: 'N9', Trigger3: '' }, IsActive: true, IsGlobal: true }] };
         }
-        if (cmd === 'plugin:global-shortcut|register') { window.savedShortcut = args.shortcuts; return; }
+        if (cmd.startsWith('plugin:global-shortcut|')) { window.systemShortcutCalls = [...(window.systemShortcutCalls || []), cmd]; }
       }, { shouldMockEvents: true });\n`;
     await route.fulfill({ response, body: bootstrap + (await response.text()) });
   });
@@ -1894,12 +1894,18 @@ test('model controls save profiles, expressions, shortcuts and a manual motion r
   await expect(expression).toHaveAttribute('aria-pressed', 'true');
   await page.locator('#clear-expressions').click();
   await expect(expression).toHaveAttribute('aria-pressed', 'false');
-  await page.getByRole('button', { name: '全局快捷键' }).click();
+  await page.getByRole('button', { name: '应用快捷键' }).click();
+  await page.locator('#hotkey-action').selectOption('clear-expressions');
   await page.locator('#hotkey-binding').fill('Control+Shift+1');
   await page.locator('#save-hotkey').click();
   await expect
-    .poll(() => page.evaluate(() => (window as any).savedShortcut))
-    .toEqual(['Control+Shift+Digit1']);
+    .poll(() => page.evaluate(() => (window as any).savedSettings?.hotkeys['clear-expressions']))
+    .toBe('Control+Shift+1');
+  expect(await page.evaluate(() => (window as any).systemShortcutCalls ?? [])).toEqual([]);
+  await expression.click();
+  await expect(expression).toHaveAttribute('aria-pressed', 'true');
+  await page.keyboard.press('Control+Shift+1');
+  await expect(expression).toHaveAttribute('aria-pressed', 'false');
   await page.locator('#record-toggle').click();
   await expect(page.locator('#record-status')).not.toHaveText('0.0 s');
   await page.locator('#record-toggle').click();
@@ -1926,7 +1932,7 @@ test('model controls save profiles, expressions, shortcuts and a manual motion r
   await expect(page.locator('#notice')).toContainText('VTS');
   expect(await page.evaluate(() => (window as any).savedSettings.physicsStrength)).toBe(1);
   expect(await page.evaluate(() => (window as any).savedSettings.physicsGroups)).toEqual({});
-  await page.locator('.model-card').first().click();
+  await page.getByTitle(modelPath, { exact: true }).click();
   await expect
     .poll(() => page.evaluate(() => (window as any).savedSettings?.modelPath))
     .toBe(modelPath);
@@ -2628,7 +2634,7 @@ test('props-only scenes support dragging, saving, recall, visibility shortcuts a
           window.cameraActions = [...(window.cameraActions || []), cameraActive ? 'start' : 'stop'];
         }
         if (cmd.startsWith('plugin:virtual-camera|')) return { supported: true, installed: true, active: cameraActive, message: 'Test' };
-        if (cmd === 'plugin:global-shortcut|register') { window.shortcut = args; return; }
+        if (cmd.startsWith('plugin:global-shortcut|')) { window.systemShortcutCalls = [...(window.systemShortcutCalls || []), cmd]; }
       }, { shouldMockEvents: true });\n`;
     await route.fulfill({ response, body: bootstrap + (await response.text()) });
   });
@@ -2658,7 +2664,7 @@ test('props-only scenes support dragging, saving, recall, visibility shortcuts a
     .poll(() => page.evaluate(() => (window as any).savedSettings?.composition.items[0].visible))
     .toBe(false);
   await page.getByRole('button', { name: '角色', exact: true }).click();
-  await page.getByRole('button', { name: '全局快捷键', exact: true }).click();
+  await page.getByRole('button', { name: '应用快捷键', exact: true }).click();
   const action = await page
     .locator('#hotkey-action option')
     .evaluateAll(
@@ -2668,15 +2674,7 @@ test('props-only scenes support dragging, saving, recall, visibility shortcuts a
   await page.locator('#hotkey-action').selectOption(action);
   await page.locator('#hotkey-binding').fill('Control+Shift+9');
   await page.locator('#save-hotkey').click();
-  await expect
-    .poll(() => page.evaluate(() => (window as any).shortcut?.shortcuts))
-    .toEqual(['Control+Shift+Digit9']);
-  await page.evaluate(() =>
-    (window as any).shortcut.handler.onmessage({
-      state: 'Pressed',
-      shortcut: 'Control+Shift+Digit9',
-    }),
-  );
+  await page.keyboard.press('Control+Shift+9');
   await expect
     .poll(() => page.evaluate(() => (window as any).savedSettings?.composition.items[0].visible))
     .toBe(true);
@@ -2693,30 +2691,16 @@ test('props-only scenes support dragging, saving, recall, visibility shortcuts a
   await page.locator('#hotkey-action').selectOption('toggle-model');
   await page.locator('#hotkey-binding').fill('Control+Shift+8');
   await page.locator('#save-hotkey').click();
-  await expect
-    .poll(() => page.evaluate(() => (window as any).shortcut?.shortcuts))
-    .toEqual(['Control+Shift+Digit8']);
-  await page.evaluate(() =>
-    (window as any).shortcut.handler.onmessage({
-      state: 'Pressed',
-      shortcut: 'Control+Shift+Digit8',
-    }),
-  );
+  await page.keyboard.press('Control+Shift+8');
   await expect
     .poll(() => page.evaluate(() => (window as any).savedSettings?.modelVisible))
     .toBe(false);
   await page.locator('#hotkey-action').selectOption('toggle-camera');
   await page.locator('#hotkey-binding').fill('Control+Shift+7');
   await page.locator('#save-hotkey').click();
-  await expect
-    .poll(() => page.evaluate(() => (window as any).shortcut?.shortcuts))
-    .toEqual(['Control+Shift+Digit7']);
+  expect(await page.evaluate(() => (window as any).systemShortcutCalls ?? [])).toEqual([]);
   for (const action of ['start', 'stop']) {
-    await page.evaluate(() => {
-      const handler = (window as any).shortcut.handler;
-      handler.onmessage({ state: 'Released', shortcut: 'Control+Shift+Digit7' });
-      handler.onmessage({ state: 'Pressed', shortcut: 'Control+Shift+Digit7' });
-    });
+    await page.keyboard.press('Control+Shift+7');
     await expect
       .poll(() => page.evaluate(() => (window as any).cameraActions?.at(-1)))
       .toBe(action);
@@ -2852,22 +2836,16 @@ test('attached dragging follows the pointer and scene recall preserves the live 
   await page.evaluate(() => (window as any).sceneTransaction.studio.destroy());
 });
 
-test('VTS local and global hotkeys release on key-up, blur and rebind without duplicate presses', async ({
-  page,
-}) => {
+test('application shortcuts preserve native controls and release on blur', async ({ page }) => {
   await page.goto('/?output=1');
-  const result = await page.evaluate(async () => {
-    const { mockIPC, clearMocks } = await import('/node_modules/@tauri-apps/api/mocks.js');
+  await page.evaluate(async () => {
+    const { mockIPC } = await import('/node_modules/@tauri-apps/api/mocks.js');
     const { Hotkeys } = await import('/src/hotkeys.ts');
     (window as any).isTauri = true;
     const calls: [string, boolean][] = [];
-    const registered: string[] = [];
-    const handlers: any[] = [];
-    mockIPC((cmd: string, args: any) => {
-      if (cmd === 'plugin:global-shortcut|register') {
-        registered.push(...args.shortcuts);
-        handlers.push(args.handler);
-      }
+    const nativeCalls: string[] = [];
+    mockIPC((cmd: string) => {
+      if (cmd.startsWith('plugin:global-shortcut|')) nativeCalls.push(cmd);
     });
     const hotkeys = new Hotkeys(
       (id: string, pressed: boolean) => calls.push([id, pressed]),
@@ -2875,39 +2853,49 @@ test('VTS local and global hotkeys release on key-up, blur and rebind without du
         throw new Error(error);
       },
     );
-    const bindings = { local: 'Control+A', global: 'Control+B' };
-    const options = { local: { scope: 'local' as const } };
-    await hotkeys.set(bindings, options);
-    const key = (type: string, code: string, ctrlKey = true) =>
-      window.dispatchEvent(new KeyboardEvent(type, { code, ctrlKey, cancelable: true }));
-    key('keydown', 'KeyA');
-    key('keydown', 'KeyA');
-    key('keyup', 'ControlLeft', false);
-    key('keydown', 'KeyA');
-    window.dispatchEvent(new Event('blur'));
-    key('keydown', 'KeyA');
-    await hotkeys.set(bindings, options);
-    key('keydown', 'KeyB'); // Global shortcuts must only arrive from the OS.
-    handlers[0].onmessage({ state: 'Pressed' }); // Stale registration is ignored.
-    handlers[1].onmessage({ state: 'Pressed' });
-    handlers[1].onmessage({ state: 'Pressed' });
-    handlers[1].onmessage({ state: 'Released' });
-    await hotkeys.destroy();
-    clearMocks();
-    (window as any).isTauri = false;
-    return { calls, registered };
+    await hotkeys.set({ space: 'Space', shifted: 'Shift+A' });
+    const host = document.createElement('div');
+    host.style.cssText = 'position:fixed;inset:0;background:white;z-index:100';
+    host.innerHTML =
+      '<button id="native-button">Native button</button><input id="native-input"><div id="editable" contenteditable="true">edit</div><div id="blank" style="height:100px">stage</div>';
+    host.querySelector('button')!.addEventListener('click', () => {
+      (window as any).buttonClicks = ((window as any).buttonClicks ?? 0) + 1;
+    });
+    document.body.append(host);
+    Object.assign(window, { hotkeyTest: { hotkeys, calls, nativeCalls } });
   });
-  expect(result.registered).toEqual(['Control+KeyB', 'Control+KeyB']);
-  expect(result.calls).toEqual([
-    ['local', true],
-    ['local', false],
-    ['local', true],
-    ['local', false],
-    ['local', true],
-    ['local', false],
-    ['global', true],
-    ['global', false],
+  await page.locator('#blank').click();
+  await page.keyboard.down('Space');
+  await page.keyboard.down('Space');
+  await expect
+    .poll(() => page.evaluate(() => (window as any).hotkeyTest.calls))
+    .toEqual([['space', true]]);
+  await page.evaluate(() => window.dispatchEvent(new Event('blur')));
+  await expect
+    .poll(() => page.evaluate(() => (window as any).hotkeyTest.calls))
+    .toEqual([
+      ['space', true],
+      ['space', false],
+    ]);
+  await page.keyboard.up('Space');
+  await page.locator('#native-input').fill('hello');
+  await page.keyboard.press('Space');
+  await expect(page.locator('#native-input')).toHaveValue('hello ');
+  await page.locator('#editable').fill('edit');
+  await page.keyboard.press('Space');
+  await expect(page.locator('#editable')).toHaveText('edit ');
+  await page.locator('#native-button').focus();
+  await page.keyboard.press('Space');
+  await expect.poll(() => page.evaluate(() => (window as any).buttonClicks)).toBe(1);
+  expect(await page.evaluate(() => (window as any).hotkeyTest.calls)).toHaveLength(2);
+  await page.locator('#blank').click();
+  await page.keyboard.press('Shift+A');
+  expect(await page.evaluate(() => (window as any).hotkeyTest.calls.slice(-2))).toEqual([
+    ['shifted', true],
+    ['shifted', false],
   ]);
+  expect(await page.evaluate(() => (window as any).hotkeyTest.nativeCalls)).toEqual([]);
+  await page.evaluate(() => (window as any).hotkeyTest.hotkeys.destroy());
 });
 
 test('bundled licenses are readable under desktop CSP without leaving the stage', async ({
@@ -2937,4 +2925,151 @@ test('bundled licenses are readable under desktop CSP without leaving the stage'
   );
   await page.getByLabel('许可文件').selectOption('/runtime/licenses/Core/LICENSE.md');
   await expect(text).toHaveText('许可文件未包含在当前构建中。');
+});
+
+test('focused output forwards application shortcuts and releases held actions without rebinding for display changes', async ({
+  page,
+}) => {
+  await page.route('**/src/main.tsx*', async (route) => {
+    const response = await route.fetch();
+    await route.fulfill({
+      response,
+      body: `import React from '/node_modules/.vite/deps/react.js';
+        import ReactDOM from '/node_modules/.vite/deps/react-dom_client.js';
+        import { mockIPC, mockWindows } from '/node_modules/@tauri-apps/api/mocks.js';
+        import { Output } from '/src/output.tsx';
+        import '/src/style.css';
+        window.isTauri = true; mockWindows('output');
+        const state = window.outputKeys = { events: [] };
+        mockIPC(() => {}, { shouldMockEvents: true });
+        const invoke = window.__TAURI_INTERNALS__.invoke;
+        window.__TAURI_INTERNALS__.invoke = async (cmd, args, options) => {
+          if (cmd === 'plugin:event|emit_to') {
+            if (args.event === 'output-ready') state.ready = true;
+            if (args.event === 'output-hotkey') {
+              if (state.blockPress && args.payload.pressed) {
+                state.blockPress = false;
+                await new Promise(resolve => { state.release = resolve; });
+              }
+              state.events.push(args.payload);
+            }
+          }
+          return invoke(cmd, args, options);
+        };
+        state.root = ReactDOM.createRoot(document.getElementById('app'));
+        state.root.render(React.createElement(Output));`,
+    });
+  });
+  await page.goto('/?output=1');
+  await expect.poll(() => page.evaluate(() => (window as any).outputKeys?.ready)).toBe(true);
+  const update = (binding: string, background = '#000000') =>
+    page.evaluate(
+      async ({ binding, background }) => {
+        const { emit } = await import('/node_modules/@tauri-apps/api/event.js');
+        await emit('output-state', {
+          model: null,
+          models: [],
+          revision: 0,
+          settings: { background, hotkeys: { 'clear-expressions': binding } },
+        });
+      },
+      { binding, background },
+    );
+  const expected: { action: string; pressed: boolean }[] = [];
+  const expectEvents = async (...presses: boolean[]) => {
+    expected.push(...presses.map((pressed) => ({ action: 'clear-expressions', pressed })));
+    await expect
+      .poll(() => page.evaluate(() => (window as any).outputKeys.events))
+      .toEqual(expected);
+  };
+  await update('Space');
+  await page.evaluate(() => {
+    (window as any).outputKeys.blockPress = true;
+  });
+  await page.keyboard.press('Space');
+  await expect
+    .poll(() => page.evaluate(() => typeof (window as any).outputKeys.release))
+    .toBe('function');
+  await expectEvents();
+  await page.evaluate(() => (window as any).outputKeys.release());
+  await expectEvents(true, false);
+  await page.keyboard.down('Space');
+  await expectEvents(true);
+  await update('Space', '#ff0000');
+  await expect(page.locator('#stage')).toHaveCSS('background-color', 'rgb(255, 0, 0)');
+  await expectEvents();
+  await page.keyboard.up('Space');
+  await expectEvents(false);
+  await page.keyboard.down('Space');
+  await expectEvents(true);
+  await update('KeyA');
+  await expectEvents(false);
+  await page.keyboard.up('Space');
+  await page.keyboard.press('Space');
+  await expectEvents();
+  await page.keyboard.down('a');
+  await expectEvents(true);
+  await page.evaluate(() => window.dispatchEvent(new Event('blur')));
+  await expectEvents(false);
+  await page.keyboard.up('a');
+  await page.keyboard.down('a');
+  await expectEvents(true);
+  await page.evaluate(() => (window as any).outputKeys.root.unmount());
+  await expectEvents(false);
+  await page.keyboard.up('a');
+
+  await page.evaluate(async () => {
+    const { mockIPC, mockWindows } = await import('/node_modules/@tauri-apps/api/mocks.js');
+    const { createStudio } = await import('/src/studio.ts');
+    mockWindows('main');
+    const state = (window as any).outputKeys;
+    mockIPC(
+      (cmd: string) => {
+        if (cmd === 'load_settings') return { globalHotkeys: { 'toggle-model': 'Space' } };
+        if (cmd === 'list_models') return { models: [], directory: '/models', errors: [] };
+        if (cmd.startsWith('plugin:virtual-camera|'))
+          return { supported: false, installed: false, active: false, message: 'Test' };
+      },
+      { shouldMockEvents: true },
+    );
+    const invoke = (window as any).__TAURI_INTERNALS__.invoke;
+    (window as any).__TAURI_INTERNALS__.invoke = (cmd: string, args: any, options: any) => {
+      if (cmd === 'plugin:event|emit_to' && args.event === 'output-state')
+        state.synced = structuredClone(args.payload.settings);
+      return invoke(cmd, args, options);
+    };
+    const container = document.getElementById('app')!;
+    state.studio = createStudio(container, document.createElement('video'), (view) => {
+      state.view = view;
+    });
+  });
+  await expect.poll(() => page.evaluate(() => (window as any).outputKeys.view?.ready)).toBe(true);
+  await page.evaluate(async () => {
+    const { emit } = await import('/node_modules/@tauri-apps/api/event.js');
+    const state = (window as any).outputKeys;
+    await emit('output-ready');
+    await state.studio.actions.applyHotkey('toggle-model', 'KeyK');
+    await emit('output-hotkey', { action: 'toggle-model', pressed: true });
+    await emit('output-hotkey', { action: 'toggle-model', pressed: true });
+    await emit('output-hotkey', { action: 'toggle-model', pressed: 'false' });
+    await emit('output-hotkey', { action: 'toggle-mic', pressed: true });
+  });
+  expect(await page.evaluate(() => (window as any).outputKeys.synced.globalHotkeys)).toEqual({
+    'toggle-model': 'KeyK',
+  });
+  expect(await page.evaluate(() => (window as any).outputKeys.view.settings.modelVisible)).toBe(
+    false,
+  );
+  expect(await page.evaluate(() => (window as any).outputKeys.view.micActive)).toBe(false);
+  await page.evaluate(async () => {
+    const { emit } = await import('/node_modules/@tauri-apps/api/event.js');
+    await emit('output-hotkey', { action: 'toggle-model', pressed: false });
+    await emit('output-hotkey', { action: 'toggle-model', pressed: true });
+    await emit('output-closed');
+    await emit('output-hotkey', { action: 'toggle-model', pressed: true });
+  });
+  expect(await page.evaluate(() => (window as any).outputKeys.view.settings.modelVisible)).toBe(
+    true,
+  );
+  await page.evaluate(() => (window as any).outputKeys.studio.destroy());
 });
