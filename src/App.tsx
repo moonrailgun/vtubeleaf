@@ -1218,14 +1218,15 @@ function ModelControls({ view, actions: a }: { view: StudioView; actions: Studio
         </Button>
       </div>
       {!!view.model?.vtsResources?.warnings.length && (
-        <div role="status">
-          <p className="hint">模型资源提示</p>
-          {view.model.vtsResources.warnings.map((warning, index) => (
-            <p key={index} className="hint">
-              {warning}
-            </p>
-          ))}
-        </div>
+        <Fold title={`模型资源提示（${view.model.vtsResources.warnings.length}）`}>
+          <div className="max-h-64 overflow-y-auto" role="status" tabIndex={0}>
+            {view.model.vtsResources.warnings.map((warning, index) => (
+              <p key={index} className="hint">
+                {warning}
+              </p>
+            ))}
+          </div>
+        </Fold>
       )}
       <div id="expression-buttons" className="button-list">
         {view.expressions.map((e) => (
@@ -1322,22 +1323,37 @@ function ModelControls({ view, actions: a }: { view: StudioView; actions: Studio
             </Button>
           </div>
           <p className="hint">手动参数、映射、校准、构图、快捷键和待机设置按模型自动保存。</p>
-          <Button
-            id="import-vts"
-            variant="outline"
-            disabled={!view.model || view.modelLoading || view.sceneBusy}
-            onClick={() => run(a.importVts)}
-          >
-            导入 VTube Studio 配置
-          </Button>
-          <p className="hint">选择当前模型的 .vtube.json，合并可兼容的映射、快捷键和待机设置。</p>
+          <div className="button-list">
+            <Button
+              id="import-vts"
+              variant="outline"
+              disabled={!view.model || view.modelLoading || view.sceneBusy}
+              onClick={() => run(a.importVts)}
+            >
+              导入 VTube Studio 配置
+            </Button>
+            <Button
+              id="reapply-vts"
+              variant="outline"
+              disabled={!view.model || view.modelLoading || view.sceneBusy}
+              onClick={() => run(() => a.importVts('model'))}
+            >
+              重新应用随模型配置
+            </Button>
+          </div>
+          <p className="hint">
+            选择当前模型的
+            .vtube.json，或重新应用随模型保存的配置。会覆盖对应的映射、快捷键和待机设置，并更新导入结果。
+          </p>
           {!!view.settings.vtsImportReport.length && (
             <Fold title="VTS 导入结果">
-              {view.settings.vtsImportReport.map((line, index) => (
-                <p key={index} className="hint">
-                  {line}
-                </p>
-              ))}
+              <div className="max-h-64 overflow-y-auto" tabIndex={0}>
+                {view.settings.vtsImportReport.map((line, index) => (
+                  <p key={index} className="hint">
+                    {line}
+                  </p>
+                ))}
+              </div>
             </Fold>
           )}
           <div className="divider" />

@@ -513,12 +513,18 @@ export function createStudio(
   const actions = {
     run,
     motionMode: 'once' as MotionMode,
-    async importVts() {
+    async importVts(source: 'file' | 'model' = 'file') {
       if (!native || !model || !stage || modelLoading || sceneBusy) return;
       const revision = profileRevision;
-      const raw = await invoke<unknown>('choose_vts_config');
-      if (raw == null || disposed || revision !== profileRevision || modelLoading || sceneBusy)
+      const raw = await (source === 'model'
+        ? invoke<unknown>('read_model_vts_config', { id: model.id })
+        : invoke<unknown>('choose_vts_config'));
+      if (disposed || revision !== profileRevision || modelLoading || sceneBusy) return;
+      if (raw == null) {
+        if (source === 'model')
+          throw new Error('未找到随模型保存的 VTS 配置，请手动选择 .vtube.json 导入。');
         return;
+      }
       const result = importVtsConfig(raw, stage);
       applyVts(result);
       stage?.restoreExpressions(settings.defaultExpressions);

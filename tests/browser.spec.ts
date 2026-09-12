@@ -1944,7 +1944,8 @@ test('model controls save profiles, expressions, shortcuts and a manual motion r
         if (cmd === 'save_motion') { window.savedMotion = args.motion; return true; }
         if (cmd === 'read_model_vts_config') {
           window.autoVtsReads = (window.autoVtsReads || 0) + 1;
-          if (chosen > 1) return { Version: 99 };
+          if (window.adjacentVtsMissing) return null;
+          if (chosen > 1 && !window.reapplyVtsFixture) return { Version: 99 };
           return { Version: 1, ParameterSettings: [
             { OutputLive2D: 'ParamAngleX', Input: 'FaceAngleX', InputRangeLower: -18, InputRangeUpper: 18,
               OutputRangeLower: -20, OutputRangeUpper: 20, Smoothing: 0, ClampInput: true, ClampOutput: true }
@@ -2317,6 +2318,24 @@ test('model controls save profiles, expressions, shortcuts and a manual motion r
   expect(await page.evaluate(() => (window as any).savedSettings.mappings)).toEqual(
     imported.mappings,
   );
+  await page.evaluate(() => {
+    (window as any).reapplyVtsFixture = true;
+  });
+  await page.locator('#reapply-vts').click();
+  await expect
+    .poll(() => page.evaluate(() => (window as any).savedSettings.mappings.ParamAngleX.inputMin))
+    .toBe(-0.6);
+  const reapplied = await page.evaluate(() => (window as any).savedSettings);
+  expect(reapplied.mappings.ParamAngleY).toEqual(imported.mappings.ParamAngleY);
+  expect(reapplied.parameterOverrides).toEqual(imported.parameterOverrides);
+  expect(reapplied.vtsImportReport.join(' ')).not.toContain('UnsupportedInput');
+  expect(reapplied.profiles[modelPath].vtsImportReport).toEqual(reapplied.vtsImportReport);
+  await page.evaluate(() => {
+    (window as any).adjacentVtsMissing = true;
+  });
+  await page.locator('#reapply-vts').click();
+  await expect(page.locator('#notice')).toContainText('未找到随模型保存的 VTS 配置');
+  expect(await page.evaluate(() => (window as any).savedSettings)).toEqual(reapplied);
   await page.getByRole('button', { name: '角色库', exact: true }).click();
   await page.getByRole('button', { name: '角色文件夹', exact: true }).click();
   await page.locator('#library .fold').getByRole('button', { name: '打开角色文件夹' }).click();
