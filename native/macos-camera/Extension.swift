@@ -148,11 +148,14 @@ final class CameraDevice: NSObject, CMIOExtensionDeviceSource {
         do { try device.addStream(source.stream); try device.addStream(sink.stream) }
         catch { fatalError("Camera stream registration failed: \(error)") }
     }
-    var availableProperties: Set<CMIOExtensionProperty> { [.deviceTransportType, .deviceModel] }
+    var availableProperties: Set<CMIOExtensionProperty> { [.deviceTransportType, .deviceModel, .deviceCanBeDefaultInputDevice] }
     func deviceProperties(forProperties properties: Set<CMIOExtensionProperty>) throws -> CMIOExtensionDeviceProperties {
         let result = CMIOExtensionDeviceProperties(dictionary: [:])
         if properties.contains(.deviceTransportType) { result.transportType = kIOAudioDeviceTransportTypeVirtual }
         if properties.contains(.deviceModel) { result.model = "VTubeLeaf Camera" }
+        if properties.contains(.deviceCanBeDefaultInputDevice) {
+            result.setPropertyState(CMIOExtensionPropertyState(value: NSNumber(value: false)), forProperty: .deviceCanBeDefaultInputDevice)
+        }
         return result
     }
     func setDeviceProperties(_ properties: CMIOExtensionDeviceProperties) throws {}

@@ -16,6 +16,11 @@ private final class TestCameraClient: CMIOExtensionClient {
     static func main() throws {
         let client = class_createInstance(TestCameraClient.self, 0) as! TestCameraClient
         let camera = CameraDevice()
+        assert(camera.availableProperties.contains(.deviceCanBeDefaultInputDevice))
+        let properties = try camera.deviceProperties(forProperties: [.deviceCanBeDefaultInputDevice])
+        let canBeDefault = properties.propertiesDictionary[.deviceCanBeDefaultInputDevice]?.value as? NSNumber
+        assert(canBeDefault == false, "The virtual camera must not become the default input device")
+        print("PASS: virtual camera is ineligible as the default input device")
         assert(camera.source.authorizedToStartStream(for: client))
         assert(!camera.sink.authorizedToStartStream(for: client), "Claimed signing ID must not authorize this unsigned test process")
         assert(camera.sink.sinkClient == nil)
