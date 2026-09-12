@@ -621,3 +621,104 @@ test('imported hotkey behavior survives model profiles and rejects invalid optio
     { 'expression:smile': { scope: 'local' } },
   );
 });
+
+test('parameter metadata uses authored names and bounded groups without adding foreign parameters', () => {
+  const parameters = [
+    { id: 'Param15', min: 0, max: 1, default: 0 },
+    { id: 'Bare', min: -1, max: 1, default: 0 },
+  ];
+  const info = {
+    Parameters: [
+      { Id: 'Param15', Name: '  牌子  ', GroupId: 'accessories' },
+      { Id: 'Unknown', Name: 'unused' },
+    ],
+    ParameterGroups: [
+      { Id: 'accessories', Name: '道具', GroupId: 'root' },
+      { Id: 'root', Name: '外观', GroupId: 'accessories' },
+    ],
+  };
+  assert.deepEqual(state.describeParameters(parameters, info), [
+    { ...parameters[0], name: '牌子', group: '外观 / 道具' },
+    parameters[1],
+  ]);
+  assert.deepEqual(state.describeParameters(parameters, null), parameters);
+});
+
+test('appearance and unbound action behavior survive reload and remain model-specific', () => {
+  const settings = readSettings({
+    modelPath: '/a',
+    parameterOverrides: { Param15: 1, broken: Infinity },
+    defaultParameterOverrides: { Param15: 0.5 },
+    defaultExpressions: ['vts:sign.exp3.json', 'vts:sign.exp3.json', 42],
+    lostIdleMotion: 'Idle:1',
+    motionSound: false,
+    hotkeyOptions: {
+      'expression:sign': { scope: 'local', release: true, seconds: 3, fadeSeconds: 0.5 },
+    },
+  });
+  assert.deepEqual(settings.parameterOverrides, { Param15: 1 });
+  assert.deepEqual(settings.defaultExpressions, ['vts:sign.exp3.json']);
+  assert.deepEqual(settings.hotkeyOptions['expression:sign'], {
+    scope: 'local',
+    release: true,
+    seconds: 3,
+    fadeSeconds: 0.5,
+  });
+  const other = state.switchProfile(settings, '/b');
+  assert.deepEqual(other.parameterOverrides, {});
+  assert.deepEqual(other.defaultExpressions, []);
+  assert.equal(other.motionSound, true);
+  const restored = state.switchProfile(readSettings(JSON.parse(JSON.stringify(other))), '/a');
+  for (const key of [
+    'parameterOverrides',
+    'defaultParameterOverrides',
+    'defaultExpressions',
+    'hotkeyOptions',
+    'lostIdleMotion',
+    'motionSound',
+  ] as const)
+    assert.deepEqual(restored[key], settings[key]);
+  restored.parameterOverrides.Param15 = 0;
+  assert.equal(restored.defaultParameterOverrides.Param15, 0.5);
+});
+
+test('unclamped mappings extrapolate but remain within model limits; automatic breath needs no camera', () => {
+  const mapping = {
+    source: 'yaw',
+    inputMin: -0.5,
+    inputMax: 0.5,
+    outputMin: -10,
+    outputMax: 10,
+    smoothing: 0,
+    enabled: true,
+    clamp: false,
+  };
+  const settings = readSettings({ motionMirror: false, mappings: { Custom: mapping } });
+  const parameter = [{ id: 'Custom', min: -15, max: 15, default: 0 }];
+  assert.equal(
+    new FaceMapper().map({ ...NEUTRAL, yaw: 22.5 }, parameter, settings, 0.1).Custom,
+    15,
+  );
+  settings.mappings.Custom.clamp = true;
+  assert.equal(
+    new FaceMapper().map({ ...NEUTRAL, yaw: 22.5 }, parameter, settings, 0.1).Custom,
+    10,
+  );
+  settings.mappings.Custom = {
+    ...settings.mappings.Custom,
+    source: 'breath',
+    inputMin: 0,
+    inputMax: 1,
+    outputMin: 0,
+    outputMax: 1,
+  };
+  const mapper = new FaceMapper();
+  const first = mapper.map(null, parameter, settings, 0.1).Custom;
+  let last = first;
+  for (let i = 0; i < 10; i++) last = mapper.map(null, parameter, settings, 0.1).Custom;
+  assert.ok(first > 0 && last > first && last <= 1);
+  mapper.reset();
+  assert.equal(mapper.map(null, parameter, settings, 0.1).Custom, first);
+  assert.equal(state.normalizedFace({ browLeft: 0.6, browRight: 0.2 }, settings).brows, 0.7);
+  assert.equal(state.normalizedFace(NEUTRAL, settings).tongueOut, undefined);
+});

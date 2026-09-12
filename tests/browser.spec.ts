@@ -2,6 +2,113 @@ import { test, expect, type Page } from '@playwright/test';
 import { readFileSync, readdirSync, writeFileSync } from 'node:fs';
 import { basename, dirname, resolve } from 'node:path';
 
+test('VTS-only expressions and motions drive the model without model3 declarations', async ({
+  page,
+}) => {
+  const root = resolve('vendor/models/Haru');
+  const json = JSON.parse(readFileSync(resolve(root, 'Haru.model3.json'), 'utf8'));
+  delete json.FileReferences.Expressions;
+  delete json.FileReferences.Motions;
+  const expression = 'expressions/accessory.exp3.json';
+  const motion = 'motions/haru_g_idle.motion3.json';
+  const files = readdirSync(root, { recursive: true, withFileTypes: true })
+    .filter((entry) => entry.isFile())
+    .map((entry) => resolve(entry.parentPath, entry.name).slice(root.length + 1));
+  files.push(expression);
+  await page.route('**/vts-only/**', (route) => {
+    const resource = decodeURIComponent(
+      new URL(route.request().url()).pathname.slice('/vts-only/'.length),
+    );
+    if (resource === 'Haru.model3.json') return route.fulfill({ json });
+    if (resource === expression)
+      return route.fulfill({
+        json: {
+          Type: 'Live2D Expression',
+          FadeInTime: 0,
+          FadeOutTime: 0,
+          Parameters: [{ Id: 'ParamAngleX', Value: 20, Blend: 'Overwrite' }],
+        },
+      });
+    return files.includes(resource)
+      ? route.fulfill({ path: resolve(root, resource) })
+      : route.abort();
+  });
+  await page.goto('/?output=1');
+  const result = await page.evaluate(
+    async (info) => {
+      const renderer = '/src/renderer.ts',
+        state = '/src/state.ts',
+        vts = '/src/vts.ts';
+      const { mockIPC } = await import('/node_modules/@tauri-apps/api/mocks.js');
+      const { AvatarStage } = await import(renderer);
+      const { defaults } = await import(state);
+      const { importVtsConfig } = await import(vts);
+      mockIPC(async (cmd: string, args: { resource: string }) => {
+        if (cmd === 'read_model_resource')
+          return (await fetch('/vts-only/' + encodeURI(args.resource))).arrayBuffer();
+      });
+      const container = document.createElement('div');
+      container.style.cssText = 'width:500px;height:500px';
+      document.body.append(container);
+      const stage = new AvatarStage(container, () => {});
+      try {
+        stage.display({ ...defaults, autoBlink: false });
+        await stage.load(info);
+        const profile = importVtsConfig(
+          {
+            Version: 1,
+            ParameterSettings: [],
+            FileReferences: { IdleAnimation: 'haru_g_idle.motion3.json' },
+            Hotkeys: [
+              {
+                Name: '牌子',
+                Action: 'ToggleExpression',
+                File: 'accessory.exp3.json',
+                Triggers: { Trigger1: 'F', Trigger2: '', Trigger3: '' },
+              },
+            ],
+          },
+          stage,
+        ).profile;
+        const id = stage.expressions[0]?.id;
+        if (!id || !stage.motions[0]) throw new Error('VTS-only resources were omitted');
+        stage.toggleExpression(id);
+        for (let frame = 0; frame < 40; frame++) stage.draw({ ParamAngleX: 0 }, 16);
+        const enabled = stage.frame.ParamAngleX;
+        stage.clearExpressions();
+        for (let frame = 0; frame < 40; frame++) stage.draw({ ParamAngleX: 0 }, 16);
+        const cleared = stage.frame.ParamAngleX;
+        stage.display({ ...defaults, idleMotion: profile.idleMotion });
+        stage.draw({}, 16);
+        const idle = stage.currentMotion;
+        await stage.load(info);
+        return { enabled, cleared, idle, profile, id, reloadedId: stage.expressions[0].id };
+      } finally {
+        stage.destroy();
+        container.remove();
+      }
+    },
+    {
+      id: 'vts-only',
+      path: '/managed/Haru.model3.json',
+      name: 'VTS-only',
+      entry: 'Haru.model3.json',
+      files,
+      vtsResources: {
+        expressions: [{ name: '牌子', file: expression }],
+        motions: [{ name: '待机', file: motion }],
+        warnings: [],
+      },
+    },
+  );
+  expect(result.enabled).toBeCloseTo(20);
+  expect(result.cleared).toBeCloseTo(0);
+  expect(result.id).toBe(`vts:${expression}`);
+  expect(result.reloadedId).toBe(result.id);
+  expect(result.profile.hotkeys).toEqual({ [`expression:${result.id}`]: 'KeyF' });
+  expect(result.idle).toBe(`vts:${motion}`);
+});
+
 // Exercise the shipped bundle under the desktop CSP; Vite's React refresh preamble is dev-only.
 async function serveProduction(page: Page, entry: string) {
   const csp = JSON.parse(readFileSync('src-tauri/tauri.conf.json', 'utf8')).app.security.csp;
@@ -22,6 +129,7 @@ async function serveProduction(page: Page, entry: string) {
 // Pause has no button; bind it to a local hotkey, return to the capture tab, and return a press helper.
 async function bindPauseHotkey(page: Page) {
   await page.getByRole('button', { name: '角色', exact: true }).click();
+  await page.locator('#model-advanced > summary').click();
   await page.getByRole('button', { name: '应用快捷键', exact: true }).click();
   await page.locator('#hotkey-action').selectOption('pause-tracking');
   await page.locator('#hotkey-binding').fill('Control+Shift+P');
@@ -400,12 +508,20 @@ test('official Cubism Core renders a supplied model and applies head, body, eye,
       {
         id: 'test-a',
         name: 'a',
-        data: { Parameters: [{ Id: 'ParamAngleX', Value: 12, Blend: 'Overwrite' }] },
+        data: {
+          FadeInTime: 0,
+          FadeOutTime: 0,
+          Parameters: [{ Id: 'ParamAngleX', Value: 12, Blend: 'Overwrite' }],
+        },
       },
       {
         id: 'test-b',
         name: 'b',
-        data: { Parameters: [{ Id: 'ParamMouthOpenY', Value: 0.7, Blend: 'Overwrite' }] },
+        data: {
+          FadeInTime: 0,
+          FadeOutTime: 0,
+          Parameters: [{ Id: 'ParamMouthOpenY', Value: 0.7, Blend: 'Overwrite' }],
+        },
       },
     );
     stage.toggleExpression('test-a');
@@ -464,7 +580,11 @@ test('official Cubism Core renders a supplied model and applies head, body, eye,
     stage.expressions.push({
       id: 'test-eye',
       name: 'eye',
-      data: { Parameters: [{ Id: 'ParamEyeLOpen', Value: 0, Blend: 'Overwrite' }] },
+      data: {
+        FadeInTime: 0,
+        FadeOutTime: 0,
+        Parameters: [{ Id: 'ParamEyeLOpen', Value: 0, Blend: 'Overwrite' }],
+      },
     });
     stage.toggleExpression('test-eye');
     tick();
@@ -1759,6 +1879,7 @@ test('OSF process errors stop reception and return a retryable failure', async (
 test('model controls save profiles, expressions, shortcuts and a manual motion recording through IPC', async ({
   page,
 }, testInfo) => {
+  test.setTimeout(60_000);
   const fixture = process.env.VTUBELEAF_MODEL_FIXTURE;
   test.skip(!fixture, 'Set VTUBELEAF_MODEL_FIXTURE to a local model with expressions and motions.');
   const modelPath = resolve(fixture!),
@@ -1775,6 +1896,29 @@ test('model controls save profiles, expressions, shortcuts and a manual motion r
     const resource = decodeURIComponent(
       new URL(route.request().url()).pathname.slice('/test-model/'.length),
     );
+    if (resource === 'motions/haru_g_idle.motion3.json')
+      return route.fulfill({
+        json: {
+          Version: 3,
+          Meta: {
+            Duration: 0.2,
+            Fps: 30,
+            Loop: false,
+            CurveCount: 1,
+            TotalSegmentCount: 1,
+            TotalPointCount: 2,
+          },
+          Curves: [
+            {
+              Target: 'Parameter',
+              Id: 'ParamAngleX',
+              FadeInTime: 0,
+              FadeOutTime: 0,
+              Segments: [0, 16, 0, 0.2, 16],
+            },
+          ],
+        },
+      });
     return files.includes(resource)
       ? route.fulfill({ path: resolve(root, resource) })
       : route.abort();
@@ -1782,6 +1926,11 @@ test('model controls save profiles, expressions, shortcuts and a manual motion r
   await page.route('**/src/main.tsx*', async (route) => {
     const response = await route.fetch();
     const bootstrap = `import { mockIPC, mockWindows } from '/node_modules/@tauri-apps/api/mocks.js';
+      import { AvatarStage } from '/src/renderer.ts';
+      const playMotion = AvatarStage.prototype.playMotion;
+      AvatarStage.prototype.playMotion = function (...args) { window.controlsStage = this; return playMotion.apply(this, args); };
+      import { Tracker } from '/src/tracker.ts';
+      Tracker.prototype.start = async function () { window.controlsTracker = this; return true; };
       window.isTauri = true; mockWindows('main'); let chosen = 0;
       const fixtureInfo = ${JSON.stringify(info)};
       mockIPC(async (cmd, args) => {
@@ -1799,7 +1948,11 @@ test('model controls save profiles, expressions, shortcuts and a manual motion r
           return { Version: 1, ParameterSettings: [
             { OutputLive2D: 'ParamAngleX', Input: 'FaceAngleX', InputRangeLower: -18, InputRangeUpper: 18,
               OutputRangeLower: -20, OutputRangeUpper: 20, Smoothing: 0, ClampInput: true, ClampOutput: true }
-          ], Hotkeys: [] };
+          ], Hotkeys: [
+            { Action: 'ToggleExpression', File: 'expressions/F01.exp3.json', DeactivateAfterKeyUp: true,
+              DeactivateAfterSeconds: true, DeactivateAfterSecondsAmount: 5, FadeSecondsAmount: 0.15, Triggers: { Trigger1: 'F' } },
+            { Action: 'TriggerAnimation', File: 'motions/haru_g_idle.motion3.json', StopsOnLastFrame: true, FadeSecondsAmount: 0.1, Triggers: { Trigger1: 'LeftControl', Trigger2: 'N2' } }
+          ] };
         }
         if (cmd === 'choose_vts_config') {
           if (window.vtsImported) return { Version: 99 };
@@ -1862,7 +2015,31 @@ test('model controls save profiles, expressions, shortcuts and a manual motion r
   await expect(page.locator('#render-status')).toContainText('FPS');
   await page.screenshot({ path: testInfo.outputPath('studio-stage.png') });
   await page.getByRole('button', { name: '角色', exact: true }).click();
+  await expect(page.locator('#model-advanced')).not.toHaveAttribute('open', '');
+  await expect(page.locator('#expression-buttons button').first()).toBeVisible();
+  await expect(page.locator('#motion-buttons button').first()).toBeVisible();
+  await expect(page.locator('#save-default-appearance')).toBeVisible();
+  await expect(page.locator('#parameter-search')).toBeHidden();
+  await expect(page.locator('#motion-mode')).toBeHidden();
+  await expect(page.locator('#hotkey-binding')).toBeHidden();
+  await page.screenshot({ path: testInfo.outputPath('studio-model-simple.png') });
+  await page.locator('#model-advanced > summary').click();
+  await page.locator('#parameter-search').fill('角度 X');
+  await expect(page.locator('#mapping-parameter option')).toHaveCount(1);
+  await expect(page.locator('#mapping-parameter')).toHaveValue('ParamAngleX');
+  await page.locator('#parameter-search').fill('ParamAngleY');
+  await expect(page.locator('#mapping-parameter')).toHaveValue('ParamAngleY');
+  await page.locator('#parameter-search').fill('no-such-parameter');
+  await expect(page.locator('#mapping-parameter')).toBeDisabled();
+  await expect(page.getByText('没有匹配的参数', { exact: true })).toHaveCount(1);
+  await page.locator('#parameter-search').fill('');
+  await page.locator('#parameter-group').selectOption({ label: '顔' });
+  await expect(page.locator('#mapping-parameter option[value="ParamAngleX"]')).toHaveCount(1);
+  await expect(page.locator('#mapping-parameter option[value="ParamEyeLOpen"]')).toHaveCount(0);
+  await page.locator('#parameter-group').selectOption('');
   await page.locator('#mapping-parameter').selectOption('ParamAngleX');
+  await expect(page.locator('#mapping-inputMin')).toBeHidden();
+  await page.getByRole('button', { name: '跟踪映射', exact: true }).click();
   await page.locator('#mapping-inputMin').fill('-0.5');
   await page.locator('#save-mapping').click();
   await expect
@@ -1890,14 +2067,160 @@ test('model controls save profiles, expressions, shortcuts and a manual motion r
   ).toContain(0);
   await page.screenshot({ path: testInfo.outputPath('studio-physics-controls.png') });
   const expression = page.locator('#expression-buttons button').first();
+  await expect(expression.locator('kbd')).toHaveText('F');
+  await expect(page.locator('#expression-buttons button').nth(1).locator('kbd')).toHaveCount(0);
+  await expect(page.locator('#motion-buttons button').first().locator('kbd')).toHaveText(
+    'Control+2',
+  );
+  await expect(page.locator('#motion-mode')).toHaveValue('default');
+  await page.locator('#motion-buttons button').first().click();
+  await expect
+    .poll(() => page.evaluate(() => (window as any).controlsStage?.held.ParamAngleX))
+    .toBeCloseTo(16, 2);
+  await page.locator('#motion-mode').selectOption('once');
+  await page.locator('#motion-buttons button').first().click();
+  await expect
+    .poll(() => page.evaluate(() => (window as any).controlsStage?.playing))
+    .toBeUndefined();
+  await expect
+    .poll(() => page.evaluate(() => (window as any).controlsStage.frame.ParamAngleX))
+    .toBeCloseTo(0, 2);
+  await expect(page.locator('#parameter-override-value')).toBeDisabled();
+  await page.locator('#parameter-override-enabled').click();
+  await page.locator('#parameter-override-value').press('End');
+  await expect(page.locator('#parameter-override-current')).toHaveText('30');
+  await expect
+    .poll(() => page.evaluate(() => (window as any).controlsStage.frame.ParamAngleX))
+    .toBe(30);
+  await expect
+    .poll(() => page.evaluate(() => (window as any).savedSettings?.parameterOverrides))
+    .toEqual({ ParamAngleX: 30 });
+  await expression.click();
+  await page.locator('#save-default-appearance').click();
+  await expect
+    .poll(() => page.evaluate(() => (window as any).savedSettings?.defaultExpressions))
+    .toEqual(['0']);
+  expect(
+    await page.evaluate(() => (window as any).savedSettings.defaultParameterOverrides),
+  ).toEqual({ ParamAngleX: 30 });
+  await page.locator('#parameter-override-value').press('Home');
+  await page.locator('#clear-expressions').click();
+  await expect(expression).toHaveAttribute('aria-pressed', 'false');
+  await expect
+    .poll(() => page.evaluate(() => (window as any).controlsStage.frame.ParamAngleX))
+    .toBe(-30);
+  await page.locator('#restore-default-appearance').click();
+  await expect(expression).toHaveAttribute('aria-pressed', 'true');
+  await expect(page.locator('#parameter-override-current')).toHaveText('30');
+  await expect
+    .poll(() => page.evaluate(() => (window as any).controlsStage.frame.ParamAngleX))
+    .toBe(30);
+  await page.locator('#restore-parameter-tracking').click();
+  await expect(page.locator('#parameter-override-enabled')).not.toBeChecked();
+  await expect(page.locator('#parameter-override-value')).toBeDisabled();
+  await expect
+    .poll(() => page.evaluate(() => (window as any).savedSettings?.parameterOverrides))
+    .toEqual({});
+  await expect
+    .poll(() => page.evaluate(() => (window as any).controlsStage.frame.ParamAngleX))
+    .toBeCloseTo(0, 2);
+  await page.locator('#clear-expressions').click();
   await expression.click();
   await expect(expression).toHaveAttribute('aria-pressed', 'true');
   await page.locator('#clear-expressions').click();
   await expect(expression).toHaveAttribute('aria-pressed', 'false');
   await page.getByRole('button', { name: '应用快捷键' }).click();
+  await expect(page.locator('#hotkey-action')).toHaveValue('expression:0');
+  await expect(page.locator('#hotkey-binding')).toHaveValue('KeyF');
+  await expect(page.locator('#hotkey-action option[value="expression:0"]')).toHaveText(
+    '表情 · F01 · F',
+  );
+  await expect(page.locator('#hotkey-release')).toBeChecked();
+  await expect(page.locator('#hotkey-seconds')).toHaveValue('5');
+  await expect(page.locator('#hotkey-fade-seconds')).toHaveValue('0.15');
+  await page.locator('#hotkey-binding').fill('G');
+  await page.locator('#save-hotkey').click();
+  await expect(expression.locator('kbd')).toHaveText('G');
+  await expect
+    .poll(() => page.evaluate(() => (window as any).savedSettings?.hotkeyOptions['expression:0']))
+    .toEqual({ scope: 'local', release: true, seconds: 5, fadeSeconds: 0.15 });
+  await page.keyboard.down('G');
+  await expect(expression).toHaveAttribute('aria-pressed', 'true');
+  await page.keyboard.up('G');
+  await expect(expression).toHaveAttribute('aria-pressed', 'false');
+  for (const [binding, error] of [
+    ['NoSuchKey', '无法识别'],
+    ['Control+2', '重复'],
+  ]) {
+    await page.locator('#hotkey-binding').fill(binding);
+    await page.locator('#save-hotkey').click();
+    await expect(page.locator('#notice')).toContainText(error);
+    await expect(page.locator('#notice')).toHaveClass(/error/);
+    expect(await page.evaluate(() => (window as any).savedSettings.hotkeys['expression:0'])).toBe(
+      'G',
+    );
+    await expect(expression.locator('kbd')).toHaveText('G');
+    await page.keyboard.down('G');
+    await expect(expression).toHaveAttribute('aria-pressed', 'true');
+    await page.keyboard.up('G');
+    await expect(expression).toHaveAttribute('aria-pressed', 'false');
+  }
+  await page.locator('#hotkey-release').click();
+  await page.locator('#hotkey-seconds').fill('0.5');
+  await page.locator('#hotkey-fade-seconds').fill('0.05');
+  await page.locator('#save-hotkey-options').click();
+  await expect
+    .poll(() => page.evaluate(() => (window as any).savedSettings?.hotkeyOptions['expression:0']))
+    .toEqual({ scope: 'local', seconds: 0.5, fadeSeconds: 0.05 });
+  await page.keyboard.press('G');
+  await expect(expression).toHaveAttribute('aria-pressed', 'true');
+  await expect(expression).toHaveAttribute('aria-pressed', 'false');
+  await page.locator('#hotkey-seconds').fill('-1');
+  await page.locator('#save-hotkey-options').click();
+  await expect(page.locator('#notice')).toHaveClass(/error/);
+  expect(
+    await page.evaluate(() => (window as any).savedSettings.hotkeyOptions['expression:0']),
+  ).toEqual({ scope: 'local', seconds: 0.5, fadeSeconds: 0.05 });
+  await page.locator('#clear-hotkey').click();
+  await expect(expression.locator('kbd')).toHaveCount(0);
+  await page.locator('#clear-expressions').click();
+  const motionAction = await page
+    .locator('#hotkey-action option')
+    .evaluateAll(
+      (options) =>
+        (options as HTMLOptionElement[]).find((option) => option.value.startsWith('motion:'))!
+          .value,
+    );
+  await page.locator('#hotkey-action').selectOption(motionAction);
+  await expect(page.locator('#hotkey-motion-mode')).toHaveValue('hold');
+  await expect(page.locator('#hotkey-fade-seconds')).toHaveValue('0.1');
+  await page.locator('#hotkey-binding').fill('Control+3');
+  await page.locator('#save-hotkey').click();
+  await expect
+    .poll(() =>
+      page.evaluate((id) => (window as any).savedSettings?.hotkeyOptions[id], motionAction),
+    )
+    .toEqual({ scope: 'local', motionMode: 'hold', fadeSeconds: 0.1 });
+  await page.locator('#hotkey-motion-mode').selectOption('once');
+  await page.locator('#hotkey-fade-seconds').fill('0');
+  await page.locator('#save-hotkey-options').click();
+  await expect
+    .poll(() =>
+      page.evaluate((id) => (window as any).savedSettings?.hotkeyOptions[id], motionAction),
+    )
+    .toEqual({ scope: 'local', motionMode: 'once', fadeSeconds: 0 });
+  await page.locator('#motion-mode').selectOption('default');
+  await page.locator('#motion-buttons button').first().click();
+  await expect
+    .poll(() => page.evaluate(() => (window as any).controlsStage?.playing))
+    .toBeUndefined();
+  await expect
+    .poll(() => page.evaluate(() => (window as any).controlsStage.frame.ParamAngleX))
+    .toBeCloseTo(0, 2);
   await page.locator('#hotkey-action').selectOption('clear-expressions');
   await page.locator('#hotkey-binding').fill('Control+Shift+1');
   await page.locator('#save-hotkey').click();
+  await expect(page.locator('#clear-expressions kbd')).toHaveText('Control+Shift+1');
   await expect
     .poll(() => page.evaluate(() => (window as any).savedSettings?.hotkeys['clear-expressions']))
     .toBe('Control+Shift+1');
@@ -1913,6 +2236,32 @@ test('model controls save profiles, expressions, shortcuts and a manual motion r
   await expect
     .poll(() => page.evaluate(() => (window as any).savedMotion?.Meta?.CurveCount ?? 0))
     .toBeGreaterThan(0);
+  await page.locator('#start').click();
+  await expect(page.locator('#tracking-status')).toHaveText('正在跟踪');
+  await page.evaluate(async () => {
+    const { NEUTRAL } = await import('/src/state.ts');
+    const tracker = (window as any).controlsTracker;
+    tracker.receive({ ...NEUTRAL });
+    (window as any).bodyOnlyFrames = 0;
+    (window as any).bodyOnlyTimer = setInterval(() => {
+      (window as any).bodyOnlyFrames++;
+      tracker.receive({ bodyYaw: 20, bodyPitch: 10, bodyRoll: 10 });
+    }, 30);
+  });
+  await expect
+    .poll(() => page.evaluate(() => (window as any).controlsStage.trackingLost))
+    .toBe(true);
+  expect(await page.evaluate(() => (window as any).bodyOnlyFrames)).toBeGreaterThan(5);
+  await page.evaluate(async () => {
+    clearInterval((window as any).bodyOnlyTimer);
+    const { NEUTRAL } = await import('/src/state.ts');
+    (window as any).controlsTracker.receive({ ...NEUTRAL });
+  });
+  await expect
+    .poll(() => page.evaluate(() => (window as any).controlsStage.trackingLost))
+    .toBe(false);
+  await page.locator('#start').click();
+  await expect(page.locator('#tracking-status')).toHaveText('尚未开始');
   await page.screenshot({ path: testInfo.outputPath('studio-model-controls.png') });
   await page.getByRole('button', { name: '角色库', exact: true }).click();
   await page.locator('.library-actions').getByRole('button', { name: '打开角色文件夹' }).click();
@@ -1945,7 +2294,13 @@ test('model controls save profiles, expressions, shortcuts and a manual motion r
   ).toContain(0);
   await expect(page.locator('#notice')).not.toHaveClass(/error/);
   expect(await page.evaluate(() => (window as any).autoVtsReads)).toBe(2);
+  expect(await page.evaluate(() => (window as any).savedSettings.parameterOverrides)).toEqual({
+    ParamAngleX: 30,
+  });
   await page.getByRole('button', { name: '角色', exact: true }).click();
+  await expect(expression).toHaveAttribute('aria-pressed', 'true');
+  await expect(page.locator('#model-advanced')).not.toHaveAttribute('open', '');
+  await page.locator('#model-advanced > summary').click();
   await page.locator('#import-vts').click();
   await expect
     .poll(() => page.evaluate(() => (window as any).savedSettings?.mappings.ParamAngleY?.inputMin))
@@ -2145,7 +2500,9 @@ test('character library generates avatars before selection, imports drops and re
     expect(pixels.top, `${models[index].name} avatar top margin`).toBeLessThan(52);
   }
   await page.getByRole('button', { name: '角色', exact: true }).click();
+  await page.locator('#model-advanced > summary').click();
   await page.locator('#mapping-parameter').selectOption('PARAM_ANGLE_X');
+  await page.getByRole('button', { name: '跟踪映射', exact: true }).click();
   await page.locator('#mapping-inputMin').fill('-0.4');
   await page.locator('#save-mapping').click();
   await expect
@@ -2688,6 +3045,7 @@ test('props-only scenes support dragging, saving, recall, visibility shortcuts a
     layers.getByRole('button', { name: '1 · Color flag（隐藏）', exact: true }),
   ).toHaveAttribute('aria-pressed', 'true');
   await page.getByRole('button', { name: '角色', exact: true }).click();
+  await page.locator('#model-advanced > summary').click();
   await page.getByRole('button', { name: '应用快捷键', exact: true }).click();
   const action = await page
     .locator('#hotkey-action option')
@@ -2746,6 +3104,139 @@ test('props-only scenes support dragging, saving, recall, visibility shortcuts a
   await expect(layers.getByRole('button')).toHaveCount(2);
   await expect(mainLayer).toHaveAttribute('aria-pressed', 'true');
   expect(await page.evaluate(() => (window as any).savedSettings?.modelPath ?? '')).toBe('');
+});
+
+test('model switches restore default appearance without releasing the new model expression', async ({
+  page,
+}) => {
+  const root = resolve('vendor/models/Haru');
+  const files = readdirSync(root, { recursive: true, withFileTypes: true })
+    .filter((entry) => entry.isFile())
+    .map((entry) => resolve(entry.parentPath, entry.name).slice(root.length + 1));
+  const models = ['a', 'b'].map((id) => ({
+    id,
+    name: `Model ${id}`,
+    path: `/model-switch/${id}/Haru.model3.json`,
+    entry: 'Haru.model3.json',
+    files,
+  }));
+  await page.route('**/switch-model/**', (route) => {
+    const resource = decodeURIComponent(
+      new URL(route.request().url()).pathname.slice('/switch-model/'.length),
+    );
+    return files.includes(resource)
+      ? route.fulfill({ path: resolve(root, resource) })
+      : route.abort();
+  });
+  await page.goto('/?output=1');
+  await page.evaluate(async (models) => {
+    const { createStudio } = await import('/src/studio.ts');
+    const { mockIPC, mockWindows } = await import('/node_modules/@tauri-apps/api/mocks.js');
+    (window as any).isTauri = true;
+    mockWindows('main');
+    const hotkeys = { 'expression:0': 'KeyF' };
+    const hotkeyOptions = {
+      'expression:0': { scope: 'local', release: true, fadeSeconds: 0 },
+    };
+    mockIPC(
+      async (cmd: string, args: { path: string; resource: string }) => {
+        if (cmd === 'load_settings')
+          return {
+            modelPath: models[0].path,
+            hotkeys,
+            hotkeyOptions,
+            profiles: {
+              [models[1].path]: {
+                hotkeys,
+                hotkeyOptions,
+                defaultExpressions: ['0'],
+                defaultParameterOverrides: { ParamAngleX: 12 },
+              },
+            },
+            scenes: [
+              {
+                id: 'b',
+                name: 'Model B scene',
+                modelPath: models[1].path,
+                background: '#ffffff',
+                placement: { x: 0, y: 0, zoom: 1, rotation: 0 },
+                composition: { items: [] },
+              },
+            ],
+          };
+        if (cmd === 'load_model') return models.find((model) => model.path === args.path);
+        if (cmd === 'list_models') return { models: [], directory: '/models', errors: [] };
+        if (cmd === 'read_model_resource')
+          return (await fetch('/switch-model/' + encodeURI(args.resource))).arrayBuffer();
+        if (cmd === 'read_model_preview') return new ArrayBuffer(0);
+        if (cmd.startsWith('plugin:virtual-camera|'))
+          return { supported: false, installed: false, active: false, message: 'Test' };
+      },
+      { shouldMockEvents: true },
+    );
+    const container = document.createElement('div');
+    container.style.cssText = 'position:fixed;inset:0;width:500px;height:500px';
+    document.body.append(container);
+    const studio = createStudio(container, document.createElement('video'), () => {});
+    (window as any).modelSwitch = { studio, container };
+  }, models);
+  const snapshot = () =>
+    page.evaluate(() => {
+      const view = (window as any).modelSwitch.studio.snapshot();
+      return {
+        ready: view.ready,
+        path: view.model?.path,
+        active: [...view.activeExpressions],
+        overrides: view.settings.parameterOverrides,
+        defaults: view.settings.defaultParameterOverrides,
+      };
+    });
+  try {
+    await expect.poll(async () => (await snapshot()).ready).toBe(true);
+    expect((await snapshot()).path).toBe(models[0].path);
+    // Rebinding held keys emits a synthetic keyup; it must still belong to model A.
+    await page.keyboard.down('f');
+    await expect.poll(async () => (await snapshot()).active).toEqual(['0']);
+    await page.evaluate(async (path) => {
+      await (window as any).modelSwitch.studio.actions.recentModel(path);
+    }, models[1].path);
+    expect(await snapshot()).toEqual({
+      ready: true,
+      path: models[1].path,
+      active: ['0'],
+      overrides: { ParamAngleX: 12 },
+      defaults: { ParamAngleX: 12 },
+    });
+    await page.keyboard.up('f');
+    expect((await snapshot()).active).toEqual(['0']);
+    await page.evaluate(async (path) => {
+      const { actions } = (window as any).modelSwitch.studio;
+      actions.setParameterOverride('ParamAngleX', -12);
+      await actions.recentModel(path);
+    }, models[0].path);
+    expect((await snapshot()).path).toBe(models[0].path);
+    // Scene recall must discard B's temporary tuning and preserve its default expression.
+    await page.keyboard.down('f');
+    await expect.poll(async () => (await snapshot()).active).toEqual(['0']);
+    await page.evaluate(async () => {
+      await (window as any).modelSwitch.studio.actions.recallScene('b');
+    });
+    expect(await snapshot()).toEqual({
+      ready: true,
+      path: models[1].path,
+      active: ['0'],
+      overrides: { ParamAngleX: 12 },
+      defaults: { ParamAngleX: 12 },
+    });
+    await page.keyboard.up('f');
+    expect((await snapshot()).active).toEqual(['0']);
+  } finally {
+    await page.evaluate(() => {
+      const { studio, container } = (window as any).modelSwitch;
+      studio.destroy();
+      container.remove();
+    });
+  }
 });
 
 test('attached dragging follows the pointer and scene recall preserves the live frame while loading fails', async ({

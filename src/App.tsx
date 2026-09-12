@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { DropdownMenu } from 'radix-ui';
 import {
   Image,
@@ -1162,121 +1162,49 @@ export function App() {
   );
 }
 
+function hotkeyLabel(binding = '') {
+  return binding.replace(/\b(?:Key|Digit)(?=[A-Z0-9]\b)/g, '');
+}
+
+function HotkeyHint({ binding }: { binding?: string }) {
+  return binding ? (
+    <kbd className="rounded border px-1 text-[0.85em] opacity-70" title="应用窗口激活时可用">
+      {hotkeyLabel(binding)}
+    </kbd>
+  ) : null;
+}
+
 function ModelControls({ view, actions: a }: { view: StudioView; actions: Studio['actions'] }) {
   const [parameterId, setParameter] = useState(view.parameters[0]?.id ?? '');
-  const [hotkeyId, setHotkey] = useState('stop-motion');
-  const [mode, setMode] = useState<MotionMode>(a.motionMode);
-  const parameter = view.parameters.find((p) => p.id === parameterId);
+  const [parameterSearch, setParameterSearch] = useState('');
+  const [parameterGroup, setParameterGroup] = useState('');
+  const groups = useMemo(
+    () => [...new Set(view.parameters.map((p) => p.group || '未分组'))].sort(),
+    [view.parameters],
+  );
+  const parameters = useMemo(() => {
+    const query = parameterSearch.trim().toLocaleLowerCase();
+    return view.parameters.filter(
+      (p) =>
+        (!parameterGroup || (p.group || '未分组') === parameterGroup) &&
+        (!query ||
+          [p.id, p.name, parameterNames[p.id], p.group].some((text) =>
+            text?.toLocaleLowerCase().includes(query),
+          )),
+    );
+  }, [view.parameters, parameterSearch, parameterGroup]);
+  const [hotkeyId, setHotkey] = useState(
+    () =>
+      [
+        ...view.expressions.map((e) => `expression:${e.id}`),
+        ...view.motions.map((m) => `motion:${m.id}`),
+      ].find((id) => view.settings.hotkeys[id]) ?? 'stop-motion',
+  );
+  const [mode, setMode] = useState<MotionMode | 'default'>('default');
+  const parameter = parameters.find((p) => p.id === parameterId) ?? parameters[0];
   const run = a.run;
   return (
     <>
-      <div className="section-title">
-        <h2>角色参数</h2>
-        <Button
-          id="reset-profile"
-          variant="ghost"
-          size="sm"
-          disabled={!view.model}
-          onClick={() => run(a.resetProfile)}
-        >
-          重置本模型
-        </Button>
-      </div>
-      <p className="hint">映射、校准、构图、表情快捷键和待机设置按模型自动保存。</p>
-      <Button
-        id="import-vts"
-        variant="outline"
-        disabled={!view.model || view.modelLoading || view.sceneBusy}
-        onClick={() => run(a.importVts)}
-      >
-        导入 VTube Studio 配置
-      </Button>
-      <p className="hint">选择当前模型的 .vtube.json，合并可兼容的映射、快捷键和待机设置。</p>
-      {!!view.settings.vtsImportReport.length && (
-        <Fold title="VTS 导入结果">
-          {view.settings.vtsImportReport.map((line, index) => (
-            <p key={index} className="hint">
-              {line}
-            </p>
-          ))}
-        </Fold>
-      )}
-      <label htmlFor="mapping-parameter">输出参数</label>
-      <Select
-        id="mapping-parameter"
-        disabled={!view.parameters.length}
-        value={parameterId}
-        onChange={(e) => setParameter(e.target.value)}
-      >
-        {!view.parameters.length && <option value="">加载模型后可用</option>}
-        {view.parameters.map((p) => (
-          <option key={p.id} value={p.id}>
-            {parameterNames[p.id] ?? p.id} ({p.id})
-          </option>
-        ))}
-      </Select>
-      {parameter && (
-        <MappingEditor
-          key={`${parameterId}:${view.profileRevision}`}
-          parameter={parameter}
-          view={view}
-          actions={a}
-        />
-      )}
-      <Fold title="物理效果">
-        {!view.physicsGroups.length ? (
-          <p className="hint">当前模型没有可调节的物理组。</p>
-        ) : (
-          <>
-            <Range
-              id="physicsStrength"
-              label="整体强度"
-              value={view.settings.physicsStrength}
-              min={0}
-              max={2}
-              step={0.05}
-              onChange={(value) => a.setSetting('physicsStrength', value)}
-            />
-            <Range
-              id="physicsWind"
-              label="横向风力"
-              value={view.settings.physicsWind}
-              min={-2}
-              max={2}
-              step={0.05}
-              onChange={(value) => a.setSetting('physicsWind', value)}
-            />
-            <label htmlFor="physics-fps">物理计算帧率</label>
-            <Select
-              id="physics-fps"
-              value={view.settings.physicsFps}
-              onChange={(e) => a.setSetting('physicsFps', Number(e.target.value) as 0 | 30 | 60)}
-            >
-              <option value="0">跟随画面帧率</option>
-              <option value="30">30 FPS</option>
-              <option value="60">60 FPS</option>
-            </Select>
-            {view.physicsGroups.map((group) => (
-              <Range
-                key={group.id}
-                id={`physics-group-${group.id}`}
-                label={group.name}
-                value={view.settings.physicsGroups[group.id] ?? 1}
-                min={0}
-                max={2}
-                step={0.05}
-                onChange={(value) =>
-                  a.setSetting('physicsGroups', {
-                    ...view.settings.physicsGroups,
-                    [group.id]: value,
-                  })
-                }
-              />
-            ))}
-          </>
-        )}
-      </Fold>
-      <div className="divider" />
       <div className="section-title">
         <h2>表情</h2>
         <Button
@@ -1286,8 +1214,19 @@ function ModelControls({ view, actions: a }: { view: StudioView; actions: Studio
           onClick={() => run(() => a.modelAction('clear-expressions'))}
         >
           全部关闭
+          <HotkeyHint binding={view.settings.hotkeys['clear-expressions']} />
         </Button>
       </div>
+      {!!view.model?.vtsResources?.warnings.length && (
+        <div role="status">
+          <p className="hint">模型资源提示</p>
+          {view.model.vtsResources.warnings.map((warning, index) => (
+            <p key={index} className="hint">
+              {warning}
+            </p>
+          ))}
+        </div>
+      )}
       <div id="expression-buttons" className="button-list">
         {view.expressions.map((e) => (
           <Button
@@ -1298,13 +1237,38 @@ function ModelControls({ view, actions: a }: { view: StudioView; actions: Studio
             onClick={() => run(() => a.modelAction(`expression:${e.id}`))}
           >
             {e.name}
+            <HotkeyHint binding={view.settings.hotkeys[`expression:${e.id}`]} />
           </Button>
         ))}
         {!view.expressions.length && (
           <p className="hint">{view.model ? '模型未提供此类资源。' : '加载模型后可用。'}</p>
         )}
       </div>
-      <p className="hint">再次点击关闭，可同时启用多个模型表情。</p>
+      <p className="hint">
+        点击表情按钮切换，再次点击关闭；按钮旁显示已绑定的快捷键，可在「进阶设置 →
+        应用快捷键」修改。
+      </p>
+      <div className="two-fields">
+        <Button
+          id="save-default-appearance"
+          variant="outline"
+          disabled={!view.model}
+          onClick={() => run(a.saveDefaultAppearance)}
+        >
+          保存默认外观
+        </Button>
+        <Button
+          id="restore-default-appearance"
+          variant="outline"
+          disabled={!view.model}
+          onClick={() => run(a.restoreDefaultAppearance)}
+        >
+          恢复默认外观
+        </Button>
+      </div>
+      <p className="hint">
+        保存当前启用的表情和手动参数；恢复时回到已保存的外观。手动参数可在进阶设置中调整。
+      </p>
       <div className="divider" />
       <div className="section-title">
         <h2>动作与待机</h2>
@@ -1315,101 +1279,301 @@ function ModelControls({ view, actions: a }: { view: StudioView; actions: Studio
           onClick={() => run(() => a.modelAction('stop-motion'))}
         >
           停止动作
+          <HotkeyHint binding={view.settings.hotkeys['stop-motion']} />
         </Button>
       </div>
-      <label htmlFor="motion-mode">播放方式</label>
-      <Select
-        id="motion-mode"
-        value={mode}
-        onChange={(e) => {
-          const next = e.target.value as MotionMode;
-          a.motionMode = next;
-          setMode(next);
-        }}
-      >
-        <option value="once">单次</option>
-        <option value="loop">循环</option>
-        <option value="hold">保持末帧</option>
-      </Select>
       <div id="motion-buttons" className="button-list">
         {view.motions.map((m) => (
           <Button
             key={m.id}
             variant="outline"
-            onClick={() => run(() => a.modelAction(`motion:${m.id}`, mode))}
+            onClick={() =>
+              run(() =>
+                a.modelAction(
+                  `motion:${m.id}`,
+                  mode === 'default'
+                    ? (view.settings.hotkeyOptions[`motion:${m.id}`]?.motionMode ?? 'once')
+                    : mode,
+                ),
+              )
+            }
           >
             {m.name}
+            <HotkeyHint binding={view.settings.hotkeys[`motion:${m.id}`]} />
           </Button>
         ))}
         {!view.motions.length && (
           <p className="hint">{view.model ? '模型未提供此类资源。' : '加载模型后可用。'}</p>
         )}
       </div>
-      <label htmlFor="idle-motion">待机动作</label>
-      <Select
-        id="idle-motion"
-        value={view.settings.idleMotion}
-        onChange={(e) => a.setSetting('idleMotion', e.target.value)}
-      >
-        <option value="">不播放</option>
-        {view.motions.map((m) => (
-          <option key={m.id} value={m.id}>
-            {m.name}
-          </option>
-        ))}
-      </Select>
-      <Toggle
-        id="autoBlink"
-        label="未跟踪眼睛时自动眨眼"
-        checked={view.settings.autoBlink}
-        onChange={(value) => a.setSetting('autoBlink', value)}
-      />
-      <Fold title="应用快捷键">
-        <p className="hint">
-          选择动作后填写按键，如 Space 或
-          Control+Shift+1。仅在应用窗口激活时生效，输入文字时不触发；表情再次触发会关闭。
-        </p>
-        <label htmlFor="hotkey-action">操作</label>
-        <Select id="hotkey-action" value={hotkeyId} onChange={(e) => setHotkey(e.target.value)}>
-          <option value="toggle-tracking">开始 / 停止跟踪</option>
-          <option value="calibrate">校准中立姿态</option>
-          <option value="toggle-mic">开启 / 关闭麦克风口型</option>
-          <option value="toggle-model">显示 / 隐藏主角色</option>
-          <option value="toggle-camera">启动 / 停止虚拟摄像头</option>
-          <option value="pause-tracking">暂停 / 恢复跟踪</option>
-          <option value="stop-tracking">停止跟踪并释放采集设备</option>
-          <option value="reset-display">复位角色构图</option>
-          <option value="open-output">打开输出窗口</option>
-          {view.settings.scenes.map((scene) => (
-            <option key={scene.id} value={`scene:${scene.id}`}>
-              场景 · {scene.name}
-            </option>
-          ))}
-          {view.settings.composition.items.map((item) => (
-            <option key={item.id} value={`item:${item.id}`}>
-              显示 / 隐藏 · {item.name}
-            </option>
-          ))}
-          <option value="stop-motion">停止动作</option>
-          <option value="clear-expressions">关闭全部表情</option>
-          {view.expressions.map((e) => (
-            <option key={e.id} value={`expression:${e.id}`}>
-              表情 · {e.name}
-            </option>
-          ))}
-          {view.motions.map((m) => (
-            <option key={m.id} value={`motion:${m.id}`}>
-              动作 · {m.name}
-            </option>
-          ))}
-        </Select>
-        <HotkeyEditor
-          key={`${hotkeyId}:${view.profileRevision}`}
-          id={hotkeyId}
-          view={view}
-          actions={a}
-        />
-      </Fold>
+      <details id="model-advanced" className="fold model-advanced">
+        <summary>进阶设置</summary>
+        <div className="fold-content">
+          <div className="section-title">
+            <h2>角色参数</h2>
+            <Button
+              id="reset-profile"
+              variant="ghost"
+              size="sm"
+              disabled={!view.model}
+              onClick={() => run(a.resetProfile)}
+            >
+              重置本模型
+            </Button>
+          </div>
+          <p className="hint">手动参数、映射、校准、构图、快捷键和待机设置按模型自动保存。</p>
+          <Button
+            id="import-vts"
+            variant="outline"
+            disabled={!view.model || view.modelLoading || view.sceneBusy}
+            onClick={() => run(a.importVts)}
+          >
+            导入 VTube Studio 配置
+          </Button>
+          <p className="hint">选择当前模型的 .vtube.json，合并可兼容的映射、快捷键和待机设置。</p>
+          {!!view.settings.vtsImportReport.length && (
+            <Fold title="VTS 导入结果">
+              {view.settings.vtsImportReport.map((line, index) => (
+                <p key={index} className="hint">
+                  {line}
+                </p>
+              ))}
+            </Fold>
+          )}
+          <div className="divider" />
+          <div className="section-title">
+            <h2>手动参数与映射</h2>
+          </div>
+          <p className="hint">
+            可按名称、参数 ID
+            或分组搜索。手动固定值优先于跟踪、表情和动作；关闭后恢复模型原有驱动。吐舌等当前引擎没有信号的参数也可手动调整。
+          </p>
+          <label htmlFor="parameter-search">搜索参数</label>
+          <Input
+            id="parameter-search"
+            type="search"
+            placeholder="名称、ID 或分组"
+            value={parameterSearch}
+            onChange={(e) => setParameterSearch(e.target.value)}
+          />
+          <label htmlFor="parameter-group">参数分组</label>
+          <Select
+            id="parameter-group"
+            value={parameterGroup}
+            onChange={(e) => setParameterGroup(e.target.value)}
+            disabled={!view.parameters.length}
+          >
+            <option value="">全部分组</option>
+            {groups.map((group) => (
+              <option key={group} value={group}>
+                {group}
+              </option>
+            ))}
+          </Select>
+          <label htmlFor="mapping-parameter">输出参数（{parameters.length}）</label>
+          <Select
+            id="mapping-parameter"
+            disabled={!parameters.length}
+            value={parameter?.id ?? ''}
+            onChange={(e) => setParameter(e.target.value)}
+          >
+            {!parameters.length && (
+              <option value="">
+                {view.parameters.length ? '没有匹配的参数' : '加载模型后可用'}
+              </option>
+            )}
+            {parameters.map((p) => (
+              <option key={p.id} value={p.id}>
+                {p.name || parameterNames[p.id] || p.id}
+                {p.name || parameterNames[p.id] ? ` (${p.id})` : ''}
+              </option>
+            ))}
+          </Select>
+          {parameter && (
+            <>
+              <ParameterOverride parameter={parameter} view={view} actions={a} />
+              <Fold title="跟踪映射">
+                <MappingEditor
+                  key={`${parameter.id}:${view.profileRevision}`}
+                  parameter={parameter}
+                  view={view}
+                  actions={a}
+                />
+              </Fold>
+            </>
+          )}
+          <Fold title="物理效果">
+            {!view.physicsGroups.length ? (
+              <p className="hint">当前模型没有可调节的物理组。</p>
+            ) : (
+              <>
+                <Range
+                  id="physicsStrength"
+                  label="整体强度"
+                  value={view.settings.physicsStrength}
+                  min={0}
+                  max={2}
+                  step={0.05}
+                  onChange={(value) => a.setSetting('physicsStrength', value)}
+                />
+                <Range
+                  id="physicsWind"
+                  label="横向风力"
+                  value={view.settings.physicsWind}
+                  min={-2}
+                  max={2}
+                  step={0.05}
+                  onChange={(value) => a.setSetting('physicsWind', value)}
+                />
+                <label htmlFor="physics-fps">物理计算帧率</label>
+                <Select
+                  id="physics-fps"
+                  value={view.settings.physicsFps}
+                  onChange={(e) =>
+                    a.setSetting('physicsFps', Number(e.target.value) as 0 | 30 | 60)
+                  }
+                >
+                  <option value="0">跟随画面帧率</option>
+                  <option value="30">30 FPS</option>
+                  <option value="60">60 FPS</option>
+                </Select>
+                {view.physicsGroups.map((group) => (
+                  <Range
+                    key={group.id}
+                    id={`physics-group-${group.id}`}
+                    label={group.name}
+                    value={view.settings.physicsGroups[group.id] ?? 1}
+                    min={0}
+                    max={2}
+                    step={0.05}
+                    onChange={(value) =>
+                      a.setSetting('physicsGroups', {
+                        ...view.settings.physicsGroups,
+                        [group.id]: value,
+                      })
+                    }
+                  />
+                ))}
+              </>
+            )}
+          </Fold>
+          <div className="divider" />
+          <div className="section-title">
+            <h2>动作设置</h2>
+          </div>
+          <label htmlFor="motion-mode">播放方式</label>
+          <Select
+            id="motion-mode"
+            value={mode}
+            onChange={(e) => {
+              const next = e.target.value as MotionMode | 'default';
+              a.motionMode = next === 'default' ? 'once' : next;
+              setMode(next);
+            }}
+          >
+            <option value="default">跟随动作设置</option>
+            <option value="once">单次</option>
+            <option value="loop">循环</option>
+            <option value="hold">保持末帧</option>
+          </Select>
+          <label htmlFor="idle-motion">待机动作</label>
+          <Select
+            id="idle-motion"
+            value={view.settings.idleMotion}
+            onChange={(e) => a.setSetting('idleMotion', e.target.value)}
+          >
+            <option value="">不播放</option>
+            {view.motions.map((m) => (
+              <option key={m.id} value={m.id}>
+                {m.name}
+              </option>
+            ))}
+          </Select>
+          <label htmlFor="lost-idle-motion">跟踪丢失时的待机动作</label>
+          <Select
+            id="lost-idle-motion"
+            value={view.settings.lostIdleMotion}
+            onChange={(e) => a.setSetting('lostIdleMotion', e.target.value)}
+          >
+            <option value="">跟随普通待机</option>
+            {view.motions.map((m) => (
+              <option key={m.id} value={m.id}>
+                {m.name}
+              </option>
+            ))}
+          </Select>
+          <Toggle
+            id="motion-sound"
+            label="播放动作附带的声音"
+            checked={view.settings.motionSound}
+            onChange={(value) => a.setSetting('motionSound', value)}
+          />
+          <Toggle
+            id="autoBlink"
+            label="未跟踪眼睛时自动眨眼"
+            checked={view.settings.autoBlink}
+            onChange={(value) => a.setSetting('autoBlink', value)}
+          />
+          <Fold title="应用快捷键">
+            <p className="hint">
+              选择动作后填写按键，如 Space 或
+              Control+Shift+1。仅在应用窗口激活时生效，输入文字时不触发。表情的按住、定时和过渡行为可单独设置。
+            </p>
+            <label htmlFor="hotkey-action">操作</label>
+            <Select id="hotkey-action" value={hotkeyId} onChange={(e) => setHotkey(e.target.value)}>
+              <option value="toggle-tracking">开始 / 停止跟踪</option>
+              <option value="calibrate">校准中立姿态</option>
+              <option value="toggle-mic">开启 / 关闭麦克风口型</option>
+              <option value="toggle-model">显示 / 隐藏主角色</option>
+              <option value="toggle-camera">启动 / 停止虚拟摄像头</option>
+              <option value="pause-tracking">暂停 / 恢复跟踪</option>
+              <option value="stop-tracking">停止跟踪并释放采集设备</option>
+              <option value="reset-display">复位角色构图</option>
+              <option value="open-output">打开输出窗口</option>
+              {view.settings.scenes.map((scene) => (
+                <option key={scene.id} value={`scene:${scene.id}`}>
+                  场景 · {scene.name}
+                </option>
+              ))}
+              {view.settings.composition.items.map((item) => (
+                <option key={item.id} value={`item:${item.id}`}>
+                  显示 / 隐藏 · {item.name}
+                </option>
+              ))}
+              <option value="stop-motion">
+                停止动作
+                {view.settings.hotkeys['stop-motion'] &&
+                  ` · ${hotkeyLabel(view.settings.hotkeys['stop-motion'])}`}
+              </option>
+              <option value="clear-expressions">
+                关闭全部表情
+                {view.settings.hotkeys['clear-expressions'] &&
+                  ` · ${hotkeyLabel(view.settings.hotkeys['clear-expressions'])}`}
+              </option>
+              {view.expressions.map((e) => (
+                <option key={e.id} value={`expression:${e.id}`}>
+                  表情 · {e.name}
+                  {view.settings.hotkeys[`expression:${e.id}`] &&
+                    ` · ${hotkeyLabel(view.settings.hotkeys[`expression:${e.id}`])}`}
+                </option>
+              ))}
+              {view.motions.map((m) => (
+                <option key={m.id} value={`motion:${m.id}`}>
+                  动作 · {m.name}
+                  {view.settings.hotkeys[`motion:${m.id}`] &&
+                    ` · ${hotkeyLabel(view.settings.hotkeys[`motion:${m.id}`])}`}
+                </option>
+              ))}
+            </Select>
+            <HotkeyEditor
+              key={`${hotkeyId}:${view.profileRevision}`}
+              id={hotkeyId}
+              view={view}
+              actions={a}
+            />
+          </Fold>
+        </div>
+      </details>
       <div className="divider" />
       <div className="section-title">
         <h2>动作录制</h2>
@@ -1440,6 +1604,60 @@ function ModelControls({ view, actions: a }: { view: StudioView; actions: Studio
     </>
   );
 }
+function ParameterOverride({
+  parameter,
+  view,
+  actions,
+}: {
+  parameter: StudioView['parameters'][number];
+  view: StudioView;
+  actions: Studio['actions'];
+}) {
+  const enabled = Object.hasOwn(view.settings.parameterOverrides, parameter.id);
+  const value = view.settings.parameterOverrides[parameter.id] ?? parameter.default;
+  return (
+    <div id="parameter-override">
+      <p className="hint">
+        {parameter.group || '未分组'} · {parameter.id}
+      </p>
+      <Toggle
+        id="parameter-override-enabled"
+        label="手动固定此参数"
+        checked={enabled}
+        onChange={(checked) => actions.setParameterOverride(parameter.id, checked ? value : null)}
+      />
+      <div className="slider-label">
+        <label htmlFor="parameter-override-value">固定值</label>
+        <output id="parameter-override-current" htmlFor="parameter-override-value">
+          {Number(value.toFixed(3))}
+        </output>
+      </div>
+      <input
+        id="parameter-override-value"
+        className="parameter-slider"
+        type="range"
+        min={parameter.min}
+        max={parameter.max}
+        step={(parameter.max - parameter.min) / 1000 || 0.001}
+        value={value}
+        disabled={!enabled || parameter.min === parameter.max}
+        onChange={(e) => actions.setParameterOverride(parameter.id, e.target.valueAsNumber)}
+      />
+      <p className="hint">
+        范围 {parameter.min} 至 {parameter.max} · 模型默认值 {parameter.default}
+      </p>
+      <Button
+        id="restore-parameter-tracking"
+        variant="outline"
+        disabled={!enabled}
+        onClick={() => actions.setParameterOverride(parameter.id, null)}
+      >
+        恢复跟踪 / 动作驱动
+      </Button>
+    </div>
+  );
+}
+
 function HotkeyEditor({
   id,
   view,
@@ -1455,6 +1673,16 @@ function HotkeyEditor({
   const [binding, setBinding] = useState(
     (global ? view.settings.globalHotkeys : view.settings.hotkeys)[id] ?? '',
   );
+  const options = view.settings.hotkeyOptions[id] ?? { scope: 'local' as const };
+  const expression = id.startsWith('expression:');
+  const motion = id.startsWith('motion:');
+  const fade = expression || motion || id === 'clear-expressions';
+  const [release, setRelease] = useState(options.release ?? false);
+  const [seconds, setSeconds] = useState(String(options.seconds ?? 0));
+  const [fadeSeconds, setFadeSeconds] = useState(
+    options.fadeSeconds === undefined ? '' : String(options.fadeSeconds),
+  );
+  const [motionMode, setMotionMode] = useState(options.motionMode ?? 'once');
   return (
     <>
       <label htmlFor="hotkey-binding">组合键</label>
@@ -1486,6 +1714,76 @@ function HotkeyEditor({
           清除
         </Button>
       </div>
+      {expression && (
+        <>
+          <Toggle
+            id="hotkey-release"
+            label="按住时启用，松开关闭"
+            checked={release}
+            onChange={setRelease}
+          />
+          <label htmlFor="hotkey-seconds">自动关闭（秒，0 为不自动关闭）</label>
+          <Input
+            id="hotkey-seconds"
+            type="number"
+            min="0"
+            max="3600"
+            step="0.1"
+            value={seconds}
+            onChange={(e) => setSeconds(e.target.value)}
+          />
+        </>
+      )}
+      {fade && (
+        <>
+          <label htmlFor="hotkey-fade-seconds">淡入淡出（秒，留空跟随资源）</label>
+          <Input
+            id="hotkey-fade-seconds"
+            type="number"
+            min="0"
+            max="10"
+            step="0.05"
+            value={fadeSeconds}
+            onChange={(e) => setFadeSeconds(e.target.value)}
+          />
+        </>
+      )}
+      {motion && (
+        <>
+          <label htmlFor="hotkey-motion-mode">此动作的播放方式</label>
+          <Select
+            id="hotkey-motion-mode"
+            value={motionMode}
+            onChange={(e) => setMotionMode(e.target.value as 'once' | 'hold')}
+          >
+            <option value="once">单次</option>
+            <option value="hold">保持末帧</option>
+          </Select>
+          <p className="hint">动作按钮的播放方式为「跟随动作设置」时，也使用此设置。</p>
+        </>
+      )}
+      {(fade || motion) && (
+        <Button
+          id="save-hotkey-options"
+          variant="outline"
+          disabled={!view.model}
+          onClick={() =>
+            actions.run(() =>
+              actions.applyHotkeyOptions(id, {
+                ...options,
+                scope: 'local',
+                ...(expression ? { release, seconds: Number(seconds) } : {}),
+                ...(fade
+                  ? { fadeSeconds: fadeSeconds.trim() === '' ? undefined : Number(fadeSeconds) }
+                  : {}),
+                ...(motion ? { motionMode } : {}),
+              }),
+            )
+          }
+        >
+          应用行为设置
+        </Button>
+      )}
     </>
   );
 }
@@ -1510,6 +1808,7 @@ function MappingEditor({
     };
   const [source, setSource] = useState<FaceKey>(initial.source);
   const [enabled, setEnabled] = useState(initial.enabled);
+  const [clamp, setClamp] = useState(initial.clamp ?? true);
   const [numbers, setNumbers] = useState({
     inputMin: String(initial.inputMin),
     inputMax: String(initial.inputMax),
@@ -1555,6 +1854,12 @@ function MappingEditor({
             </option>
           ))}
         </Select>
+        <Toggle
+          id="mapping-clamp"
+          label="将输入限制在映射范围内"
+          checked={clamp}
+          onChange={setClamp}
+        />
         <div className="two-fields">
           {field('inputMin', '输入下限')}
           {field('inputMax', '输入上限')}
@@ -1572,6 +1877,7 @@ function MappingEditor({
                 actions.saveMapping(parameter.id, {
                   source,
                   enabled,
+                  clamp,
                   ...Object.fromEntries(
                     Object.entries(numbers).map(([key, value]) => [
                       key,

@@ -67,6 +67,10 @@ int wmain(int argc, wchar_t** argv) {
     check(NvAR_SetCudaStream(handle, NvAR_Parameter_Config(CUDAStream), nullptr), "Set CUDA stream");
     check(NvAR_SetU32(handle, NvAR_Parameter_Config(Temporal), 0x37), "Set temporal filter");
     check(NvAR_SetU32(handle, NvAR_Parameter_Config(PoseMode), 0), "Set rotational pose");
+    // Older SDKs can still track the face without the experimental cheek coefficients.
+    const auto cheek_status = NvAR_SetU32(handle, NvAR_Parameter_Config(EnableCheekPuff), 1);
+    if (cheek_status != NVCV_SUCCESS)
+      std::cerr << "Cheek puff unavailable: " << static_cast<int>(cheek_status) << '\n';
     check(NvAR_Load(handle), "Load FaceExpressions models");
 
     unsigned count = 0;

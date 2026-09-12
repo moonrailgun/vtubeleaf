@@ -27,6 +27,8 @@ test('NVIDIA expressions, independent brows and quaternion use the existing face
     [45, 0.6],
     [46, 0.4],
     [2, 0.7],
+    [6, 0.8],
+    [7, 0.4],
     [1, 0.2],
     [16, 0.8],
     [40, 0.6],
@@ -42,6 +44,8 @@ test('NVIDIA expressions, independent brows and quaternion use the existing face
   assert.equal(face.browRight, -0.2);
   assert.equal(face.gazeX, 0.4);
   assert.equal(face.mouthX, 0.6);
+  assert.ok(Math.abs(face.cheekPuff! - 0.6) < 1e-6);
+  assert.equal(face.tongueOut, undefined);
   const sine = Math.sin(Math.PI / 12),
     cosine = Math.cos(Math.PI / 12);
   for (const [rotation, key, expected] of [

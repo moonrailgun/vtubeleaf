@@ -854,6 +854,32 @@ h1 span {
   margin-bottom: 12px;
   line-height: 1.6;
 }
+.model-advanced {
+  margin-top: 20px;
+}
+.model-advanced > summary {
+  padding: 4px 4px 14px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #75546d;
+  cursor: pointer;
+}
+.model-advanced > summary:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+.parameter-slider {
+  width: 100%;
+  margin: 12px 0 0;
+  accent-color: var(--primary);
+}
+.parameter-slider:disabled {
+  opacity: 0.5;
+}
+#parameter-override .slider-label label {
+  margin: 0;
+}
 .two-fields {
   display: flex;
   gap: 9px;

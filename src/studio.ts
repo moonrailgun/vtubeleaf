@@ -14,10 +14,12 @@ import {
   normalizedFace,
   isFace,
   type Mapping,
+  type HotkeyOptions,
+  clamp,
   type Face,
   type Settings,
 } from './state';
-import { Hotkeys } from './hotkeys';
+import { Hotkeys, validateHotkey } from './hotkeys';
 import { MotionRecording } from './recording';
 import { sampleCalibration } from './calibration';
 import { AudioLipSync, type Vowel } from './lipsync';
@@ -54,6 +56,7 @@ export function createStudio(
   let previewTask: Promise<void> | undefined;
   let lastFace: Partial<Face> | null = null;
   let lastFaceAt = 0;
+  let lastDetectedFaceAt = 0;
   let tracking: 'stopped' | 'starting' | 'running' | 'paused' = 'stopped';
   let trackingOperation = 0;
   let modelOperation = 0;
@@ -216,10 +219,12 @@ export function createStudio(
   }
   function modelAction(id: string, mode: MotionMode = 'once') {
     if (!stage || !model || disposed) return;
-    if (id.startsWith('expression:')) stage.toggleExpression(id.slice(11));
+    const options = settings.hotkeyOptions[id];
+    if (id.startsWith('expression:'))
+      stage.toggleExpression(id.slice(11), options?.seconds, options?.fadeSeconds);
     else if (id.startsWith('motion:')) stage.playMotion(id.slice(7), mode);
     else if (id === 'stop-motion') stage.stopMotion();
-    else if (id === 'clear-expressions') stage.clearExpressions();
+    else if (id === 'clear-expressions') stage.clearExpressions(options?.fadeSeconds);
     publish();
   }
   const virtualCamera = new VirtualCamera((status) => {
@@ -243,7 +248,7 @@ export function createStudio(
     const options = settings.hotkeyOptions[id];
     if (!pressed) {
       if (heldExpressions.delete(id)) {
-        stage?.setExpression(id.slice(11), false);
+        stage?.setExpression(id.slice(11), false, undefined, options?.fadeSeconds);
         publish();
       }
       return;
@@ -251,8 +256,8 @@ export function createStudio(
     if (options && id.startsWith('expression:')) {
       if (options.release) {
         heldExpressions.add(id);
-        stage?.setExpression(id.slice(11), true, options.seconds);
-      } else stage?.toggleExpression(id.slice(11), options.seconds);
+        stage?.setExpression(id.slice(11), true, options.seconds, options.fadeSeconds);
+      } else stage?.toggleExpression(id.slice(11), options.seconds, options.fadeSeconds);
       publish();
       return;
     }
@@ -299,6 +304,7 @@ export function createStudio(
       if (!disposed) {
         lastFace = face;
         lastFaceAt = performance.now();
+        if (isFace(face)) lastDetectedFaceAt = lastFaceAt;
         inputFrames++;
         if (calibration && lastFaceAt >= calibration.after && isFace(face))
           calibration.samples.push({ at: lastFaceAt, face: { ...face } });
@@ -456,11 +462,15 @@ export function createStudio(
     settings = switchProfile(settings, next.path);
     if (vts) applyVts(vts);
     else if (vtsError) settings.vtsImportReport = [vtsError];
+    settings.parameterOverrides = { ...settings.defaultParameterOverrides };
+    // Held keys belong to the model that received the press.
+    heldExpressions.clear();
     settings.recentModels = [
       { name: next.name, path: next.path },
       ...settings.recentModels.filter((m) => m.path !== next.path),
     ].slice(0, 5);
     stage.display(settings);
+    stage.restoreExpressions(settings.defaultExpressions);
     publish();
     await bindHotkeys();
     if (disposed || operation !== modelOperation) return;
@@ -511,6 +521,7 @@ export function createStudio(
         return;
       const result = importVtsConfig(raw, stage);
       applyVts(result);
+      stage?.restoreExpressions(settings.defaultExpressions);
       profileRevision++;
       mapper.reset();
       await bindHotkeys();
@@ -671,13 +682,16 @@ export function createStudio(
           nextModel = await invoke<ModelInfo>('load_model', { path: scene.modelPath });
         } else if (!scene.modelPath) nextModel = null;
         if (disposed || operation !== modelOperation) return;
-        const sceneSettings = () =>
-          readSettings({
-            ...switchProfile(settings, scene.modelPath),
+        const sceneSettings = () => {
+          const profile = switchProfile(settings, scene.modelPath);
+          return readSettings({
+            ...profile,
+            parameterOverrides: profile.defaultParameterOverrides,
             ...scene.placement,
             background: scene.background,
             composition: scene.composition,
           });
+        };
         candidate = await stage.prepare(nextModel, sceneSettings(), library);
         if (disposed || operation !== modelOperation) return;
         if (nextModel?.path !== model?.path) {
@@ -686,6 +700,7 @@ export function createStudio(
         }
         if (disposed || operation !== modelOperation) return;
         settings = sceneSettings();
+        heldExpressions.clear();
         candidate.display(settings);
         candidate.mount(container);
         stage.destroy();
@@ -730,6 +745,7 @@ export function createStudio(
       tracking = 'starting';
       lastFace = null;
       lastFaceAt = 0;
+      lastDetectedFaceAt = performance.now();
       publish();
       try {
         const started = await tracker.start(structuredClone(settings));
@@ -1000,10 +1016,10 @@ export function createStudio(
         Math.abs(mapping.inputMax) > 1000 ||
         mapping.smoothing < 0 ||
         mapping.smoothing > 0.5 ||
-        [mapping.outputMin, mapping.outputMax].some((v) => v < parameter.min || v > parameter.max)
+        [mapping.outputMin, mapping.outputMax].some((v) => Math.abs(v) > 1e6)
       )
         throw new Error(
-          `请填写有效范围：输入下限小于上限，输出在 ${parameter.min} 至 ${parameter.max} 之间，平滑时间为 0 至 0.5 秒。`,
+          `请填写有效范围：输入下限小于上限，输出绝对值不超过 1000000，平滑时间为 0 至 0.5 秒。最终参数会限制在模型范围内。`,
         );
       settings.mappings[id] = mapping;
       mapper.reset();
@@ -1016,6 +1032,48 @@ export function createStudio(
       mapper.reset();
       changed();
     },
+    setParameterOverride(id: string, value: number | null) {
+      const parameter = stage?.parameters.find((p) => p.id === id);
+      if (!parameter) return;
+      if (value === null) delete settings.parameterOverrides[id];
+      else {
+        if (!Number.isFinite(value)) throw new Error('参数值必须是有效数字。');
+        settings.parameterOverrides[id] = clamp(value, parameter.min, parameter.max);
+      }
+      changed();
+    },
+    saveDefaultAppearance() {
+      if (!stage || !model) return;
+      settings.defaultExpressions = [...stage.activeExpressions];
+      settings.defaultParameterOverrides = { ...settings.parameterOverrides };
+      changed();
+      notify('当前表情和手动参数已保存为默认外观，重新打开角色时会恢复。');
+    },
+    restoreDefaultAppearance() {
+      settings.parameterOverrides = { ...settings.defaultParameterOverrides };
+      stage?.restoreExpressions(settings.defaultExpressions);
+      profileRevision++;
+      changed();
+    },
+    async applyHotkeyOptions(id: string, options: HotkeyOptions) {
+      if (!model) return;
+      if (
+        (options.seconds !== undefined &&
+          (!Number.isFinite(options.seconds) || options.seconds < 0 || options.seconds > 3600)) ||
+        (options.fadeSeconds !== undefined &&
+          (!Number.isFinite(options.fadeSeconds) ||
+            options.fadeSeconds < 0 ||
+            options.fadeSeconds > 10))
+      )
+        throw new Error('自动关闭时间须为 0 至 3600 秒，过渡时间须为 0 至 10 秒。');
+      const next = readSettings({
+        ...settings,
+        hotkeyOptions: { ...settings.hotkeyOptions, [id]: options },
+      });
+      settings.hotkeyOptions = next.hotkeyOptions;
+      await bindHotkeys();
+      changed();
+    },
     modelAction,
     async applyHotkey(id: string, binding: string) {
       const global = !['expression:', 'motion:', 'stop-motion', 'clear-expressions'].some(
@@ -1023,7 +1081,7 @@ export function createStudio(
       );
       if (!global && !model) return;
       const bindings = global ? settings.globalHotkeys : settings.hotkeys;
-      if (!global) delete settings.hotkeyOptions[id];
+      validateHotkey(id, binding, { ...settings.globalHotkeys, ...settings.hotkeys });
       if (binding.trim()) bindings[id] = binding.trim();
       else delete bindings[id];
       publish();
@@ -1129,6 +1187,7 @@ export function createStudio(
       stage = new AvatarStage(container, () =>
         notify('显卡上下文已丢失。请重新加载角色；反复失败时重启应用。', true),
       );
+      stage.onWarning = (message) => notify(message, true);
       stage.display(settings);
     } catch {
       notify('无法初始化 WebGL。请检查显卡驱动或系统 WebView。', true);
@@ -1257,6 +1316,8 @@ export function createStudio(
       };
     if (stage && failedRevision !== modelRevision) {
       try {
+        stage.trackingLost =
+          tracking === 'running' && now - lastDetectedFaceAt >= settings.lostDelay * 1000;
         stage.draw(mapper.map(face, stage.parameters, settings, dt / 1000), dt);
       } catch (error) {
         failedRevision = modelRevision;

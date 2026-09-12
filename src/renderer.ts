@@ -2,14 +2,25 @@ import * as PIXI from 'pixi.js';
 import { install } from '@pixi/unsafe-eval';
 import { invoke } from '@tauri-apps/api/core';
 import type { Live2DModel, Cubism4InternalModel } from 'pixi-live2d-display/cubism4';
-import { type Parameter, type Settings } from './state';
+import { clamp, describeParameters, type Parameter, type Settings } from './state';
 import { SceneLayers, type SceneFrames } from './scene-renderer';
 import { physicsGroupsFromJson, wrapPhysics, type PhysicsGroup } from './physics';
 import { layoutMasks, maskBufferSize } from './masks';
 
 install(PIXI);
 
-export type ModelInfo = { id: string; path: string; name: string; entry: string; files: string[] };
+export type ModelInfo = {
+  id: string;
+  path: string;
+  name: string;
+  entry: string;
+  files: string[];
+  vtsResources?: {
+    expressions: { name: string; file: string }[];
+    motions: { name: string; file: string }[];
+    warnings: string[];
+  };
+};
 
 export type MotionMode = 'once' | 'loop' | 'hold';
 
@@ -20,7 +31,26 @@ type ExpressionData = {
   [key: string]: unknown;
 };
 
-export type Motion = { id: string; name: string; group: string; data: MotionData; file: string };
+type MotionDefinition = { File: string; FadeInTime?: number; FadeOutTime?: number; Sound?: string };
+export type Motion = {
+  id: string;
+  name: string;
+  group: string;
+  data: MotionData;
+  file: string;
+  definition?: MotionDefinition;
+  sound?: string;
+};
+type ExpressionLayer = {
+  motion: ReturnType<
+    NonNullable<Cubism4InternalModel['motionManager']['expressionManager']>['createExpression']
+  >;
+  from: number;
+  weight: number;
+  target: number;
+  elapsed: number;
+  duration: number;
+};
 
 export type Expression = { id: string; name: string; data: ExpressionData; file: string };
 
@@ -86,6 +116,10 @@ export class AvatarStage {
   physicsGroups: PhysicsGroup[] = [];
   activeExpressions = new Set<string>();
   private expressionExpiry = new Map<string, number>();
+  private expressionLayers = new Map<string, ExpressionLayer>();
+  private motionAudio?: HTMLAudioElement;
+  trackingLost = false;
+  onWarning?: (message: string) => void;
   private heldMotion = '';
   frame: Record<string, number> = {};
   parts: Record<string, number> = {};
@@ -160,11 +194,12 @@ export class AvatarStage {
       const json = JSON.parse(new TextDecoder().decode(bytes));
       const motionDefinitions = Object.entries(json.FileReferences.Motions ?? {}).flatMap(
         ([group, entries]) =>
-          (entries as { File: string }[]).map((entry, index) => ({
+          (entries as MotionDefinition[]).map((entry, index) => ({
             id: `${group}:${index}`,
             name: `${group} · ${index + 1}`,
             group,
             file: entry.File,
+            definition: { ...entry },
           })),
       );
       const expressionDefinitions = (json.FileReferences.Expressions ?? []).map(
@@ -174,8 +209,22 @@ export class AvatarStage {
           file: entry.File,
         }),
       );
+      // Keep native action IDs intact; VTS-only resources use file-based IDs across reloads.
+      for (const entry of info.vtsResources?.expressions ?? []) {
+        expressionDefinitions.push({ id: `vts:${entry.file}`, ...entry });
+        (json.FileReferences.Expressions ??= []).push({ Name: entry.name, File: entry.file });
+      }
+      for (const entry of info.vtsResources?.motions ?? [])
+        motionDefinitions.push({
+          id: `vts:${entry.file}`,
+          group: 'VTS',
+          ...entry,
+          definition: { File: entry.file },
+        });
       const documents = new Map<string, MotionData & ExpressionData>();
       let physicsDocument: unknown;
+      let displayDocument: unknown;
+      const displayFile = json.FileReferences.DisplayInfo as string | undefined;
       const physicsFile = json.FileReferences.Physics as string | undefined;
       json.url = `/${info.entry}`;
       const settings = new Cubism4ModelSettings(json);
@@ -184,6 +233,8 @@ export class AvatarStage {
         paths.add(path);
         return path;
       });
+      for (const entry of info.vtsResources?.motions ?? []) paths.add(entry.file);
+      if (displayFile) paths.add(displayFile);
       const resolved = new Map<string, string>();
       for (const path of paths) {
         const resource = path.replace(/^\.\//, '');
@@ -191,14 +242,21 @@ export class AvatarStage {
         const data = await invoke<ArrayBuffer>('read_model_resource', { id: info.id, resource });
         if (/\.(motion3|exp3)\.json$/i.test(path))
           documents.set(path, JSON.parse(new TextDecoder().decode(data)));
+        else if (path === displayFile) displayDocument = JSON.parse(new TextDecoder().decode(data));
         else if (path === physicsFile) physicsDocument = JSON.parse(new TextDecoder().decode(data));
-        const type = /\.png$/i.test(path)
-          ? 'image/png'
-          : /\.jpe?g$/i.test(path)
-            ? 'image/jpeg'
-            : /\.json$/i.test(path)
-              ? 'application/json'
-              : 'application/octet-stream';
+        const type = /\.wav$/i.test(path)
+          ? 'audio/wav'
+          : /\.mp3$/i.test(path)
+            ? 'audio/mpeg'
+            : /\.ogg$/i.test(path)
+              ? 'audio/ogg'
+              : /\.png$/i.test(path)
+                ? 'image/png'
+                : /\.jpe?g$/i.test(path)
+                  ? 'image/jpeg'
+                  : /\.json$/i.test(path)
+                    ? 'application/json'
+                    : 'application/octet-stream';
         const url = URL.createObjectURL(new Blob([data], { type }));
         urls.push(url);
         resolved.set(path, url);
@@ -234,6 +292,7 @@ export class AvatarStage {
       };
       const masks = renderer._clippingManager._clippingContextListForMask.length;
       if (maskBufferSize(masks) !== 256) renderer.setClippingMaskBufferSize(maskBufferSize(masks));
+      this.stopMotion();
       this.model?.destroy({ children: true, texture: true, baseTexture: true });
       this.urls.forEach(URL.revokeObjectURL);
       this.urls = urls;
@@ -245,13 +304,19 @@ export class AvatarStage {
       this.heldMotion = '';
       this.activeExpressions.clear();
       this.expressionExpiry.clear();
+      this.expressionLayers.clear();
+      this.trackingLost = false;
       this.expressionIds.clear();
       this.frame = {};
       this.parts = {};
       this.physicsGroups = this.passive ? [] : physicsGroupsFromJson(physicsDocument);
       this.motions = motionDefinitions
         .filter((def) => documents.has(def.file))
-        .map((def) => ({ ...def, data: documents.get(def.file)! }));
+        .map((def) => ({
+          ...def,
+          data: documents.get(def.file)!,
+          sound: def.definition.Sound ? resolved.get(def.definition.Sound) : undefined,
+        }));
       this.expressions = expressionDefinitions
         .filter((def: { file: string }) => documents.has(def.file))
         .map((def: { id: string; name: string; file: string }) => ({
@@ -259,12 +324,41 @@ export class AvatarStage {
           data: documents.get(def.file)!,
         }));
       const raw = core.parameters;
-      this.parameters = Array.from(raw.ids, (id, i) => ({
-        id,
-        min: raw.minimumValues[i],
-        max: raw.maximumValues[i],
-        default: raw.defaultValues[i],
-      }));
+      this.parameters = describeParameters(
+        Array.from(raw.ids, (id, i) => ({
+          id,
+          min: raw.minimumValues[i],
+          max: raw.maximumValues[i],
+          default: raw.defaultValues[i],
+        })),
+        displayDocument,
+      );
+      const expressionManager = internal.motionManager.expressionManager;
+      let expressionTime: number | undefined;
+      if (expressionManager)
+        expressionManager.update = (_core, now) => {
+          const dt = expressionTime === undefined ? 0 : clamp(now - expressionTime, 0, 0.1);
+          expressionTime = now;
+          for (const [id, layer] of this.expressionLayers) {
+            layer.elapsed += dt;
+            const progress = layer.duration <= 0 ? 1 : clamp(layer.elapsed / layer.duration, 0, 1);
+            layer.weight =
+              layer.from + (layer.target - layer.from) * (0.5 - 0.5 * Math.cos(progress * Math.PI));
+            if (layer.target === 0 && progress === 1) {
+              this.expressionLayers.delete(id);
+              continue;
+            }
+            // Cubism handles Add/Multiply/Overwrite; expression motions do not use the queue entry.
+            layer.motion.doUpdateParameters(internal.coreModel, now, layer.weight, null!);
+          }
+          this.expressionIds = new Set(
+            [...this.expressionLayers.keys()].flatMap(
+              (id) =>
+                this.expressions.find((e) => e.id === id)?.data.Parameters?.map((p) => p.Id) ?? [],
+            ),
+          );
+          return this.expressionLayers.size > 0;
+        };
       // Cubism 4 shares one shader singleton across WebGL contexts (including thumbnails).
       // ponytail: rebuild only on a context switch; cache per context if thumbnail throughput matters.
       const draw = internal.draw.bind(internal);
@@ -311,12 +405,15 @@ export class AvatarStage {
           internal.coreModel.setParameterValueById(id, value);
         for (const [id, value] of Object.entries(this.values)) {
           if (
-            (!this.playing || this.playing.idle || !this.playing.ids.has(id)) &&
+            (!this.playing ||
+              (this.playing.idle && !this.trackingLost) ||
+              !this.playing.ids.has(id)) &&
             !Object.hasOwn(this.held, id)
           )
             internal.coreModel.setParameterValueById(id, value);
         }
         if (this.playing?.finished) {
+          this.stopMotionAudio();
           if (this.playing.mode === 'hold') {
             for (const id of this.playing.ids)
               this.held[id] = internal.coreModel.getParameterValueById(id);
@@ -346,6 +443,12 @@ export class AvatarStage {
           for (const [id, value] of Object.entries(this.incomingParts))
             internal.coreModel.setPartOpacityById(id, value);
         }
+        if (!this.passive)
+          for (const p of this.parameters) {
+            const value = this.settings?.parameterOverrides[p.id];
+            if (Number.isFinite(value))
+              internal.coreModel.setParameterValueById(p.id, clamp(value!, p.min, p.max));
+          }
         this.frame = Object.fromEntries(Array.from(raw.ids, (id, i) => [id, raw.values[i]]));
         this.parts = Object.fromEntries(
           Array.from(core.parts.ids, (id, i) => [id, core.parts.opacities[i]]),
@@ -373,6 +476,7 @@ export class AvatarStage {
 
   display(settings: Settings) {
     this.settings = settings;
+    if (!settings.motionSound) this.stopMotionAudio();
     if (!this.sharedApp) this.container.style.backgroundColor = settings.background;
     this.layout();
   }
@@ -390,9 +494,11 @@ export class AvatarStage {
       this.onContextLost,
       this.passive,
     );
+    candidate.onWarning = this.onWarning;
     try {
       if (info) await candidate.load(info);
       await candidate.compose(settings, models);
+      candidate.restoreExpressions(settings.defaultExpressions);
       return candidate;
     } catch (error) {
       candidate.destroy();
@@ -522,7 +628,23 @@ export class AvatarStage {
     const internal = this.model?.internalModel as Cubism4InternalModel | undefined;
     if (!entry || !internal || this.passive) return;
     this.stopMotion();
-    const motion = internal.motionManager.createMotion(entry.data, entry.group, { File: '' });
+    const motion = internal.motionManager.createMotion(
+      entry.data,
+      entry.group,
+      entry.definition ?? { File: entry.file },
+    );
+    if (entry.definition?.FadeInTime === 0) motion.setFadeInTime(0);
+    if (entry.definition?.FadeOutTime === 0) motion.setFadeOutTime(0);
+    const fade = this.settings?.hotkeyOptions[`motion:${id}`]?.fadeSeconds;
+    if (fade !== undefined) {
+      motion.setFadeInTime(fade);
+      motion.setFadeOutTime(fade);
+      for (const curve of entry.data.Curves ?? [])
+        if (curve.Target === 'Parameter') {
+          motion.setParameterFadeInTime(curve.Id, fade);
+          motion.setParameterFadeOutTime(curve.Id, fade);
+        }
+    }
     motion.setIsLoop(mode === 'loop');
     const ids = new Set(
       (entry.data.Curves ?? [])
@@ -545,9 +667,27 @@ export class AvatarStage {
       playing.finished = true;
     });
     internal.motionManager.queueManager.startMotion(motion, false, 0);
+    if (entry.sound && this.settings?.motionSound && !this.sharedApp) {
+      const audio = new Audio(entry.sound);
+      this.motionAudio = audio;
+      audio.loop = mode === 'loop';
+      void audio.play().catch(() => {
+        if (this.motionAudio === audio) {
+          this.stopMotionAudio();
+          this.onWarning?.('动作音效播放失败。请检查音频文件，或点击动作按钮重试。');
+        }
+      });
+    }
+  }
+
+  private stopMotionAudio() {
+    this.motionAudio?.pause();
+    if (this.motionAudio) this.motionAudio.src = '';
+    this.motionAudio = undefined;
   }
 
   stopMotion() {
+    this.stopMotionAudio();
     (this.model?.internalModel as Cubism4InternalModel | undefined)?.motionManager.stopAllMotions();
     this.playing = undefined;
     this.held = {};
@@ -562,40 +702,51 @@ export class AvatarStage {
     }
   }
 
-  toggleExpression(id: string, seconds?: number) {
-    if (!this.expressions.some((e) => e.id === id)) return;
-    this.setExpression(id, !this.activeExpressions.has(id), seconds);
+  toggleExpression(id: string, seconds?: number, fadeSeconds?: number) {
+    this.setExpression(id, !this.activeExpressions.has(id), seconds, fadeSeconds);
   }
 
-  setExpression(id: string, active: boolean, seconds?: number) {
-    if (!this.expressions.some((e) => e.id === id)) return;
+  setExpression(id: string, active: boolean, seconds?: number, fadeSeconds?: number) {
+    const entry = this.expressions.find((e) => e.id === id);
+    const manager = (this.model?.internalModel as Cubism4InternalModel | undefined)?.motionManager
+      .expressionManager;
+    if (!entry || !manager || this.passive) return;
     this.expressionExpiry.delete(id);
     if (active) {
       this.activeExpressions.add(id);
       if (seconds) this.expressionExpiry.set(id, performance.now() + seconds * 1000);
     } else this.activeExpressions.delete(id);
-    this.applyExpressions();
+    const previous = this.expressionLayers.get(id);
+    const motion =
+      previous?.motion ??
+      manager.createExpression(entry.data, { Name: entry.name, File: entry.file });
+    const configured = fadeSeconds ?? this.settings?.hotkeyOptions[`expression:${id}`]?.fadeSeconds;
+    const authored = active ? motion.getFadeInTime() : motion.getFadeOutTime();
+    const duration = configured ?? (Number.isFinite(authored) && authored >= 0 ? authored : 1);
+    if (active && previous?.target === 0) this.expressionLayers.delete(id);
+    this.expressionLayers.set(id, {
+      motion,
+      from: previous?.weight ?? 0,
+      weight: previous?.weight ?? 0,
+      target: active ? 1 : 0,
+      elapsed: 0,
+      duration,
+    });
+    for (const p of entry.data.Parameters ?? []) this.expressionIds.add(p.Id);
   }
 
-  clearExpressions() {
+  clearExpressions(fadeSeconds?: number) {
+    for (const id of this.expressionLayers.keys())
+      this.setExpression(id, false, undefined, fadeSeconds);
+    this.expressionExpiry.clear();
+  }
+
+  restoreExpressions(ids: string[]) {
     this.activeExpressions.clear();
     this.expressionExpiry.clear();
-    this.applyExpressions();
-  }
-
-  private applyExpressions() {
-    const manager = (this.model?.internalModel as Cubism4InternalModel | undefined)?.motionManager
-      .expressionManager;
-    if (!manager || this.passive) return;
-    const parameters = [...this.activeExpressions].flatMap(
-      (id) => this.expressions.find((e) => e.id === id)?.data.Parameters ?? [],
-    );
-    this.expressionIds = new Set(parameters.map((p) => p.Id));
-    const expression = manager.createExpression(
-      { Type: 'Live2D Expression', FadeInTime: 0.15, FadeOutTime: 0.15, Parameters: parameters },
-      { Name: 'Combined', File: '' },
-    );
-    manager.queueManager.startMotion(expression, false, 0);
+    this.expressionLayers.clear();
+    this.expressionIds.clear();
+    for (const id of ids) this.setExpression(id, true, undefined, 0);
   }
 
   get sceneFrames(): SceneFrames {
@@ -613,9 +764,11 @@ export class AvatarStage {
     this.values = values;
     this.incomingParts = parts;
     if (!this.passive && !this.sharedApp) {
-      if (this.playing?.idle && this.playing.id !== this.settings?.idleMotion) this.stopMotion();
-      if (!this.playing && !Object.keys(this.held).length && this.settings?.idleMotion)
-        this.playMotion(this.settings.idleMotion, 'loop', true);
+      const idle =
+        (this.trackingLost && this.settings?.lostIdleMotion) || this.settings?.idleMotion;
+      if (this.playing?.idle && this.playing.id !== idle) this.stopMotion();
+      if (!this.playing && !Object.keys(this.held).length && idle)
+        this.playMotion(idle, 'loop', true);
     }
     this.model?.update(Math.min(dt, 100));
     if (this.settings)
@@ -631,6 +784,10 @@ export class AvatarStage {
 
   clear() {
     this.generation++;
+    this.stopMotion();
+    this.expressionLayers.clear();
+    this.expressionIds.clear();
+    this.trackingLost = false;
     this.model?.destroy({ children: true, texture: true, baseTexture: true });
     this.model = undefined;
     this.urls.forEach(URL.revokeObjectURL);

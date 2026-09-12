@@ -33,5 +33,6 @@ export function fromNvidia(value: unknown): Face | null {
     browLeft: clamp(score(2) + score(4) - score(0), -1, 1),
     browRight: clamp(score(3) + score(5) - score(1), -1, 1),
     mouthX: score(40) - score(34),
+    cheekPuff: (score(6) + score(7)) / 2,
   };
 }

@@ -27,6 +27,10 @@ export type Face = UpperBody &
     browLeft?: number;
     browRight?: number;
     mouthX?: number;
+    brows?: number;
+    cheekPuff?: number;
+    tongueOut?: number;
+    breath?: number;
     positionX?: number;
     positionY?: number;
     positionZ?: number;
@@ -48,6 +52,10 @@ export const faceSources: Record<FaceKey, string> = {
   browLeft: '左眉升降',
   browRight: '右眉升降',
   mouthX: '嘴部左右',
+  brows: '双眉升降',
+  cheekPuff: '鼓嘴（NVIDIA）',
+  tongueOut: '吐舌（当前引擎无信号，可手动控制）',
+  breath: '自动呼吸',
   positionX: '头部左右位移',
   positionY: '头部上下位移',
   positionZ: '头部前后位移',
@@ -74,6 +82,7 @@ export type Mapping = {
   outputMax: number;
   smoothing: number;
   enabled: boolean;
+  clamp?: boolean;
 };
 
 export type HotkeyOptions = {
@@ -81,6 +90,7 @@ export type HotkeyOptions = {
   release?: boolean;
   seconds?: number;
   motionMode?: 'once' | 'hold';
+  fadeSeconds?: number;
 };
 
 export type ModelProfile = {
@@ -114,6 +124,11 @@ export type ModelProfile = {
   mappings: Record<string, Mapping>;
   autoBlink: boolean;
   idleMotion: string;
+  lostIdleMotion: string;
+  motionSound: boolean;
+  parameterOverrides: Record<string, number>;
+  defaultParameterOverrides: Record<string, number>;
+  defaultExpressions: string[];
   hotkeys: Record<string, string>;
   hotkeyOptions: Record<string, HotkeyOptions>;
   vtsImportReport: string[];
@@ -217,6 +232,11 @@ export const defaults: Settings = {
   profiles: {},
   autoBlink: false,
   idleMotion: '',
+  lostIdleMotion: '',
+  motionSound: true,
+  parameterOverrides: {},
+  defaultParameterOverrides: {},
+  defaultExpressions: [],
   hotkeys: {},
   hotkeyOptions: {},
   vtsImportReport: [],
@@ -293,6 +313,7 @@ function readMapping(v: unknown): Mapping | undefined {
     outputMax: m.outputMax,
     smoothing: clamp(m.smoothing, 0, 0.5),
     enabled: m.enabled,
+    ...(m.clamp === false ? { clamp: false } : {}),
   };
 }
 
@@ -328,6 +349,11 @@ function readProfile(v: unknown): ModelProfile {
     mappings: {},
     autoBlink: defaults.autoBlink,
     idleMotion: '',
+    lostIdleMotion: '',
+    motionSound: true,
+    parameterOverrides: {},
+    defaultParameterOverrides: {},
+    defaultExpressions: [],
     hotkeys: {},
     hotkeyOptions: {},
     vtsImportReport: [],
@@ -362,7 +388,7 @@ function readProfile(v: unknown): ModelProfile {
         p.voiceTemplates[vowel] = [...template];
     }
 
-  for (const key of ['motionMirror', 'autoBlink', 'modelVisible'] as const)
+  for (const key of ['motionMirror', 'autoBlink', 'modelVisible', 'motionSound'] as const)
     if (typeof v[key] === 'boolean') p[key] = v[key];
   for (const key of Object.keys(profileRanges) as (keyof typeof profileRanges)[])
     if (typeof v[key] === 'number' && Number.isFinite(v[key]))
@@ -372,7 +398,27 @@ function readProfile(v: unknown): ModelProfile {
     p.neutral = Object.fromEntries(
       faceKeys.filter((k) => Object.hasOwn(v.neutral!, k)).map((k) => [k, (v.neutral as Face)[k]]),
     ) as Face;
-  if (typeof v.idleMotion === 'string' && v.idleMotion.length <= 512) p.idleMotion = v.idleMotion;
+  for (const key of ['idleMotion', 'lostIdleMotion'] as const)
+    if (typeof v[key] === 'string' && v[key].length <= 512) p[key] = v[key];
+  for (const key of ['parameterOverrides', 'defaultParameterOverrides'] as const)
+    if (record(v[key]))
+      for (const [id, value] of Object.entries(v[key]).slice(0, 512))
+        if (
+          safeKey(id) &&
+          id.length <= 512 &&
+          typeof value === 'number' &&
+          Number.isFinite(value) &&
+          Math.abs(value) <= 1e6
+        )
+          p[key][id] = value;
+  if (Array.isArray(v.defaultExpressions))
+    p.defaultExpressions = [
+      ...new Set(
+        v.defaultExpressions.filter(
+          (id): id is string => typeof id === 'string' && safeKey(id) && id.length <= 512,
+        ),
+      ),
+    ].slice(0, 128);
 
   if (record(v.mappings))
     for (const [id, raw] of Object.entries(v.mappings).slice(0, 512)) {
@@ -386,10 +432,21 @@ function readProfile(v: unknown): ModelProfile {
         p.hotkeys[id] = shortcut;
 
   if (record(v.hotkeyOptions))
-    for (const id of Object.keys(p.hotkeys)) {
+    for (const id of Object.keys(v.hotkeyOptions)
+      .filter((id) => safeKey(id) && id.length <= 512)
+      .slice(0, 128)) {
       const value = v.hotkeyOptions[id];
+      if (!id.startsWith('expression:') && !id.startsWith('motion:') && id !== 'clear-expressions')
+        continue;
       if (!record(value) || !['local', 'global'].includes(value.scope as string)) continue;
       const option: HotkeyOptions = { scope: 'local' };
+      if (
+        typeof value.fadeSeconds === 'number' &&
+        Number.isFinite(value.fadeSeconds) &&
+        value.fadeSeconds >= 0 &&
+        value.fadeSeconds <= 10
+      )
+        option.fadeSeconds = value.fadeSeconds;
       if (id.startsWith('expression:')) {
         if (value.release === true) option.release = true;
         if (
@@ -493,7 +550,49 @@ export function switchProfile(settings: Settings, path: string): Settings {
   return s;
 }
 
-export type Parameter = { id: string; min: number; max: number; default: number };
+export type Parameter = {
+  id: string;
+  min: number;
+  max: number;
+  default: number;
+  name?: string;
+  group?: string;
+};
+
+/** Optional Cubism display information never adds parameters absent from the model. */
+export function describeParameters(parameters: Parameter[], info: unknown): Parameter[] {
+  if (!record(info)) return parameters;
+  const entries = new Map(
+    (Array.isArray(info.Parameters) ? info.Parameters : [])
+      .filter(record)
+      .slice(0, 2048)
+      .map((p) => [p.Id, p]),
+  );
+  const groups = new Map(
+    (Array.isArray(info.ParameterGroups) ? info.ParameterGroups : [])
+      .filter(record)
+      .slice(0, 512)
+      .map((p) => [p.Id, p]),
+  );
+  const label = (v: unknown) => (typeof v === 'string' ? v.slice(0, 200).trim() : '');
+  return parameters.map((parameter) => {
+    const entry = entries.get(parameter.id);
+    if (!entry) return parameter;
+    const names: string[] = [],
+      seen = new Set<unknown>();
+    let group = groups.get(entry.GroupId);
+    while (group && !seen.has(group.Id) && seen.size < 32) {
+      seen.add(group.Id);
+      if (label(group.Name)) names.unshift(label(group.Name));
+      group = groups.get(group.GroupId);
+    }
+    return {
+      ...parameter,
+      ...(label(entry.Name) ? { name: label(entry.Name) } : {}),
+      ...(names.length ? { group: names.join(' / ') } : {}),
+    };
+  });
+}
 
 const parameterSources: Record<string, FaceKey> = {
   ParamAngleX: 'yaw',
@@ -594,7 +693,18 @@ export function normalizedFace(face: Partial<Face>, s: Settings): Partial<Record
       values.eyeRight! += (linked - values.eyeRight!) * blend;
     }
   }
-  for (const key of ['voiceVolume', 'voiceA', 'voiceI', 'voiceU', 'voiceE', 'voiceO'] as const)
+  for (const key of [
+    'cheekPuff',
+    'tongueOut',
+    'brows',
+    'breath',
+    'voiceVolume',
+    'voiceA',
+    'voiceI',
+    'voiceU',
+    'voiceE',
+    'voiceO',
+  ] as const)
     if (Number.isFinite(face[key])) values[key] = clamp(face[key]!, 0, 1);
   if (s.lipSyncMode !== 'off' && values.voiceVolume !== undefined) {
     const calibrated = ['A', 'I', 'U', 'E', 'O'].every((v) => Object.hasOwn(s.voiceTemplates, v));
@@ -668,14 +778,26 @@ export function normalizedFace(face: Partial<Face>, s: Settings): Partial<Record
     values[key] = key.startsWith('position') ? value : clamp(value, -1, 1);
   }
 
+  if (
+    values.brows === undefined &&
+    (values.browLeft !== undefined || values.browRight !== undefined)
+  )
+    values.brows = clamp(
+      0.5 + ((values.browLeft ?? values.browRight!) + (values.browRight ?? values.browLeft!)) / 4,
+      0,
+      1,
+    );
+
   return Object.fromEntries(Object.entries(values).filter(([, value]) => Number.isFinite(value)));
 }
 
 export class FaceMapper {
   private current: Record<string, number> = {};
+  private elapsed = 0;
 
   reset() {
     this.current = {};
+    this.elapsed = 0;
   }
 
   map(
@@ -684,7 +806,9 @@ export class FaceMapper {
     s: Settings,
     dt: number,
   ): Record<string, number> {
+    this.elapsed += clamp(Number.isFinite(dt) ? dt : 0, 0, 0.1);
     const values = face ? normalizedFace(face, s) : null;
+    const breath = (1 - Math.cos((this.elapsed * Math.PI * 2) / 3.2345)) / 2;
     const next: Record<string, number> = {};
 
     for (const p of parameters) {
@@ -694,7 +818,7 @@ export class FaceMapper {
       const mapping = custom ?? defaultMapping(p, s);
       if (!mapping?.enabled) continue;
 
-      let value = values?.[mapping.source];
+      let value = mapping.source === 'breath' ? breath : values?.[mapping.source];
       const missingSource = value === undefined;
       if (value === undefined && values && !custom && Object.hasOwn(bodyFallback, mapping.source)) {
         const head = values[bodyFallback[mapping.source as keyof typeof bodyFallback]];
@@ -706,7 +830,12 @@ export class FaceMapper {
         !Object.hasOwn(this.current, p.id)
       )
         continue;
-      if (!face && !Object.hasOwn(NEUTRAL, mapping.source) && !Object.hasOwn(this.current, p.id))
+      if (
+        !face &&
+        mapping.source !== 'breath' &&
+        !Object.hasOwn(NEUTRAL, mapping.source) &&
+        !Object.hasOwn(this.current, p.id)
+      )
         continue;
       if (
         missingSource &&
@@ -733,7 +862,9 @@ export class FaceMapper {
         else
           target =
             mapping.outputMin +
-            clamp((value - mapping.inputMin) / (mapping.inputMax - mapping.inputMin), 0, 1) *
+            (mapping.clamp === false
+              ? (value - mapping.inputMin) / (mapping.inputMax - mapping.inputMin)
+              : clamp((value - mapping.inputMin) / (mapping.inputMax - mapping.inputMin), 0, 1)) *
               (mapping.outputMax - mapping.outputMin);
       }
 

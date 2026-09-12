@@ -83,6 +83,26 @@ function normalize(shortcut: string): string {
   ].join('+');
 }
 
+/** Validate an edit before changing the registered or persisted bindings. */
+export function validateHotkey(
+  action: string,
+  binding: string,
+  bindings: Record<string, string>,
+): void {
+  if (!binding.trim()) return;
+  const shortcut = normalize(binding);
+  for (const [id, value] of Object.entries(bindings)) {
+    if (id === action || !value.trim()) continue;
+    let other: string;
+    try {
+      other = normalize(value);
+    } catch {
+      continue;
+    }
+    if (shortcut === other) throw new Error(`与 ${id} 的快捷键重复：${binding}`);
+  }
+}
+
 function editing(target: EventTarget | null): boolean {
   return (
     target instanceof Element &&

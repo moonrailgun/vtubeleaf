@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { mockIPC } from '@tauri-apps/api/mocks';
-import { Hotkeys } from '../src/hotkeys.ts';
+import { Hotkeys, validateHotkey } from '../src/hotkeys.ts';
 import { importVtsConfig } from '../src/vts.ts';
 import { readSettings } from '../src/state.ts';
 
@@ -159,4 +159,20 @@ test('desktop shortcuts stay inside the focused app, including legacy global and
   assert.equal(key('keydown').defaultPrevented, false);
   assert.deepEqual(nativeCalls, []);
   assert.deepEqual(errors, []);
+});
+
+test('hotkey edits reject invalid keys and normalized conflicts before changing bindings', () => {
+  const bindings = {
+    'expression:sign': 'F',
+    'motion:Idle:0': 'Control+Shift+A',
+    stale: 'invalid key',
+  };
+  const original = structuredClone(bindings);
+  validateHotkey('expression:sign', 'KeyF', bindings);
+  validateHotkey('expression:sign', '', bindings);
+  validateHotkey('expression:sign', 'G', bindings);
+  assert.throws(() => validateHotkey('expression:sign', 'Shift+Ctrl+KeyA', bindings), /重复/);
+  assert.throws(() => validateHotkey('expression:sign', 'Control', bindings), /请添加/);
+  assert.throws(() => validateHotkey('expression:sign', 'F+G', bindings), /一个普通按键/);
+  assert.deepEqual(bindings, original);
 });

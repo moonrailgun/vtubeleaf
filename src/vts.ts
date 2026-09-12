@@ -23,13 +23,19 @@ const safe = (v: unknown): v is string =>
   !/[\x00-\x1f]/.test(v);
 const number = (v: unknown): v is number =>
   typeof v === 'number' && Number.isFinite(v) && Math.abs(v) <= 1e6;
-const path = (v: unknown): v is string =>
-  safe(v) &&
-  !/^[\/\\]|:/.test(v) &&
-  !v.split(/[\/\\]/).some((part) => part === '..' || part === '.');
+function path(v: unknown): string | undefined {
+  if (!safe(v)) return;
+  const normalized = v.replaceAll('\\', '/').replace(/^(?:\.\/)+/, '');
+  if (
+    /^\/|:/.test(normalized) ||
+    normalized.split('/').some((part) => !part || part === '..' || part === '.')
+  )
+    return;
+  return normalized;
+}
 
 // These inputs have a documented counterpart. Tracking calibration still differs between apps.
-const sources: Record<string, [FaceKey, number]> = {
+const sources: Record<string, [FaceKey, number, number?]> = {
   FaceAngleX: ['yaw', 30],
   FaceAngleY: ['pitch', 30],
   FaceAngleZ: ['roll', 30],
@@ -37,6 +43,16 @@ const sources: Record<string, [FaceKey, number]> = {
   EyeOpenRight: ['eyeRight', 1],
   MouthOpen: ['mouthOpen', 1],
   MouthSmile: ['mouthSmile', 1],
+  EyeLeftX: ['gazeX', 1],
+  EyeRightX: ['gazeX', 1],
+  EyeLeftY: ['gazeY', 1],
+  EyeRightY: ['gazeY', 1],
+  Brows: ['brows', 1],
+  BrowLeftY: ['browLeft', 0.5, 0.5],
+  BrowRightY: ['browRight', 0.5, 0.5],
+  MouthX: ['mouthX', 1],
+  CheekPuff: ['cheekPuff', 1],
+  TongueOut: ['tongueOut', 1],
 };
 const keys: Record<string, string> = {
   LeftControl: 'Control',
@@ -113,15 +129,18 @@ export function importVtsConfig(raw: unknown, model: Model): VtsImportResult {
   const hotkeyOptions: Record<string, HotkeyOptions> = {};
   const profile: Partial<ModelProfile> = { mappings, hotkeys, hotkeyOptions };
   const resolve = (file: unknown, entries: Model['motions']): string | undefined => {
-    if (!path(file)) return;
-    const normalized = file.replaceAll('\\', '/');
-    const valid = entries.filter((e) => safe(e.id) && e.id.length < 490 && path(e.file));
-    const exact = valid.filter((e) => e.file.replaceAll('\\', '/') === normalized);
+    const normalized = path(file);
+    if (!normalized) return;
+    const valid = entries.flatMap((e) => {
+      const file = path(e.file);
+      return safe(e.id) && e.id.length < 490 && file ? [{ id: e.id, file }] : [];
+    });
+    const exact = valid.filter((e) => e.file === normalized);
     const matches = exact.length
       ? exact
       : normalized.includes('/')
         ? []
-        : valid.filter((e) => e.file.replaceAll('\\', '/').split('/').at(-1) === normalized);
+        : valid.filter((e) => e.file.split('/').at(-1) === normalized);
     return matches.length === 1 ? matches[0].id : undefined;
   };
   for (const [i, item] of raw.ParameterSettings.entries()) {
@@ -146,57 +165,56 @@ export function importVtsConfig(raw: unknown, model: Model): VtsImportResult {
       warn(`${label}：当前模型不存在输出参数 ${id}`);
       continue;
     }
-    if (item.UseBreathing === true) {
-      warn(`${id}：自动呼吸覆盖输入，当前运行时无逐参数呼吸，已跳过`);
-      continue;
-    }
     if (item.UseBlinking === true)
       warn(`${id}：VTS 逐参数自动眨眼无法等同于全局自动眨眼，仅导入追踪映射`);
-    if (typeof item.Input !== 'string' || !Object.hasOwn(sources, item.Input)) {
+    if (
+      item.UseBreathing !== true &&
+      (typeof item.Input !== 'string' || !Object.hasOwn(sources, item.Input))
+    ) {
       warn(`${id}：不支持输入源 ${String(item.Input).slice(0, 80)}`);
       continue;
     }
-    const [source, divisor] = sources[item.Input];
+    const [source, divisor, offset = 0] =
+      item.UseBreathing === true ? ['breath' as const, 1] : sources[item.Input as string];
+    if (source === 'gazeX' || source === 'gazeY')
+      warn('视线输入：当前追踪使用双眼合并视线，左右眼独立方向按合并信号近似');
+    if (source === 'brows' || source === 'browLeft' || source === 'browRight')
+      warn('眉毛输入：按当前追踪的眉毛升降归一化，需校准中立姿态，非 VTS 原算法');
+    if (source === 'cheekPuff')
+      warn('CheekPuff：当前仅 NVIDIA 引擎提供鼓嘴信号；其他引擎可用参数固定值手动控制');
+    if (source === 'tongueOut')
+      warn('TongueOut：当前追踪引擎未提供吐舌信号；已保留映射，可用参数固定值手动控制');
+    if (source === 'breath')
+      warn('自动呼吸：忽略原输入源，使用当前运行时的周期曲线，节奏可能与 VTS 不同');
+    const inputLo = source === 'breath' ? 0 : item.InputRangeLower;
+    const inputHi = source === 'breath' ? 1 : item.InputRangeUpper;
     if (
-      ![
-        item.InputRangeLower,
-        item.InputRangeUpper,
-        item.OutputRangeLower,
-        item.OutputRangeUpper,
-        item.Smoothing,
-      ].every(number) ||
-      item.InputRangeLower === item.InputRangeUpper ||
+      ![inputLo, inputHi, item.OutputRangeLower, item.OutputRangeUpper, item.Smoothing].every(
+        number,
+      ) ||
+      inputLo === inputHi ||
       (item.Smoothing as number) < 0 ||
       (item.Smoothing as number) > 100
     ) {
       warn(`${id}：无效范围或平滑值`);
       continue;
     }
-    let lo = (item.InputRangeLower as number) / divisor,
-      hi = (item.InputRangeUpper as number) / divisor;
+    let lo = ((inputLo as number) - offset) / divisor,
+      hi = ((inputHi as number) - offset) / divisor;
     let outLo = item.OutputRangeLower as number,
       outHi = item.OutputRangeUpper as number;
     if (lo > hi) {
       [lo, hi] = [hi, lo];
       [outLo, outHi] = [outHi, outLo];
     }
-    if (
-      Math.abs(lo) > 1000 ||
-      Math.abs(hi) > 1000 ||
-      outLo < p.min ||
-      outLo > p.max ||
-      outHi < p.min ||
-      outHi > p.max
-    ) {
-      warn(`${id}：范围超出当前模型或映射限制，已跳过`);
+    if (Math.abs(lo) > 1000 || Math.abs(hi) > 1000) {
+      warn(`${id}：输入范围超出映射限制，已跳过`);
       continue;
     }
     if (Object.hasOwn(mappings, id)) {
       warn(`${id}：重复输出映射，保留第一项`);
       continue;
     }
-    if (item.ClampInput !== true || item.ClampOutput !== true)
-      warn(`${id}：当前运行时始终限制输入/输出，VTS 外推行为未保留`);
     // ponytail: slider proportion only; exact VTS smoothing needs its unpublished algorithm.
     if (item.Smoothing !== 0) warn(`${id}：平滑滑杆按 0–100 → 0–0.5 秒近似，非 VTS 原算法`);
     mappings[id] = {
@@ -207,19 +225,56 @@ export function importVtsConfig(raw: unknown, model: Model): VtsImportResult {
       outputMax: outHi,
       smoothing: (item.Smoothing as number) / 200,
       enabled: true,
+      ...(item.ClampInput === false && item.ClampOutput === false ? { clamp: false } : {}),
     };
   }
   if (Object.keys(mappings).length)
     warn(
-      '追踪范围按角度 / 30、眼口 0–1 转换；当前灵敏度、镜像、校准仍生效，需在预览中校准方向和幅度',
+      '追踪范围按当前输入源归一化，保留作者输出范围及外推设置；最终值受模型本身范围限制，灵敏度、镜像、校准仍生效，需在预览中校准方向和幅度',
     );
   const refs = record(raw.FileReferences) ? raw.FileReferences : {};
-  if (refs.IdleAnimation) {
-    const id = resolve(refs.IdleAnimation, model.motions);
-    if (id) profile.idleMotion = id;
-    else warn('待机动画：当前模型元数据无唯一匹配文件，未导入');
+  for (const [field, target, label] of [
+    ['IdleAnimation', 'idleMotion', '待机动画'],
+    ['IdleAnimationWhenTrackingLost', 'lostIdleMotion', '追踪丢失待机动画'],
+  ] as const) {
+    if (!refs[field]) continue;
+    const id = resolve(refs[field], model.motions);
+    if (id) profile[target] = id;
+    else
+      warn(
+        `${label}「${String(refs[field]).slice(0, 160)}」：文件缺失或存在同名歧义，未导入。请从原模型包重新导入，并检查同名文件。`,
+      );
   }
-  if (refs.IdleAnimationWhenTrackingLost) warn('追踪丢失专用待机动画不支持，未导入');
+  if (profile.lostIdleMotion)
+    warn('追踪丢失待机动画：使用应用的追踪丢失延迟，VTS 的等待时长未转换');
+  if (raw.SavedActiveExpressions !== undefined) {
+    const saving = record(raw.GeneralSettings)
+      ? raw.GeneralSettings.EnableExpressionSaving
+      : undefined;
+    if (saving !== undefined && typeof saving !== 'boolean') {
+      warn('SavedActiveExpressions：EnableExpressionSaving 开关类型无效，未导入默认表情');
+    } else if (saving === false) {
+      profile.defaultExpressions = [];
+    } else if (Array.isArray(raw.SavedActiveExpressions)) {
+      profile.defaultExpressions = [];
+      for (const file of raw.SavedActiveExpressions) {
+        const id = resolve(file, model.expressions);
+        if (id) {
+          if (!profile.defaultExpressions.includes(id)) profile.defaultExpressions.push(id);
+        } else {
+          warn(
+            `默认表情「${String(file).slice(0, 160)}」：文件缺失、引用无效或存在同名歧义，未导入。请从原模型包重新导入，并检查同名文件。`,
+          );
+        }
+      }
+      if (profile.defaultExpressions.length > 128) {
+        profile.defaultExpressions.length = 128;
+        warn('默认表情超过 128 个，仅导入前 128 个');
+      }
+    } else {
+      warn('SavedActiveExpressions：应为表情文件列表，未导入默认表情');
+    }
+  }
   if (record(raw.PhysicsSettings)) {
     if (raw.PhysicsSettings.Use === false) profile.physicsStrength = 0;
     warn('物理设置：仅支持 Use=false 关闭物理；强度滑杆、风、帧率枚举及旧版算法未转换');
@@ -278,7 +333,9 @@ export function importVtsConfig(raw: unknown, model: Model): VtsImportResult {
       const id = resolve(item.File, expression ? model.expressions : model.motions);
       if (id) action = `${expression ? 'expression' : 'motion'}:${id}`;
       else {
-        warn(`${label}：当前模型元数据无唯一匹配的表情/动作文件`);
+        warn(
+          `${label}${safe(item.Name) ? `「${item.Name.slice(0, 80)}」` : ''}：表情/动作文件「${String(item.File).slice(0, 160)}」缺失或存在同名歧义，未导入。请从原模型包重新导入，并检查同名文件。`,
+        );
         continue;
       }
     } else if (item.Action === 'RemoveAllExpressions') action = 'clear-expressions';
@@ -318,6 +375,15 @@ export function importVtsConfig(raw: unknown, model: Model): VtsImportResult {
     }
     hotkeys[action] = shortcut;
     const options: HotkeyOptions = { scope: 'local' };
+    if (item.FadeSecondsAmount !== undefined) {
+      if (
+        number(item.FadeSecondsAmount) &&
+        item.FadeSecondsAmount >= 0 &&
+        item.FadeSecondsAmount <= 10
+      )
+        options.fadeSeconds = item.FadeSecondsAmount;
+      else warn(`${label}：淡入淡出秒数无效（范围 0–10），使用运行时默认值`);
+    }
     if (item.Action === 'ToggleExpression') {
       if (item.DeactivateAfterKeyUp) options.release = true;
       if (item.DeactivateAfterSeconds)
@@ -331,8 +397,6 @@ export function importVtsConfig(raw: unknown, model: Model): VtsImportResult {
         );
     }
     hotkeyOptions[action] = options;
-    if (number(item.FadeSecondsAmount) && item.FadeSecondsAmount > 0)
-      warn(`${label}：VTS 自定义淡入淡出时间未导入，使用模型运行时默认值`);
   }
   for (const field of [
     'SavedModelPosition',
@@ -342,9 +406,13 @@ export function importVtsConfig(raw: unknown, model: Model): VtsImportResult {
     'ArtMeshDetails',
     'PhysicsCustomizationSettings',
     'ParameterCustomization',
-    'SavedActiveExpressions',
   ])
-    if (raw[field] !== undefined) warn(`${field}：VTS 专用配置未导入`);
+    if (raw[field] !== undefined)
+      warn(
+        field === 'GeneralSettings'
+          ? 'GeneralSettings：仅处理表情保存开关，其他 VTS 专用设置未转换'
+          : `${field}：VTS 专用配置未导入`,
+      );
   const known = [
     'Version',
     'Name',
