@@ -36,26 +36,15 @@ import { SceneControls } from './SceneControls';
 import { vowels } from './lipsync';
 import { version } from '../package.json';
 
-function Fold({
-  title,
-  action,
-  children,
-}: {
-  title: string;
-  action?: ReactNode;
-  children: ReactNode;
-}) {
+function Fold({ title, children }: { title: string; children: ReactNode }) {
   return (
     <Collapsible className="fold">
-      <div className="flex items-start">
-        {action}
-        <CollapsibleTrigger asChild>
-          <Button variant="ghost" className="fold-trigger min-w-0 flex-1">
-            {title}
-            <ChevronDown aria-hidden="true" />
-          </Button>
-        </CollapsibleTrigger>
-      </div>
+      <CollapsibleTrigger asChild>
+        <Button variant="ghost" className="fold-trigger">
+          {title}
+          <ChevronDown aria-hidden="true" />
+        </Button>
+      </CollapsibleTrigger>
       <CollapsibleContent className="fold-content">{children}</CollapsibleContent>
     </Collapsible>
   );
@@ -1054,8 +1043,11 @@ export function App() {
               <p className="hint">还没有角色。加入后会保存在本机，重启也能直接切换。</p>
             )}
             {!!view.libraryDirectory && (
-              <Fold title="角色文件夹" action={openLibraryButton}>
-                <p className="library-path">{view.libraryDirectory}</p>
+              <Fold title="角色文件夹">
+                <div className="flex items-center gap-2">
+                  <p className="library-path min-w-0 flex-1">{view.libraryDirectory}</p>
+                  {openLibraryButton}
+                </div>
                 <p className="hint">
                   导入后使用库内副本，原文件可以移动。每个角色的构图、映射和快捷键独立保存。
                 </p>

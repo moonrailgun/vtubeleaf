@@ -1963,6 +1963,7 @@ test('model controls save profiles, expressions, shortcuts and a manual motion r
     imported.mappings,
   );
   await page.getByRole('button', { name: '角色库', exact: true }).click();
+  await page.getByRole('button', { name: '角色文件夹', exact: true }).click();
   await page.locator('#library .fold').getByRole('button', { name: '打开角色文件夹' }).click();
   await expect(page.locator('#notice')).toContainText('无法打开角色文件夹');
   await expect(page.locator('#notice')).toHaveClass(/error/);
@@ -2003,16 +2004,19 @@ test('character library shows square icons and opens its folder without loading 
   const folderToggle = page.getByRole('button', { name: '角色文件夹', exact: true });
   const openFolder = page.locator('#library .fold').getByRole('button', { name: '打开角色文件夹' });
   await expect(folderToggle).toHaveAttribute('aria-expanded', 'false');
-  await openFolder.click();
-  await expect.poll(() => page.evaluate(() => (window as any).folderOpens)).toBe(1);
-  await expect(folderToggle).toHaveAttribute('aria-expanded', 'false');
+  await expect(openFolder).toBeHidden();
   await folderToggle.click();
   await expect(page.locator('.library-path')).toHaveText('/icon');
+  await openFolder.click();
+  await expect.poll(() => page.evaluate(() => (window as any).folderOpens)).toBe(1);
+  await expect(folderToggle).toHaveAttribute('aria-expanded', 'true');
   await openFolder.press('Enter');
   await expect(page.locator('#notice')).toContainText('无法打开角色文件夹');
   await expect(page.locator('#notice')).toHaveClass(/error/);
   await expect(folderToggle).toHaveAttribute('aria-expanded', 'true');
   await page.screenshot({ path: testInfo.outputPath('library-folder-button.png') });
+  await folderToggle.click();
+  await expect(openFolder).toBeHidden();
 });
 
 test('character library generates avatars before selection, imports drops and restores previews', async ({
