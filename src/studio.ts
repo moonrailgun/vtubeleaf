@@ -4,6 +4,7 @@ import { WebviewWindow } from '@tauri-apps/api/webviewWindow';
 import { getCurrentWindow, type BackgroundThrottlingPolicy } from '@tauri-apps/api/window';
 import { AvatarStage, type ModelInfo, type MotionMode } from './renderer';
 import { Tracker } from './tracker';
+import { enumerateCaptureDevices, isVTubeLeafCamera } from './camera-devices';
 import {
   defaults,
   readSettings,
@@ -210,12 +211,18 @@ export function createStudio(
     });
     publish();
   }
-  async function devices() {
-    const next = (await navigator.mediaDevices?.enumerateDevices()) ?? [];
+  async function devices(requestPermission = false) {
+    const next = await enumerateCaptureDevices(requestPermission, () => disposed);
     if (disposed) return;
     cameraDevices = next.filter((d) => d.kind === 'videoinput' && d.deviceId);
     micDevices = next.filter((d) => d.kind === 'audioinput' && d.deviceId);
-    publish();
+    if (
+      cameraDevices.some(
+        (device) => device.deviceId === settings.deviceId && isVTubeLeafCamera(device),
+      )
+    )
+      actions.setSetting('deviceId', '');
+    else publish();
   }
   function modelAction(id: string, mode: MotionMode = 'once') {
     if (!stage || !model || disposed) return;

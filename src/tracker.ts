@@ -8,6 +8,7 @@ import type {
 } from '@mediapipe/tasks-vision';
 import { fromHands, type HandSignals } from './hands.ts';
 import { fromNvidia } from './nvidia.ts';
+import { openTrackingCamera } from './camera-devices';
 import {
   fromMediaPipe,
   fromPose,
@@ -138,15 +139,16 @@ export class Tracker {
             : s.cameraResolution === '720p'
               ? [1280, 720]
               : [640, 360];
-        const stream = await navigator.mediaDevices.getUserMedia({
-          audio: false,
-          video: {
+        const stream = await openTrackingCamera(
+          s.deviceId,
+          {
             width: { ideal: width },
             height: { ideal: height },
             frameRate: { ideal: s.trackingFps, max: s.trackingFps },
-            ...(s.deviceId ? { deviceId: { exact: s.deviceId } } : {}),
           },
-        });
+          () => generation !== this.generation,
+        );
+        if (!stream) return false;
         if (generation !== this.generation) {
           stream.getTracks().forEach((track) => track.stop());
           return false;
@@ -299,7 +301,8 @@ export class Tracker {
         const messages: Record<string, string> = {
           NotAllowedError:
             '摄像头权限被拒绝。请在系统隐私设置中允许 VTubeLeaf 使用摄像头，然后重试。',
-          NotFoundError: '未找到摄像头。请连接设备并刷新列表。',
+          NotFoundError:
+            '未找到可用于跟踪的摄像头。请连接其他摄像头并刷新列表；VTubeLeaf Camera 仅用于输出。',
           NotReadableError: '无法打开摄像头。请关闭正在占用它的应用后重试。',
           OverconstrainedError: '所选摄像头已不可用。请刷新列表并重新选择。',
         };
