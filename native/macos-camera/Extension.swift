@@ -58,10 +58,8 @@ final class CameraStream: NSObject, CMIOExtensionStreamSource {
             cameraAuthorizationLog.error("Sink authorization rejected: stage=client-busy \(context, privacy: .public)")
             return false
         }
-        guard client.signingID == "com.moonrailgun.vtubeleaf" else {
-            cameraAuthorizationLog.error("Sink authorization rejected: stage=signing-id \(context, privacy: .public)")
-            return false
-        }
+        // CoreMediaIO can report "unknown" even for the signed host. Validate the
+        // running process below; the requirement checks both identifier and Team ID.
         guard let team = configuredTeam,
               team.range(of: "^[A-Z0-9]{10}$", options: .regularExpression) != nil else {
             cameraAuthorizationLog.error("Sink authorization rejected: stage=team-id \(context, privacy: .public)")

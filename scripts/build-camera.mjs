@@ -204,6 +204,18 @@ if (values.test) {
     join(build, 'host-checks'),
   ]);
   console.log(run(join(build, 'host-checks'), []).toString().trim());
+  const authorizationInfo = join(build, 'AuthorizationChecks.plist');
+  writePlist(authorizationInfo, { CameraTeamIdentifier: team === 'UNSIGNED' ? 'TESTTEAM01' : team });
+  run('xcrun', [
+    'swiftc', '-swift-version', '5',
+    '-target', `${process.arch === 'arm64' ? 'arm64' : 'x86_64'}-apple-macos14.0`,
+    join(native, 'Frame.swift'), join(native, 'Extension.swift'),
+    join(native, 'tests/AuthorizationChecks.swift'),
+    '-Xlinker', '-sectcreate', '-Xlinker', '__TEXT', '-Xlinker', '__info_plist',
+    '-Xlinker', authorizationInfo,
+    '-o', join(build, 'authorization-checks'),
+  ]);
+  console.log(run(join(build, 'authorization-checks'), []).toString().trim());
 }
 if (app) {
   // Preserve existing host entitlements, including those added by Tauri or the distributor.
