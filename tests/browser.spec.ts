@@ -2644,7 +2644,20 @@ test('props-only scenes support dragging, saving, recall, visibility shortcuts a
   });
   await page.goto('/');
   await page.getByRole('button', { name: '画面', exact: true }).click();
+  const layers = page.getByRole('group', { name: '编辑图层', exact: true });
+  const mainLayer = layers.getByRole('button', { name: '主角色', exact: true });
+  const propLayer = layers.getByRole('button', { name: '1 · Color flag', exact: true });
+  await expect(mainLayer).toHaveAttribute('aria-pressed', 'true');
   await page.getByRole('button', { name: '添加图片 / GIF', exact: true }).click();
+  await expect(page.locator('#item-name')).toHaveValue('Color flag');
+  await expect(propLayer).toHaveAttribute('aria-pressed', 'true');
+  await expect(mainLayer).toHaveAttribute('aria-pressed', 'false');
+  await mainLayer.click();
+  await expect(page.locator('#item-name')).toBeHidden();
+  await expect(propLayer).toHaveAttribute('aria-pressed', 'false');
+  await propLayer.focus();
+  await page.keyboard.press('Enter');
+  await expect(propLayer).toHaveAttribute('aria-pressed', 'true');
   await expect(page.locator('#item-name')).toHaveValue('Color flag');
   await expect(page.locator('#empty-state')).toBeHidden();
   await page.mouse.move(480, 360);
@@ -2654,19 +2667,26 @@ test('props-only scenes support dragging, saving, recall, visibility shortcuts a
   await expect
     .poll(() => page.evaluate(() => (window as any).savedSettings?.composition.items[0].x))
     .toBeCloseTo(0.1, 2);
+  const saveScene = page.getByRole('button', { name: '保存为新场景', exact: true });
+  await page.locator('#scene-name').fill('  ');
+  await expect(saveScene).toBeDisabled();
   await page.locator('#scene-name').fill('旗帜场景');
-  await page.getByRole('button', { name: '保存为新场景', exact: true }).click();
+  await saveScene.click();
   await expect(page.locator('#saved-scene option')).toHaveCount(2);
   const sceneId = await page.locator('#saved-scene option').last().getAttribute('value');
   await page.locator('#saved-scene').selectOption(sceneId!);
   await page.locator('#item-name').fill('Changed');
   await page.getByRole('button', { name: '切换场景', exact: true }).click();
-  await page.locator('#selected-item').selectOption({ label: '1 · Color flag' });
+  await expect(mainLayer).toHaveAttribute('aria-pressed', 'true');
+  await propLayer.click();
   await expect(page.locator('#item-name')).toHaveValue('Color flag');
   await page.getByRole('checkbox', { name: '显示', exact: true }).uncheck();
   await expect
     .poll(() => page.evaluate(() => (window as any).savedSettings?.composition.items[0].visible))
     .toBe(false);
+  await expect(
+    layers.getByRole('button', { name: '1 · Color flag（隐藏）', exact: true }),
+  ).toHaveAttribute('aria-pressed', 'true');
   await page.getByRole('button', { name: '角色', exact: true }).click();
   await page.getByRole('button', { name: '应用快捷键', exact: true }).click();
   const action = await page
@@ -2723,7 +2743,8 @@ test('props-only scenes support dragging, saving, recall, visibility shortcuts a
   await page.reload();
   await page.getByRole('button', { name: '画面', exact: true }).click();
   await expect(page.locator('#saved-scene option')).toHaveCount(2);
-  await expect(page.locator('#selected-item option')).toHaveCount(2);
+  await expect(layers.getByRole('button')).toHaveCount(2);
+  await expect(mainLayer).toHaveAttribute('aria-pressed', 'true');
   expect(await page.evaluate(() => (window as any).savedSettings?.modelPath ?? '')).toBe('');
 });
 

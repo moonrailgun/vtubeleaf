@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { Check, Image as ImageIcon, Save, UserRound } from 'lucide-react';
 import { Button } from './components/ui/button';
 import { Input } from './components/ui/input';
 import { NativeSelect as Select } from './components/ui/native-select';
@@ -83,20 +84,46 @@ export function SceneControls({
           添加 Live2D
         </Button>
       </div>
-      <label htmlFor="selected-item">编辑图层</label>
-      <Select
-        id="selected-item"
-        value={view.selectedItem}
-        onChange={(e) => a.selectItem(e.target.value)}
+      <h3 id="layer-label" className="mt-4 mb-2 text-xs font-semibold">
+        编辑图层
+      </h3>
+      <div
+        role="group"
+        aria-labelledby="layer-label"
+        className="flex max-h-60 flex-col gap-1 overflow-y-auto rounded-lg border p-1"
       >
-        <option value="">主角色</option>
+        <Button
+          variant="ghost"
+          className="w-full justify-start text-xs aria-pressed:bg-secondary aria-pressed:text-secondary-foreground"
+          aria-pressed={!view.selectedItem}
+          onClick={() => a.selectItem('')}
+        >
+          <UserRound aria-hidden="true" />
+          <span className="flex-1 text-left">主角色</span>
+          {!view.selectedItem && <Check aria-hidden="true" />}
+        </Button>
         {s.composition.items.map((item, index) => (
-          <option key={item.id} value={item.id}>
-            {index + 1} · {item.name}
-            {!item.visible ? '（隐藏）' : ''}
-          </option>
+          <Button
+            key={item.id}
+            variant="ghost"
+            className="w-full justify-start text-xs aria-pressed:bg-secondary aria-pressed:text-secondary-foreground"
+            aria-pressed={view.selectedItem === item.id}
+            onClick={() => a.selectItem(item.id)}
+            title={item.name}
+          >
+            {item.kind === 'live2d' ? (
+              <UserRound aria-hidden="true" />
+            ) : (
+              <ImageIcon aria-hidden="true" />
+            )}
+            <span className="min-w-0 flex-1 truncate text-left">
+              {index + 1} · {item.name}
+              {!item.visible ? '（隐藏）' : ''}
+            </span>
+            {view.selectedItem === item.id && <Check aria-hidden="true" />}
+          </Button>
         ))}
-      </Select>
+      </div>
       {item && (
         <>
           <label htmlFor="item-name">道具名称</label>
@@ -168,20 +195,29 @@ export function SceneControls({
         Live2D。跟随角色构图会随整体移动、缩放与旋转。
       </p>
       <div className="divider" />
-      <label htmlFor="scene-name">场景名称</label>
-      <Input
-        id="scene-name"
-        value={name}
-        maxLength={100}
-        onChange={(e) => setName(e.target.value)}
-      />
-      <Button
-        variant="outline"
-        disabled={!name.trim()}
-        onClick={() => run(() => a.saveScene(name))}
-      >
-        保存为新场景
-      </Button>
+      <div className="mt-4 flex items-center gap-2">
+        <label htmlFor="scene-name" className="m-0 shrink-0">
+          场景名称
+        </label>
+        <Input
+          id="scene-name"
+          className="flex-1"
+          value={name}
+          maxLength={100}
+          onChange={(e) => setName(e.target.value)}
+        />
+        <Button
+          variant="outline"
+          size="icon"
+          className="size-[40px]"
+          aria-label="保存为新场景"
+          title="保存为新场景"
+          disabled={!name.trim()}
+          onClick={() => run(() => a.saveScene(name))}
+        >
+          <Save aria-hidden="true" />
+        </Button>
+      </div>
       <label htmlFor="saved-scene">已保存场景</label>
       <Select
         id="saved-scene"
