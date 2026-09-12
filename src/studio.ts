@@ -133,6 +133,7 @@ export function createStudio(
     if (error) {
       events.unshift(`${new Date().toLocaleTimeString('zh-CN')} · ${message}`);
       events.length = Math.min(events.length, 8);
+      if (native) void emitTo('about', 'about-events', [...events]).catch(() => {});
     }
     publish();
   }
@@ -1140,6 +1141,12 @@ export function createStudio(
           dropActive = payload.type === 'enter' || payload.type === 'over';
           publish();
           if (payload.type === 'drop') void run(() => actions.importPaths(payload.paths));
+        }),
+      );
+      if (disposed) return;
+      await own(
+        listen('about-ready', () => {
+          void emitTo('about', 'about-events', [...events]).catch(() => {});
         }),
       );
       if (disposed) return;

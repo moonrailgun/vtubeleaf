@@ -13,7 +13,10 @@ use std::{
     path::{Path, PathBuf},
     sync::Mutex,
 };
-use tauri::{Emitter, Manager, WebviewWindow};
+use tauri::{
+    menu::{Menu, MenuItem},
+    Emitter, Manager, WebviewUrl, WebviewWindow, WebviewWindowBuilder,
+};
 use tauri_plugin_dialog::DialogExt;
 
 struct AppState {
@@ -384,7 +387,40 @@ pub fn run() {
                 settings: Mutex::default(),
                 tracker: Mutex::default(),
             });
+            let menu = Menu::default(app.handle())?;
+            let about_menu = if cfg!(target_os = "macos") {
+                menu.items()?.into_iter().next()
+            } else {
+                menu.get(tauri::menu::HELP_SUBMENU_ID)
+            }
+            .expect("默认菜单缺少关于子菜单");
+            let submenu = about_menu.as_submenu().expect("关于入口必须位于子菜单中");
+            submenu.remove_at(0)?;
+            submenu.insert(
+                &MenuItem::with_id(app, "about", "关于 VTubeLeaf", true, None::<&str>)?,
+                0,
+            )?;
+            #[cfg(target_os = "macos")]
+            app.set_menu(menu)?;
+            #[cfg(not(target_os = "macos"))]
+            app.get_webview_window("main")
+                .expect("工作台窗口未创建")
+                .set_menu(menu)?;
             Ok(())
+        })
+        .on_menu_event(|app, event| {
+            if event.id() == "about" {
+                let app = app.clone();
+                // WebView2 window creation must run outside the synchronous menu handler.
+                tauri::async_runtime::spawn(async move {
+                    if let Err(error) = show_about(&app) {
+                        app.dialog()
+                            .message(format!("无法打开关于窗口：{error}"))
+                            .title("VTubeLeaf")
+                            .show(|_| {});
+                    }
+                });
+            }
         })
         .invoke_handler(tauri::generate_handler![
             load_settings,
@@ -425,4 +461,21 @@ pub fn run() {
             }
         }
     });
+}
+
+fn show_about(app: &tauri::AppHandle) -> tauri::Result<()> {
+    let window = match app.get_webview_window("about") {
+        Some(window) => window,
+        None => {
+            WebviewWindowBuilder::new(app, "about", WebviewUrl::App("index.html?about=1".into()))
+                .title("关于 VTubeLeaf")
+                .inner_size(640.0, 700.0)
+                .min_inner_size(480.0, 480.0)
+                .center()
+                .build()?
+        }
+    };
+    window.unminimize()?;
+    window.show()?;
+    window.set_focus()
 }

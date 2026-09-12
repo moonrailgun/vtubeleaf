@@ -2923,33 +2923,115 @@ test('application shortcuts preserve native controls and release on blur', async
   await page.evaluate(() => (window as any).hotkeyTest.hotkeys.destroy());
 });
 
-test('bundled licenses are readable under desktop CSP without leaving the stage', async ({
+test('standalone about window groups FAQs and licenses under desktop CSP', async ({
   page,
+  context,
 }, testInfo) => {
   await serveProduction(page, '**/');
   await page.goto('/');
   await page.getByRole('button', { name: '接入', exact: true }).click();
-  await page.getByRole('button', { name: '开源与第三方许可', exact: true }).click();
-  const text = page.getByLabel('许可正文');
+  const faq = page.getByRole('button', { name: '常见问题与运行记录', exact: true });
+  await expect(faq).toBeHidden();
+  await expect(page.getByRole('button', { name: '开源与第三方许可', exact: true })).toBeHidden();
+  await expect(page.getByRole('button', { name: '关于 VTubeLeaf', exact: true })).toHaveCount(0);
+  const about = await context.newPage();
+  await serveProduction(about, '**/index.html?about=1');
+  await about.setViewportSize({ width: 640, height: 700 });
+  await about.goto('/index.html?about=1');
+  await expect(about).toHaveTitle('关于 VTubeLeaf');
+  await expect(about.getByRole('heading', { name: 'VTubeLeaf', exact: true })).toBeVisible();
+  await expect(about.locator('#stage, #controls, video, canvas')).toHaveCount(0);
+  await about.getByText('常见问题与运行记录', { exact: true }).click();
+  await expect(about.getByText('黑屏：检查模型是否成功加载', { exact: false })).toBeVisible();
+  await about.screenshot({ path: testInfo.outputPath('about.png') });
+  await about.getByText('常见问题与运行记录', { exact: true }).click();
+  const text = about.getByLabel('许可正文');
   await expect(text).toContainText('VTubeLeaf resource and bundled-code notices');
-  await page.getByLabel('许可文件').selectOption('/licenses/npm.txt');
+  await about.getByLabel('许可文件').selectOption('/licenses/npm.txt');
   await expect(text).toContainText('Permission is hereby granted');
-  await page.getByLabel('许可文件').selectOption('/licenses/rust.html');
+  await about.getByLabel('许可文件').selectOption('/licenses/rust.html');
   await expect(text).toContainText('Mozilla Public License');
   await expect(text).toContainText('2.0');
   await expect(text).toContainText('https://crates.io/crates/');
-  await page.getByLabel('许可文件').selectOption('/licenses/vtubeleaf.txt');
+  await about.getByLabel('许可文件').selectOption('/licenses/vtubeleaf.txt');
   await expect(text).toContainText('MIT License');
   await expect(text).toContainText('Copyright (c) 2026 moonrailgun');
   await expect(text).toContainText('Permission is hereby granted');
   await expect(page.locator('#stage canvas')).toBeVisible();
   await text.scrollIntoViewIfNeeded();
-  await page.screenshot({ path: testInfo.outputPath('licenses.png') });
-  await page.route('**/runtime/licenses/Core/LICENSE.md', (route) =>
+  await about.screenshot({ path: testInfo.outputPath('licenses.png') });
+  await about.route('**/runtime/licenses/Core/LICENSE.md', (route) =>
     route.fulfill({ status: 404, body: 'missing' }),
   );
-  await page.getByLabel('许可文件').selectOption('/runtime/licenses/Core/LICENSE.md');
+  await about.getByLabel('许可文件').selectOption('/runtime/licenses/Core/LICENSE.md');
   await expect(text).toHaveText('许可文件未包含在当前构建中。');
+  await about.setViewportSize({ width: 480, height: 480 });
+  expect(await about.evaluate(() => document.documentElement.scrollWidth)).toBe(480);
+  await about.close();
+  await expect(page.locator('#stage canvas')).toBeVisible();
+  await expect(page.locator('#meeting')).toBeVisible();
+});
+
+test('about window receives existing and new studio errors without starting another studio', async ({
+  page,
+}) => {
+  await page.route('**/src/main.tsx*', async (route) => {
+    await route.fulfill({
+      contentType: 'application/javascript',
+      body: `import React from '/node_modules/.vite/deps/react.js';
+        import ReactDOM from '/node_modules/.vite/deps/react-dom_client.js';
+        import { mockIPC, mockWindows } from '/node_modules/@tauri-apps/api/mocks.js';
+        import { createStudio } from '/src/studio.ts';
+        import { About } from '/src/About.tsx';
+        window.isTauri = true;
+        mockWindows('main', 'about');
+        mockIPC(cmd => {
+          if (cmd === 'load_settings') return null;
+          if (cmd === 'list_models') return { models: [], directory: '', errors: [] };
+          if (cmd === 'plugin:virtual-camera|status') return { supported: false, installed: false, active: false, message: '' };
+        }, { shouldMockEvents: true });
+        // Tauri's mock supports emit but not emitTo; both windows share this test's event bus.
+        const ipc = window.__TAURI_INTERNALS__.invoke;
+        window.__TAURI_INTERNALS__.invoke = (cmd, args, options) =>
+          ipc(cmd === 'plugin:event|emit_to' ? 'plugin:event|emit' : cmd, args, options);
+        const container = document.createElement('div');
+        container.style.cssText = 'width:320px;height:180px';
+        document.body.append(container);
+        window.aboutStudio = createStudio(container, document.createElement('video'), () => {});
+        window.mountAbout = () => {
+          const root = ReactDOM.createRoot(document.getElementById('app'));
+          root.render(React.createElement(React.StrictMode, null, React.createElement(About)));
+          window.unmountAbout = () => root.unmount();
+        };
+      `,
+    });
+  });
+  await page.goto('/?about=1');
+  await expect
+    .poll(() => page.evaluate(() => (window as any).aboutStudio?.snapshot().ready))
+    .toBe(true);
+  await page.evaluate(async () => {
+    await (window as any).aboutStudio.actions.run(() => {
+      throw new Error('打开关于前的错误');
+    });
+    (window as any).mountAbout();
+  });
+  await page.getByText('常见问题与运行记录', { exact: true }).click();
+  await expect(page.locator('#events')).toContainText('打开关于前的错误');
+  await page.evaluate(() =>
+    (window as any).aboutStudio.actions.run(() => {
+      throw new Error('打开关于后的错误');
+    }),
+  );
+  await expect(page.locator('#events li').first()).toContainText('打开关于后的错误');
+  await page.evaluate(() => (window as any).unmountAbout());
+  await page.evaluate(() => (window as any).mountAbout());
+  await page.getByText('常见问题与运行记录', { exact: true }).click();
+  await expect(page.locator('#events li')).toHaveCount(2);
+  await page.evaluate(() => {
+    (window as any).unmountAbout();
+    (window as any).aboutStudio.destroy();
+  });
 });
 
 test('focused output forwards application shortcuts and releases held actions without rebinding for display changes', async ({

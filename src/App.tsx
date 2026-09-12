@@ -49,65 +49,6 @@ function Fold({ title, children }: { title: string; children: ReactNode }) {
     </Collapsible>
   );
 }
-function LicenseNotices() {
-  const [file, setFile] = useState('/licenses/resources.txt');
-  const [text, setText] = useState('');
-  useEffect(() => {
-    const controller = new AbortController();
-    setText('读取中…');
-    void fetch(file, { signal: controller.signal })
-      .then(async (response) => {
-        if (
-          !response.ok ||
-          (!file.endsWith('.html') && response.headers.get('content-type')?.includes('text/html'))
-        )
-          throw new Error('许可文件未包含在当前构建中。');
-        let body = await response.text();
-        if (file.endsWith('.html')) {
-          const document = new DOMParser().parseFromString(body, 'text/html');
-          document.querySelectorAll('a').forEach((link) => {
-            link.textContent += ` (${link.getAttribute('href')})`;
-          });
-          body = [...document.querySelectorAll('h1, h2, p, li, pre')]
-            .map((element) => element.textContent)
-            .join('\n\n');
-        }
-        setText(body);
-      })
-      .catch((error: unknown) => {
-        if (!controller.signal.aborted)
-          setText(error instanceof Error ? error.message : '无法读取许可文件。');
-      });
-    return () => controller.abort();
-  }, [file]);
-  return (
-    <>
-      <Select aria-label="许可文件" value={file} onChange={(event) => setFile(event.target.value)}>
-        <option value="/licenses/vtubeleaf.txt">VTubeLeaf（MIT）</option>
-        <option value="/licenses/resources.txt">资源来源与许可状态</option>
-        <option value="/licenses/npm.txt">JavaScript 依赖许可</option>
-        <option value="/licenses/rust.html">Rust 依赖许可</option>
-        <option value="/licenses/cubism-framework.md">Cubism Framework</option>
-        <option value="/runtime/licenses/Core/LICENSE.md">Cubism Core（已配置时）</option>
-        <option value="/licenses/windows-microsoft.txt">Microsoft BaseClasses</option>
-        <option value="/licenses/windows-softcam.txt">Softcam BaseClasses</option>
-      </Select>
-      <pre
-        aria-label="许可正文"
-        tabIndex={0}
-        style={{
-          maxHeight: 360,
-          overflow: 'auto',
-          whiteSpace: 'pre-wrap',
-          overflowWrap: 'anywhere',
-          fontSize: 12,
-        }}
-      >
-        {text}
-      </pre>
-    </>
-  );
-}
 function Toggle({
   id,
   label,
@@ -1196,20 +1137,6 @@ export function App() {
               需要边调整边输出时，可使用「独立输出窗口」并在 OBS 捕获 VTubeLeaf
               Output。先用另一参会端确认画面，后台与最小化表现需按平台实测。
             </p>
-            <Fold title="常见问题与运行记录">
-              <p className="hint">
-                黑屏：检查模型是否成功加载，以及 OBS
-                捕获的窗口。无表情：检查跟踪状态并重新校准。摄像头不可用：检查系统权限、设备连接与其他应用占用。
-              </p>
-              <ul id="events" className="events">
-                {view.events.map((event, i) => (
-                  <li key={`${i}:${event}`}>{event}</li>
-                ))}
-              </ul>
-            </Fold>
-            <Fold title="开源与第三方许可">
-              <LicenseNotices />
-            </Fold>
             <div className="privacy-note">
               <b>你的人脸，留在你的电脑。</b>
               <p>

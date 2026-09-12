@@ -1,0 +1,7 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "about",
+  "description": "Receive current-session diagnostics in the About window",
+  "windows": ["about"],
+  "permissions": ["core:event:default"]
+}
