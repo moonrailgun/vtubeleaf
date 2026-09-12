@@ -15,8 +15,8 @@
         "label": "main",
         "url": "index.html",
         "title": "VTubeLeaf",
-        "width": 1200,
-        "height": 800,
+        "width": 1280,
+        "height": 720,
         "minWidth": 900,
         "minHeight": 650,
         "backgroundThrottling": "disabled"
