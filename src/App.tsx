@@ -36,15 +36,26 @@ import { SceneControls } from './SceneControls';
 import { vowels } from './lipsync';
 import { version } from '../package.json';
 
-function Fold({ title, children }: { title: string; children: ReactNode }) {
+function Fold({
+  title,
+  action,
+  children,
+}: {
+  title: string;
+  action?: ReactNode;
+  children: ReactNode;
+}) {
   return (
     <Collapsible className="fold">
-      <CollapsibleTrigger asChild>
-        <Button variant="ghost" className="fold-trigger">
-          {title}
-          <ChevronDown aria-hidden="true" />
-        </Button>
-      </CollapsibleTrigger>
+      <div className="flex items-start">
+        {action}
+        <CollapsibleTrigger asChild>
+          <Button variant="ghost" className="fold-trigger min-w-0 flex-1">
+            {title}
+            <ChevronDown aria-hidden="true" />
+          </Button>
+        </CollapsibleTrigger>
+      </div>
       <CollapsibleContent className="fold-content">{children}</CollapsibleContent>
     </Collapsible>
   );
@@ -322,6 +333,18 @@ export function App() {
           ? '摄像头使用中'
           : '摄像头未使用';
   const common = view.parameters.filter((p) => Object.hasOwn(parameterNames, p.id));
+  const openLibraryButton = (
+    <Button
+      variant="ghost"
+      size="icon-sm"
+      aria-label="打开角色文件夹"
+      title="打开角色文件夹"
+      disabled={!view.libraryDirectory}
+      onClick={() => run(() => a?.openLibrary())}
+    >
+      <FolderOpen aria-hidden="true" />
+    </Button>
+  );
   return (
     <div className={`studio-shell${live ? ' live-mode' : ''}`}>
       <div
@@ -1001,16 +1024,7 @@ export function App() {
                   </DropdownMenu.Content>
                 </DropdownMenu.Portal>
               </DropdownMenu.Root>
-              <Button
-                variant="ghost"
-                size="icon-sm"
-                aria-label="打开角色文件夹"
-                title="打开角色文件夹"
-                disabled={!view.libraryDirectory}
-                onClick={() => run(() => a?.openLibrary())}
-              >
-                <FolderOpen aria-hidden="true" />
-              </Button>
+              {openLibraryButton}
             </div>
             <div className="model-library" aria-label="已保存的角色" aria-busy={busy}>
               {view.library.map((entry) => (
@@ -1040,7 +1054,7 @@ export function App() {
               <p className="hint">还没有角色。加入后会保存在本机，重启也能直接切换。</p>
             )}
             {!!view.libraryDirectory && (
-              <Fold title="角色文件夹">
+              <Fold title="角色文件夹" action={openLibraryButton}>
                 <p className="library-path">{view.libraryDirectory}</p>
                 <p className="hint">
                   导入后使用库内副本，原文件可以移动。每个角色的构图、映射和快捷键独立保存。

@@ -1909,7 +1909,7 @@ test('model controls save profiles, expressions, shortcuts and a manual motion r
     .toBeGreaterThan(0);
   await page.screenshot({ path: testInfo.outputPath('studio-model-controls.png') });
   await page.getByRole('button', { name: '角色库', exact: true }).click();
-  await page.getByRole('button', { name: '打开角色文件夹' }).click();
+  await page.locator('.library-actions').getByRole('button', { name: '打开角色文件夹' }).click();
   await expect.poll(() => page.evaluate(() => (window as any).openedLibrary)).toBe(true);
   await page.getByRole('button', { name: '添加角色', exact: true }).click();
   await expect(page.getByRole('menuitem', { name: '选择模型文件夹' })).toBeVisible();
@@ -1957,16 +1957,18 @@ test('model controls save profiles, expressions, shortcuts and a manual motion r
     imported.mappings,
   );
   await page.getByRole('button', { name: '角色库', exact: true }).click();
-  await page.getByRole('button', { name: '打开角色文件夹' }).click();
+  await page.locator('#library .fold').getByRole('button', { name: '打开角色文件夹' }).click();
   await expect(page.locator('#notice')).toContainText('无法打开角色文件夹');
   await expect(page.locator('#notice')).toHaveClass(/error/);
 });
 
-test('character icons appear as squares without loading model resources', async ({ page }) => {
+test('character library shows square icons and opens its folder without loading model resources', async ({
+  page,
+}, testInfo) => {
   await page.route('**/src/main.tsx*', async (route) => {
     const response = await route.fetch();
     const bootstrap = `import { mockIPC, mockWindows } from '/node_modules/@tauri-apps/api/mocks.js';
-      window.isTauri = true; mockWindows('main'); window.resourceReads = 0;
+      window.isTauri = true; mockWindows('main'); window.resourceReads = 0; window.folderOpens = 0;
       const canvas = document.createElement('canvas'); canvas.width = 48; canvas.height = 24;
       const context = canvas.getContext('2d'); context.fillStyle = '#39794b'; context.fillRect(0, 0, 48, 24);
       const icon = await (await fetch(canvas.toDataURL('image/jpeg'))).arrayBuffer();
@@ -1974,6 +1976,7 @@ test('character icons appear as squares without loading model resources', async 
         if (cmd === 'load_settings') return null;
         if (cmd === 'list_models') return { models: [{ id: 'icon', path: '/icon/model.model3.json', name: 'Icon', entry: 'model.model3.json', files: [] }], directory: '/icon', errors: [] };
         if (cmd === 'read_model_preview') return icon;
+        if (cmd === 'open_models_directory') { if (window.folderOpens++) throw new Error('无法打开角色文件夹'); return; }
         if (cmd === 'read_model_resource' || cmd === 'save_model_preview') { window.resourceReads++; throw new Error('icon must not render a model'); }
       }, { shouldMockEvents: true });\n`;
     await route.fulfill({ response, body: bootstrap + (await response.text()) });
@@ -1991,6 +1994,19 @@ test('character icons appear as squares without loading model resources', async 
   expect(dimensions.width).toBe(dimensions.height);
   expect(dimensions.naturalWidth).toBe(48);
   expect(await page.evaluate(() => (window as any).resourceReads)).toBe(0);
+  const folderToggle = page.getByRole('button', { name: '角色文件夹', exact: true });
+  const openFolder = page.locator('#library .fold').getByRole('button', { name: '打开角色文件夹' });
+  await expect(folderToggle).toHaveAttribute('aria-expanded', 'false');
+  await openFolder.click();
+  await expect.poll(() => page.evaluate(() => (window as any).folderOpens)).toBe(1);
+  await expect(folderToggle).toHaveAttribute('aria-expanded', 'false');
+  await folderToggle.click();
+  await expect(page.locator('.library-path')).toHaveText('/icon');
+  await openFolder.press('Enter');
+  await expect(page.locator('#notice')).toContainText('无法打开角色文件夹');
+  await expect(page.locator('#notice')).toHaveClass(/error/);
+  await expect(folderToggle).toHaveAttribute('aria-expanded', 'true');
+  await page.screenshot({ path: testInfo.outputPath('library-folder-button.png') });
 });
 
 test('character library generates avatars before selection, imports drops and restores previews', async ({
