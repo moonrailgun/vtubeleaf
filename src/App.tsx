@@ -18,6 +18,14 @@ import {
 import { Button } from './components/ui/button';
 import { Input } from './components/ui/input';
 import { NativeSelect as Select } from './components/ui/native-select';
+import {
+  Select as CameraSelect,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from './components/ui/select';
+import { isVTubeLeafCamera } from './camera-devices';
 import { Switch } from './components/ui/switch';
 import { Slider } from './components/ui/slider';
 import { Collapsible, CollapsibleTrigger, CollapsibleContent } from './components/ui/collapsible';
@@ -525,27 +533,37 @@ export function App() {
                   id="refresh-devices"
                   variant="ghost"
                   size="sm"
-                  onClick={() => run(() => a?.devices())}
+                  onClick={() => run(() => a?.devices(true))}
                 >
                   刷新
                 </Button>
               </div>
-              <Select
-                id="device"
+              <CameraSelect
                 disabled={active || !view.ready}
-                value={s.deviceId}
-                onChange={(e) => set('deviceId', e.target.value)}
+                value={s.deviceId || 'auto-camera'}
+                onValueChange={(value) => set('deviceId', value === 'auto-camera' ? '' : value)}
+                onOpenChange={(open) => {
+                  if (open) run(() => a?.devices(true));
+                }}
               >
-                <option value="">系统默认摄像头</option>
-                {view.cameraDevices.map((d, i) => (
-                  <option key={d.deviceId} value={d.deviceId}>
-                    {d.label || `摄像头 ${i + 1}`}
-                  </option>
-                ))}
-                {s.deviceId && !view.cameraDevices.some((d) => d.deviceId === s.deviceId) && (
-                  <option value={s.deviceId}>上次选择的摄像头（当前不可用）</option>
-                )}
-              </Select>
+                <SelectTrigger id="device">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="auto-camera">自动选择摄像头</SelectItem>
+                  {view.cameraDevices.map((d, i) => (
+                    <SelectItem key={d.deviceId} value={d.deviceId} disabled={isVTubeLeafCamera(d)}>
+                      {d.label || `摄像头 ${i + 1}`}
+                      {isVTubeLeafCamera(d) && ' · 仅用于输出（不可跟踪）'}
+                    </SelectItem>
+                  ))}
+                  {s.deviceId && !view.cameraDevices.some((d) => d.deviceId === s.deviceId) && (
+                    <SelectItem value={s.deviceId} disabled>
+                      上次选择的摄像头（当前不可用）
+                    </SelectItem>
+                  )}
+                </SelectContent>
+              </CameraSelect>
               {view.cameraLabel && <p className="hint break-all">正在使用：{view.cameraLabel}</p>}
               <Fold title="采集质量与帧率">
                 <label htmlFor="camera-resolution">采集分辨率</label>

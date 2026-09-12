@@ -106,7 +106,9 @@ export function validateHotkey(
 function editing(target: EventTarget | null): boolean {
   return (
     target instanceof Element &&
-    (target.matches('input, textarea, select') || (target as HTMLElement).isContentEditable)
+    (target.matches('input, textarea, select') ||
+      (target as HTMLElement).isContentEditable ||
+      !!target.closest('[role="combobox"], [role="listbox"]'))
   );
 }
 
