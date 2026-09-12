@@ -5,7 +5,12 @@ import SystemExtensions
 
 private let hostQueue = DispatchQueue(label: "com.vtubeleaf.camera.host", qos: .userInteractive)
 private let cameraHost = CameraHost()
-private let cameraDeviceUnavailable = "摄像头扩展已启用，macOS 尚未提供设备，请稍后重试"
+private let cameraDeviceUnavailable: String = {
+    if #available(macOS 15, *) {
+        return "摄像头扩展已启用，macOS 尚未提供设备。可尝试退出 VTubeLeaf，在系统设置中关闭再开启 VTubeLeaf 相机扩展后重试"
+    }
+    return "摄像头扩展已启用，macOS 尚未提供设备。可尝试退出并重新打开 VTubeLeaf 后重试"
+}()
 private let cameraRebootRequired = "macOS 要求重启以完成摄像头扩展变更；请保存工作并重启 Mac"
 
 func objectIDs(_ object: CMIOObjectID, _ selector: CMIOObjectPropertySelector, scope: CMIOObjectPropertyScope = CMIOObjectPropertyScope(kCMIOObjectPropertyScopeGlobal)) -> [CMIOObjectID] {
@@ -48,6 +53,7 @@ class CameraHost: NSObject, OSSystemExtensionRequestDelegate {
     var approvalPromptShown = false
     var waitingForDevice = false
     var startAfterActivation = false
+    var activationCompleted = false
     var needsReboot = false
     var deviceWaitDeadline: UInt64?
     var uninstallAfterRequest = false
@@ -80,7 +86,7 @@ class CameraHost: NSObject, OSSystemExtensionRequestDelegate {
     func findDevice() -> CMIODeviceID? {
         objectIDs(CMIOObjectID(kCMIOObjectSystemObject), CMIOObjectPropertySelector(kCMIOHardwarePropertyDevices)).first { deviceUID($0) == cameraDeviceUID }
     }
-    func updateInstallation(enabled: Bool, deviceAvailable: Bool) {
+    func updateInstallation(enabled: Bool, deviceAvailable: Bool?) {
         let wasInstalled = installed
         installed = enabled
         guard !needsReboot, !startAfterActivation else { return }
@@ -89,8 +95,12 @@ class CameraHost: NSObject, OSSystemExtensionRequestDelegate {
             waitingForDevice = false
             message = "摄像头扩展已停用，请在系统设置中重新开启或安装"
         } else if installed && stream == 0 && (!wasInstalled || waitingForDevice) {
-            waitingForDevice = !deviceAvailable
-            message = deviceAvailable ? "摄像头已安装，可以启动输出" : cameraDeviceUnavailable
+            waitingForDevice = deviceAvailable == false
+            if let deviceAvailable {
+                message = deviceAvailable ? "摄像头已安装，可以启动输出" : cameraDeviceUnavailable
+            } else {
+                message = "摄像头扩展已启用，启动输出时将检查设备"
+            }
         }
     }
     func snapshot() -> [String: Any] {
@@ -131,7 +141,10 @@ class CameraHost: NSObject, OSSystemExtensionRequestDelegate {
             waitingForDevice = false
         }
         // Pre-change status results are obsolete even if they arrive after this request finishes.
-        if kind != "status" { requests = requests.filter { $0.value != "status" } }
+        if kind != "status" {
+            requests = requests.filter { $0.value != "status" }
+            activationCompleted = false
+        }
         let request: OSSystemExtensionRequest
         switch kind {
         case "install", "start": request = .activationRequest(forExtensionWithIdentifier: cameraIdentifier, queue: hostQueue)
@@ -237,7 +250,10 @@ class CameraHost: NSObject, OSSystemExtensionRequestDelegate {
             return
         }
         if kind == "install" || kind == "start" {
-            updateInstallation(enabled: true, deviceAvailable: findDevice() != nil)
+            activationCompleted = result == .completed && !needsReboot
+            // Refresh readiness even if earlier status already marked the extension installed.
+            if kind == "install" && activationCompleted && stream == 0 { waitingForDevice = true }
+            updateInstallation(enabled: true, deviceAvailable: activationCompleted ? findDevice() != nil : nil)
         }
         if kind == "uninstall" { updateInstallation(enabled: false, deviceAvailable: false); message = "摄像头已卸载" }
         if needsReboot {
@@ -278,7 +294,8 @@ class CameraHost: NSObject, OSSystemExtensionRequestDelegate {
         // A status request submitted before activation must not replace update/approval feedback.
         guard !requests.values.contains(where: { $0 != "status" }), !needsReboot,
               !startAfterActivation else { return }
-        updateInstallation(enabled: properties.contains { $0.isEnabled && !$0.isUninstalling }, deviceAvailable: findDevice() != nil)
+        // Early CMIO enumeration can bind the old extension and obstruct its replacement.
+        updateInstallation(enabled: properties.contains { $0.isEnabled && !$0.isUninstalling }, deviceAvailable: activationCompleted ? findDevice() != nil : nil)
         if !installed && properties.contains(where: { $0.isAwaitingUserApproval }) { showApprovalPrompt() }
         else if !installed && properties.contains(where: { $0.isUninstalling }) { message = "摄像头正在卸载，可能需要重启" }
     }

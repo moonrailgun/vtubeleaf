@@ -8,8 +8,12 @@ private final class StartingCameraHost: CameraHost {
     var streamStarts = 0
     var streamError: Error?
     var availableDevice: CMIODeviceID? = 1
+    var deviceLookups = 0
 
-    override func findDevice() -> CMIODeviceID? { availableDevice }
+    override func findDevice() -> CMIODeviceID? {
+        deviceLookups += 1
+        return availableDevice
+    }
     override func submitRequest(_ request: OSSystemExtensionRequest) {
         submitted.append(request)
     }
@@ -19,8 +23,61 @@ private final class StartingCameraHost: CameraHost {
     }
 }
 
+private final class EnabledCameraProperties: OSSystemExtensionProperties {
+    override var isEnabled: Bool { true }
+    override var isAwaitingUserApproval: Bool { false }
+    override var isUninstalling: Bool { false }
+}
+
 @main struct HostChecks {
     static func main() throws {
+        let enabledProperties = EnabledCameraProperties()
+        for kind in ["install", "start"] {
+            let polling = StartingCameraHost()
+            polling.extensionBundleURL = FileManager.default.temporaryDirectory
+            polling.availableDevice = nil
+            for _ in 0..<2 {
+                polling.request("status")
+                polling.request(polling.submitted.last!, foundProperties: [enabledProperties])
+            }
+            assert(polling.deviceLookups == 0, "Startup status must not bind CMIO to an installed extension before its version is checked")
+            assert(polling.installed && !polling.waitingForDevice && !polling.message.contains("尚未提供设备"), "Enabled but uninspected devices must not be reported missing")
+            polling.request(kind)
+            _ = polling.snapshot()
+            assert(polling.deviceLookups == 0, "Pending activation must not discover an old device")
+            polling.request(polling.submitted.last!, didFailWithError: cameraError("activation rejected"))
+            polling.request("status")
+            polling.request(polling.submitted.last!, foundProperties: [enabledProperties])
+            assert(polling.deviceLookups == 0 && polling.message.contains("activation rejected"), "Polling after failed activation must preserve its error without initializing CMIO")
+            polling.request(kind)
+            polling.request(polling.submitted.last!, didFinishWithResult: .willCompleteAfterReboot)
+            polling.request("status")
+            polling.request(polling.submitted.last!, foundProperties: [enabledProperties])
+            assert(polling.deviceLookups == 0 && polling.message.contains("重启"), "Activation requiring reboot must not initialize CMIO in its completion callback or later polling")
+
+            let activated = StartingCameraHost()
+            activated.extensionBundleURL = FileManager.default.temporaryDirectory
+            activated.request("status")
+            activated.request(activated.submitted.last!, foundProperties: [enabledProperties])
+            activated.request(kind)
+            activated.request(activated.submitted.last!, didFinishWithResult: .completed)
+            assert(activated.deviceLookups > 0, "Completed installation and startup must allow device discovery")
+            if kind == "install" {
+                assert(activated.message.contains("可以启动输出"), "An enabled status received before installation must not leave the completed installation showing an approval prompt")
+            }
+            let lookupsAfterActivation = activated.deviceLookups
+            activated.request("status")
+            activated.request(activated.submitted.last!, foundProperties: [enabledProperties])
+            assert(activated.installed && activated.deviceLookups > lookupsAfterActivation, "Fresh status after successful activation must keep checking device availability")
+            let lookupsBeforeRetry = activated.deviceLookups
+            activated.request(kind)
+            activated.request(activated.submitted.last!, didFailWithError: cameraError("activation rejected"))
+            activated.request("status")
+            activated.request(activated.submitted.last!, foundProperties: [enabledProperties])
+            assert(activated.deviceLookups == lookupsBeforeRetry, "A prior activation success must not allow polling to bypass a failed activation retry")
+        }
+        print("PASS: status avoids CMIO before activation, after failure and when reboot is required; successful activation enables discovery")
+
         let delayed = StartingCameraHost()
         delayed.extensionBundleURL = FileManager.default.temporaryDirectory
         delayed.availableDevice = nil
@@ -123,9 +180,9 @@ private final class StartingCameraHost: CameraHost {
         timedOut.advanceStart(now: .max)
         timedOut.advanceStart(now: .max)
         assert(timedOut.submitted.count == 1 && timedOut.installed && timedOut.requests.isEmpty, "A device timeout must leave the extension installed without submitting deactivation")
-        assert(!timedOut.startAfterActivation && timedOut.streamStarts == 0 && timedOut.message.contains("稍后重试"), "A device timeout must end the pending start with retry feedback")
+        assert(!timedOut.startAfterActivation && timedOut.streamStarts == 0 && timedOut.message.contains("后重试"), "A device timeout must end the pending start with retry feedback")
         timedOut.updateInstallation(enabled: true, deviceAvailable: false)
-        assert(timedOut.message.contains("稍后重试"), "Status polling must preserve device-unavailable feedback")
+        assert(timedOut.message.contains("后重试"), "Status polling must preserve device-unavailable feedback")
         timedOut.availableDevice = 1
         timedOut.advanceStart(now: .max)
         assert(timedOut.streamStarts == 0, "A timed-out request must not start unexpectedly when a device later appears")

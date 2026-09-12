@@ -1,0 +1,5 @@
+; Reproduce the camera extension's denial of reads from the host app bundle.
+; This is a focused regression, not the full macOS camera extension sandbox.
+(version 1)
+(allow default)
+(deny file-read* (subpath (param "HOST_BUNDLE")))

@@ -66,7 +66,10 @@ final class CameraStream: NSObject, CMIOExtensionStreamSource {
             return false
         }
         var code: SecCode?
-        let lookupStatus = SecCodeCopyGuestWithAttributes(nil, [kSecGuestAttributePid: client.pid] as CFDictionary, [], &code)
+        // The camera sandbox cannot read the host's app bundle. Ask Security to
+        // validate the running process via its kernel signature and signing helper.
+        let lookupStatus = SecCodeCopyGuestWithAttributes(nil,
+            [kSecGuestAttributePid: client.pid, kSecGuestAttributeDynamicCode: true] as CFDictionary, [], &code)
         guard lookupStatus == errSecSuccess, let code else {
             cameraAuthorizationLog.error("Sink authorization rejected: stage=guest-code osStatus=\(lookupStatus) codePresent=\(code != nil) \(context, privacy: .public)")
             return false

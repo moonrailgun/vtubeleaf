@@ -16,9 +16,19 @@ node --experimental-strip-types --test tests/virtual-camera.test.ts
 
 The first command checks profile App Group authorization and the built extension's Mach service prefix, compiles arm64 and x86_64 extension executables, combines them, and runs the native frame/queue checks on the current architecture. Output is under the ignored `native/macos-camera/build/` directory. It is unsigned and cannot be installed. `src-tauri/build.rs` separately compiles and links the host bridge for the Rust target architecture. Non-macOS builds skip the Swift bridge. Windows uses its [DirectShow camera](../windows-camera/README.md); other platforms return unsupported camera status.
 
-The host checks cover activation before streaming, repeated clicks, cancellation, activation failures, reboot prompts, stale status responses, delayed device arrival, non-destructive timeouts, deferred uninstall, startup error preservation and disable/re-enable status transitions. Lifecycle checks intercept system submission and stream I/O; they do not install or update an extension. If a signed VTubeLeaf Camera is already installed and enabled, `--test` also checks actual device discovery and opening its CMIO sink queue without starting output. Otherwise this device check reports `SKIP`. Run `native/macos-camera/build/host-checks --require-device` to require a real device and fail if it is missing.
+The host checks cover activation before CMIO discovery and streaming, repeated clicks, cancellation, activation failures, reboot prompts, stale status responses, delayed device arrival, non-destructive timeouts, deferred uninstall, startup error preservation and disable/re-enable status transitions. Lifecycle checks intercept system submission and stream I/O; they do not install or update an extension. If a signed VTubeLeaf Camera is already installed and enabled, `--test` also checks actual device discovery and opening its CMIO sink queue without starting output. Otherwise this device check reports `SKIP`. Run `native/macos-camera/build/host-checks --require-device` to require a real device and fail if it is missing.
 
 Authorization checks reject an unsigned process even when its callback metadata claims the host signing ID. To also check a real signed host with `unknown`/missing metadata, build with `--test --team-id YOURTEAMID`, then run `native/macos-camera/build/authorization-checks HOST_PID` using a running signed VTubeLeaf process from that team. The check calls the extension's authorization method with test client metadata and real Security.framework validation; it does not install an extension or test its sandbox or frame delivery.
+
+Reproduce the camera sandbox's host-bundle read restriction with the same signed host:
+
+```sh
+sandbox-exec -D HOST_BUNDLE=/Applications/VTubeLeaf.app \
+  -f native/macos-camera/tests/AuthorizationSandbox.sb \
+  native/macos-camera/build/authorization-checks HOST_PID
+```
+
+This regression must still authorize the real host while rejecting the unsigned test process. It checks the file-access restriction, not the complete camera extension sandbox; signed extension activation and video delivery remain separate checks.
 
 ## Package a distributable app
 
@@ -65,7 +75,11 @@ Move the packaged app into `/Applications`, launch that copy, and use its native
 
 Each start action first requests activation of the bundled extension, allowing macOS to check its version and replace an older installation without uninstalling it first. Output starts only after activation completes and the device appears. Approval, activation errors and required reboots are shown in status; repeated clicks do not submit another pending request. Stopping or uninstalling while activation is pending cancels the deferred video start. Uninstall is queued until the pending request finishes.
 
+Before successful activation, status polling reads only system extension properties. CMIO device discovery stays deferred, including after activation fails or requires a reboot, to avoid binding an older extension before macOS can replace it. An enabled extension whose device has not been checked is not reported as missing.
+
 After activation succeeds, the host waits up to eight seconds for device discovery, checked by the existing two-second status poll. Device arrival during that wait resumes output automatically. If the device remains absent, the pending start ends with retry feedback and leaves the extension installed. Stop cancels the pending start. Only an explicit uninstall action requests deactivation; repeated uninstall clicks are coalesced. A missing device does not prove that reinstalling the extension or restarting the app will repair the system service.
+
+For an enabled extension whose device is missing on macOS 15+, try quitting VTubeLeaf, switching its camera extension off and back on under **System Settings → General → Login Items & Extensions → Camera Extensions**, then reopening the app and starting output. This recovery attempt does not require restarting the Mac, but is not guaranteed to recover every system. If macOS explicitly reports that activation requires a reboot, the app preserves that result.
 
 When approval is pending, the app shows a dialog linking to System Settings. On macOS 15+, enable VTubeLeaf under **General → Login Items & Extensions → Camera Extensions**; on macOS 14, allow it under **Privacy & Security**. Status distinguishes an enabled extension from a discovered device and updates when the device appears. A pending start continues after approval and device discovery. macOS may require approval during activation or return a result requiring reboot; the app cannot bypass those requirements.
 
@@ -87,6 +101,8 @@ For `Unable to start camera input stream: -4` / `无法启动摄像头输入流�
 Rebuild/sign the app and start camera output to activate its bundled extension first; merely replacing the app without starting output may leave an older extension running. Confirm the active version with `systemextensionsctl list`. The diagnostic entries include `extensionVersion`, the requesting PID/client ID/signing ID, the configured Team ID, and the existing sink client/running count. These fields are public so unified logging does not redact the evidence. No frame data or user paths are logged.
 
 CoreMediaIO can report `signingID=unknown` for a correctly signed host. This field is diagnostic only; authorization checks the running process's Apple signature, host identifier and packaged Team ID with Security.framework. Version 0.1.7 rejected such clients early with `stage=signing-id`; that requires a rebuilt, signed extension to fix.
+
+Version 0.1.8 can fail at `stage=guest-code osStatus=100001` because the camera sandbox denies reading the host app bundle. Authorization now requests `kSecGuestAttributeDynamicCode`, so Security.framework obtains the running process's signature from the kernel and uses its signing helper for bundle metadata. The signature requirement is unchanged and failures still reject the client. See [Apple's implementation](https://github.com/apple-oss-distributions/Security/blob/main/OSX/libsecurity_codesigning/lib/cskernel.cpp). This fix also requires a rebuilt, signed extension.
 
 Each rejected request names its `stage`: `client-busy`, `team-id`, `guest-code` (process lookup), `requirement` (signature rule creation), or `signature` (running process validation). Security API failures retain their original `osStatus`; lookup and rule creation also record whether an object was returned. `Sink authorization accepted` confirms only authorization, so continue checking frame delivery and conferencing output separately. Logs are emitted per authorization request, never per frame.
 
