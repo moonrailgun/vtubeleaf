@@ -1,6 +1,11 @@
-import { test, expect, type Page } from '@playwright/test';
+import { test, expect, type Page, type Locator } from '@playwright/test';
 import { readFileSync, readdirSync, writeFileSync } from 'node:fs';
 import { basename, dirname, resolve } from 'node:path';
+
+async function chooseOption(page: Page, trigger: Locator, name: string | RegExp) {
+  await trigger.click();
+  await page.getByRole('option', { name, exact: true }).click();
+}
 
 test('keyboard hotkey switch persists and restores existing application bindings', async ({
   page,
@@ -159,7 +164,7 @@ async function bindPauseHotkey(page: Page) {
   await page.getByRole('button', { name: '角色', exact: true }).click();
   await page.locator('#model-advanced > summary').click();
   await page.getByRole('button', { name: '应用快捷键', exact: true }).click();
-  await page.locator('#hotkey-action').selectOption('pause-tracking');
+  await chooseOption(page, page.locator('#hotkey-action'), '暂停 / 恢复跟踪');
   await page.locator('#hotkey-binding').fill('Control+Shift+P');
   await page.locator('#save-hotkey').click();
   await page.getByRole('button', { name: '面捕', exact: true }).click();
@@ -920,7 +925,7 @@ test('built-in backgrounds switch, persist, recall, and clear under production C
     'aria-pressed',
     'true',
   );
-  await page.locator('#saved-scene').selectOption({ label: '游戏直播' });
+  await chooseOption(page, page.locator('#saved-scene'), '游戏直播');
   await page.getByRole('button', { name: '切换场景', exact: true }).click();
   await expect(page.getByRole('button', { name: '游戏房', exact: true })).toHaveAttribute(
     'aria-pressed',
@@ -1736,16 +1741,16 @@ test('NVIDIA experimental settings are visible on Windows and survive reload', a
 }, testInfo) => {
   await page.addInitScript(() => Object.defineProperty(navigator, 'platform', { value: 'Win32' }));
   await page.goto('/');
-  await page.locator('#engine').selectOption('nvidia');
-  await expect(page.locator('#engine option:checked')).toHaveText('NVIDIA RTX · 实验中');
+  await chooseOption(page, page.locator('#engine'), 'NVIDIA RTX · 实验中');
+  await expect(page.locator('#engine')).toHaveText('NVIDIA RTX · 实验中');
   const options = page.locator('#nvidia-options');
   await expect(options).toBeVisible();
   await expect(options).toContainText('尚未完成实机验证');
   await page.locator('#nvidia-path').fill('C:\\ARSDK\\bin\\VTubeLeafNvidia.exe');
   await page.locator('#nvidia-model-dir').fill('C:\\ARSDK\\bin\\models');
   await page.locator('#nvidia-camera').fill('2');
-  await page.locator('#nvidia-fps').selectOption('24');
-  await page.locator('#nvidia-resolution').selectOption('720p');
+  await chooseOption(page, page.locator('#nvidia-fps'), '24 FPS');
+  await chooseOption(page, page.locator('#nvidia-resolution'), '1280 × 720');
   await expect
     .poll(() =>
       page.evaluate(
@@ -1754,12 +1759,12 @@ test('NVIDIA experimental settings are visible on Windows and survive reload', a
     )
     .toBe('720p');
   await page.reload();
-  await expect(page.locator('#engine')).toHaveValue('nvidia');
+  await expect(page.locator('#engine')).toHaveText('NVIDIA RTX · 实验中');
   await expect(page.locator('#nvidia-path')).toHaveValue('C:\\ARSDK\\bin\\VTubeLeafNvidia.exe');
   await expect(page.locator('#nvidia-model-dir')).toHaveValue('C:\\ARSDK\\bin\\models');
   await expect(page.locator('#nvidia-camera')).toHaveValue('2');
-  await expect(page.locator('#nvidia-fps')).toHaveValue('24');
-  await expect(page.locator('#nvidia-resolution')).toHaveValue('720p');
+  await expect(page.locator('#nvidia-fps')).toHaveText('24 FPS');
+  await expect(page.locator('#nvidia-resolution')).toHaveText('1280 × 720');
   await options.screenshot({ path: testInfo.outputPath('nvidia-settings.png') });
   await page.screenshot({ path: testInfo.outputPath('nvidia-windows.png') });
 });
@@ -1771,15 +1776,19 @@ test('NVIDIA is hidden on macOS but a restored setting explains the unsupported 
     Object.defineProperty(navigator, 'platform', { value: 'MacIntel' }),
   );
   await page.goto('/');
-  await expect(page.locator('#engine')).toHaveValue('mediapipe');
-  await expect(page.locator('#engine option[value="nvidia"]')).toHaveCount(0);
+  await expect(page.locator('#engine')).toHaveText('MediaPipe · 默认');
+  await page.locator('#engine').click();
+  await expect(page.getByRole('option', { name: 'NVIDIA RTX · 实验中' })).toHaveCount(0);
+  await page.keyboard.press('Escape');
   await page.evaluate(() =>
     localStorage.setItem('vtubeleaf-preview', JSON.stringify({ engine: 'nvidia' })),
   );
   await page.reload();
-  await expect(page.locator('#engine option[value="nvidia"]')).toBeDisabled();
+  await page.locator('#engine').click();
+  await expect(page.getByRole('option', { name: 'NVIDIA RTX · 实验中' })).toBeDisabled();
+  await page.keyboard.press('Escape');
   await expect(page.locator('#nvidia-options')).toContainText('此平台不支持');
-  await page.locator('#engine').selectOption('mediapipe');
+  await chooseOption(page, page.locator('#engine'), 'MediaPipe · 默认');
   await expect(page.locator('#nvidia-options')).toBeHidden();
 });
 
@@ -2054,19 +2063,23 @@ test('model controls save profiles, expressions, shortcuts and a manual motion r
   await page.screenshot({ path: testInfo.outputPath('studio-model-simple.png') });
   await page.locator('#model-advanced > summary').click();
   await page.locator('#parameter-search').fill('角度 X');
-  await expect(page.locator('#mapping-parameter option')).toHaveCount(1);
-  await expect(page.locator('#mapping-parameter')).toHaveValue('ParamAngleX');
+  await page.locator('#mapping-parameter').click();
+  await expect(page.getByRole('option')).toHaveCount(1);
+  await page.keyboard.press('Escape');
+  await expect(page.locator('#mapping-parameter')).toContainText('ParamAngleX');
   await page.locator('#parameter-search').fill('ParamAngleY');
-  await expect(page.locator('#mapping-parameter')).toHaveValue('ParamAngleY');
+  await expect(page.locator('#mapping-parameter')).toContainText('ParamAngleY');
   await page.locator('#parameter-search').fill('no-such-parameter');
   await expect(page.locator('#mapping-parameter')).toBeDisabled();
   await expect(page.getByText('没有匹配的参数', { exact: true })).toHaveCount(1);
   await page.locator('#parameter-search').fill('');
-  await page.locator('#parameter-group').selectOption({ label: '顔' });
-  await expect(page.locator('#mapping-parameter option[value="ParamAngleX"]')).toHaveCount(1);
-  await expect(page.locator('#mapping-parameter option[value="ParamEyeLOpen"]')).toHaveCount(0);
-  await page.locator('#parameter-group').selectOption('');
-  await page.locator('#mapping-parameter').selectOption('ParamAngleX');
+  await chooseOption(page, page.locator('#parameter-group'), '顔');
+  await page.locator('#mapping-parameter').click();
+  await expect(page.getByRole('option', { name: /ParamAngleX/ })).toHaveCount(1);
+  await expect(page.getByRole('option', { name: /ParamEyeLOpen/ })).toHaveCount(0);
+  await page.keyboard.press('Escape');
+  await chooseOption(page, page.locator('#parameter-group'), '全部分组');
+  await chooseOption(page, page.locator('#mapping-parameter'), /ParamAngleX/);
   await expect(page.locator('#mapping-inputMin')).toBeHidden();
   await page.getByRole('button', { name: '跟踪映射', exact: true }).click();
   await page.locator('#mapping-inputMin').fill('-0.5');
@@ -2084,7 +2097,7 @@ test('model controls save profiles, expressions, shortcuts and a manual motion r
   await page.getByRole('slider', { name: '整体强度', exact: true }).focus();
   await page.keyboard.press('Home');
   await page.keyboard.press('ArrowRight');
-  await page.locator('#physics-fps').selectOption('60');
+  await chooseOption(page, page.locator('#physics-fps'), '60 FPS');
   const physicsGroup = page.locator('[id^="physics-group-"] [role="slider"]').first();
   await expect(physicsGroup).toBeVisible();
   await physicsGroup.focus();
@@ -2101,12 +2114,12 @@ test('model controls save profiles, expressions, shortcuts and a manual motion r
   await expect(page.locator('#motion-buttons button').first().locator('kbd')).toHaveText(
     'Control+2',
   );
-  await expect(page.locator('#motion-mode')).toHaveValue('default');
+  await expect(page.locator('#motion-mode')).toHaveText('跟随动作设置');
   await page.locator('#motion-buttons button').first().click();
   await expect
     .poll(() => page.evaluate(() => (window as any).controlsStage?.held.ParamAngleX))
     .toBeCloseTo(16, 2);
-  await page.locator('#motion-mode').selectOption('once');
+  await chooseOption(page, page.locator('#motion-mode'), '单次');
   await page.locator('#motion-buttons button').first().click();
   await expect
     .poll(() => page.evaluate(() => (window as any).controlsStage?.playing))
@@ -2159,11 +2172,8 @@ test('model controls save profiles, expressions, shortcuts and a manual motion r
   await page.locator('#clear-expressions').click();
   await expect(expression).toHaveAttribute('aria-pressed', 'false');
   await page.getByRole('button', { name: '应用快捷键' }).click();
-  await expect(page.locator('#hotkey-action')).toHaveValue('expression:0');
+  await expect(page.locator('#hotkey-action')).toHaveText('表情 · F01 · F');
   await expect(page.locator('#hotkey-binding')).toHaveValue('KeyF');
-  await expect(page.locator('#hotkey-action option[value="expression:0"]')).toHaveText(
-    '表情 · F01 · F',
-  );
   await expect(page.locator('#hotkey-release')).toBeChecked();
   await expect(page.locator('#hotkey-seconds')).toHaveValue('5');
   await expect(page.locator('#hotkey-fade-seconds')).toHaveValue('0.15');
@@ -2213,15 +2223,15 @@ test('model controls save profiles, expressions, shortcuts and a manual motion r
   await page.locator('#clear-hotkey').click();
   await expect(expression.locator('kbd')).toHaveCount(0);
   await page.locator('#clear-expressions').click();
-  const motionAction = await page
-    .locator('#hotkey-action option')
-    .evaluateAll(
-      (options) =>
-        (options as HTMLOptionElement[]).find((option) => option.value.startsWith('motion:'))!
-          .value,
-    );
-  await page.locator('#hotkey-action').selectOption(motionAction);
-  await expect(page.locator('#hotkey-motion-mode')).toHaveValue('hold');
+  const motionAction = await page.evaluate(
+    () => `motion:${(window as any).controlsStage.motions[0].id}`,
+  );
+  await page.locator('#hotkey-action').click();
+  await page
+    .getByRole('option', { name: /^动作 ·/ })
+    .first()
+    .click();
+  await expect(page.locator('#hotkey-motion-mode')).toHaveText('保持末帧');
   await expect(page.locator('#hotkey-fade-seconds')).toHaveValue('0.1');
   await page.locator('#hotkey-binding').fill('Control+3');
   await page.locator('#save-hotkey').click();
@@ -2230,7 +2240,7 @@ test('model controls save profiles, expressions, shortcuts and a manual motion r
       page.evaluate((id) => (window as any).savedSettings?.hotkeyOptions[id], motionAction),
     )
     .toEqual({ scope: 'local', motionMode: 'hold', fadeSeconds: 0.1 });
-  await page.locator('#hotkey-motion-mode').selectOption('once');
+  await chooseOption(page, page.locator('#hotkey-motion-mode'), '单次');
   await page.locator('#hotkey-fade-seconds').fill('0');
   await page.locator('#save-hotkey-options').click();
   await expect
@@ -2238,7 +2248,7 @@ test('model controls save profiles, expressions, shortcuts and a manual motion r
       page.evaluate((id) => (window as any).savedSettings?.hotkeyOptions[id], motionAction),
     )
     .toEqual({ scope: 'local', motionMode: 'once', fadeSeconds: 0 });
-  await page.locator('#motion-mode').selectOption('default');
+  await chooseOption(page, page.locator('#motion-mode'), '跟随动作设置');
   await page.locator('#motion-buttons button').first().click();
   await expect
     .poll(() => page.evaluate(() => (window as any).controlsStage?.playing))
@@ -2246,7 +2256,7 @@ test('model controls save profiles, expressions, shortcuts and a manual motion r
   await expect
     .poll(() => page.evaluate(() => (window as any).controlsStage.frame.ParamAngleX))
     .toBeCloseTo(0, 2);
-  await page.locator('#hotkey-action').selectOption('clear-expressions');
+  await chooseOption(page, page.locator('#hotkey-action'), '关闭全部表情');
   await page.locator('#hotkey-binding').fill('Control+Shift+1');
   await page.locator('#save-hotkey').click();
   await expect(page.locator('#clear-expressions kbd')).toHaveText('Control+Shift+1');
@@ -2548,7 +2558,7 @@ test('character library generates avatars before selection, imports drops and re
   }
   await page.getByRole('button', { name: '角色', exact: true }).click();
   await page.locator('#model-advanced > summary').click();
-  await page.locator('#mapping-parameter').selectOption('PARAM_ANGLE_X');
+  await chooseOption(page, page.locator('#mapping-parameter'), /PARAM_ANGLE_X/);
   await page.getByRole('button', { name: '跟踪映射', exact: true }).click();
   await page.locator('#mapping-inputMin').fill('-0.4');
   await page.locator('#save-mapping').click();
@@ -2600,7 +2610,7 @@ test('quality settings preserve privacy and calibration samples cancel on stop',
   });
   await page.goto('/');
   await expect(page.locator('#render-fps')).toBeVisible();
-  await page.locator('#render-fps').selectOption('60');
+  await chooseOption(page, page.locator('#render-fps'), '60 FPS · 流畅');
   await page.locator('#start').click();
   await expect(page.locator('#tracking-status')).toHaveText('正在跟踪');
   await page.evaluate(() => {
@@ -2638,8 +2648,8 @@ test('quality settings preserve privacy and calibration samples cancel on stop',
   await expect(page.locator('#tracking-status')).toHaveText('尚未开始');
   await page.evaluate(() => clearInterval((window as any).qualityTimer));
   await page.getByText('眼睛、嘴部与丢脸恢复', { exact: true }).click();
-  await page.locator('#eye-link').selectOption('always');
-  await page.locator('#lost-mode').selectOption('hold');
+  await chooseOption(page, page.locator('#eye-link'), '始终同步 · 取双眼平均');
+  await chooseOption(page, page.locator('#lost-mode'), '保持最后姿态');
   await expect
     .poll(() =>
       page.evaluate(() => JSON.parse(localStorage.getItem('vtubeleaf-preview') || '{}').lostMode),
@@ -2652,15 +2662,15 @@ test('quality settings preserve privacy and calibration samples cancel on stop',
   expect(saved.lipSyncMode).toBe('off');
   expect(saved.handTracking).toBe(false);
   await page.screenshot({ path: testInfo.outputPath('quality-controls.png') });
-  await page.locator('#engine').selectOption('mediapipe');
+  await chooseOption(page, page.locator('#engine'), 'MediaPipe · 默认');
   await page.getByText('采集质量与帧率', { exact: true }).click();
-  await page.locator('#camera-resolution').selectOption('1080p');
-  await page.locator('#tracking-fps').selectOption('24');
+  await chooseOption(page, page.locator('#camera-resolution'), '1920 × 1080 · 高清');
+  await chooseOption(page, page.locator('#tracking-fps'), '24 FPS');
   await page.locator('#hand-tracking').click();
   await page.locator('#camera-resolution').scrollIntoViewIfNeeded();
   await page.screenshot({ path: testInfo.outputPath('capture-quality-controls.png') });
   await page.getByText('麦克风口型', { exact: true }).click();
-  await page.locator('#lip-sync-mode').selectOption('vowels');
+  await chooseOption(page, page.locator('#lip-sync-mode'), '校准元音');
   await expect(page.locator('#calibrate-voice-A')).toBeDisabled();
   await expect(page.locator('#mic-toggle')).toHaveText('开启麦克风');
   await page.locator('#mic-toggle').scrollIntoViewIfNeeded();
@@ -3076,9 +3086,10 @@ test('props-only scenes support dragging, saving, recall, visibility shortcuts a
   await expect(saveScene).toBeDisabled();
   await page.locator('#scene-name').fill('旗帜场景');
   await saveScene.click();
-  await expect(page.locator('#saved-scene option')).toHaveCount(2);
-  const sceneId = await page.locator('#saved-scene option').last().getAttribute('value');
-  await page.locator('#saved-scene').selectOption(sceneId!);
+  await page.locator('#saved-scene').click();
+  await expect(page.getByRole('option')).toHaveCount(2);
+  await page.keyboard.press('Escape');
+  await chooseOption(page, page.locator('#saved-scene'), '旗帜场景');
   await page.locator('#item-name').fill('Changed');
   await page.getByRole('button', { name: '切换场景', exact: true }).click();
   await expect(mainLayer).toHaveAttribute('aria-pressed', 'true');
@@ -3094,37 +3105,33 @@ test('props-only scenes support dragging, saving, recall, visibility shortcuts a
   await page.getByRole('button', { name: '角色', exact: true }).click();
   await page.locator('#model-advanced > summary').click();
   await page.getByRole('button', { name: '应用快捷键', exact: true }).click();
-  const action = await page
-    .locator('#hotkey-action option')
-    .evaluateAll(
-      (options) =>
-        (options as HTMLOptionElement[]).find((option) => option.value.startsWith('item:'))!.value,
-    );
-  await page.locator('#hotkey-action').selectOption(action);
+  await chooseOption(page, page.locator('#hotkey-action'), '显示 / 隐藏 · Color flag');
   await page.locator('#hotkey-binding').fill('Control+Shift+9');
   await page.locator('#save-hotkey').click();
   await page.keyboard.press('Control+Shift+9');
   await expect
     .poll(() => page.evaluate(() => (window as any).savedSettings?.composition.items[0].visible))
     .toBe(true);
-  for (const action of [
-    'toggle-tracking',
-    'calibrate',
-    'toggle-mic',
-    'toggle-model',
-    'toggle-camera',
+  await page.locator('#hotkey-action').click();
+  for (const name of [
+    '开始 / 停止跟踪',
+    '校准中立姿态',
+    '开启 / 关闭麦克风口型',
+    '显示 / 隐藏主角色',
+    '启动 / 停止虚拟摄像头',
   ]) {
-    await expect(page.locator(`#hotkey-action option[value="${action}"]`)).toHaveCount(1);
+    await expect(page.getByRole('option', { name, exact: true })).toHaveCount(1);
   }
+  await page.keyboard.press('Escape');
   expect(await page.evaluate(() => (window as any).cameraActions ?? [])).not.toContain('start');
-  await page.locator('#hotkey-action').selectOption('toggle-model');
+  await chooseOption(page, page.locator('#hotkey-action'), '显示 / 隐藏主角色');
   await page.locator('#hotkey-binding').fill('Control+Shift+8');
   await page.locator('#save-hotkey').click();
   await page.keyboard.press('Control+Shift+8');
   await expect
     .poll(() => page.evaluate(() => (window as any).savedSettings?.modelVisible))
     .toBe(false);
-  await page.locator('#hotkey-action').selectOption('toggle-camera');
+  await chooseOption(page, page.locator('#hotkey-action'), '启动 / 停止虚拟摄像头');
   await page.locator('#hotkey-binding').fill('Control+Shift+7');
   await page.locator('#save-hotkey').click();
   expect(await page.evaluate(() => (window as any).systemShortcutCalls ?? [])).toEqual([]);
@@ -3147,7 +3154,9 @@ test('props-only scenes support dragging, saving, recall, visibility shortcuts a
   await page.screenshot({ path: testInfo.outputPath('virtual-camera-controls.png') });
   await page.reload();
   await page.getByRole('button', { name: '画面', exact: true }).click();
-  await expect(page.locator('#saved-scene option')).toHaveCount(2);
+  await page.locator('#saved-scene').click();
+  await expect(page.getByRole('option')).toHaveCount(2);
+  await page.keyboard.press('Escape');
   await expect(layers.getByRole('button')).toHaveCount(2);
   await expect(mainLayer).toHaveAttribute('aria-pressed', 'true');
   expect(await page.evaluate(() => (window as any).savedSettings?.modelPath ?? '')).toBe('');
@@ -3535,13 +3544,13 @@ test('standalone about window groups FAQs and licenses under desktop CSP', async
   await about.getByText('常见问题与运行记录', { exact: true }).click();
   const text = about.getByLabel('许可正文');
   await expect(text).toContainText('VTubeLeaf resource and bundled-code notices');
-  await about.getByLabel('许可文件').selectOption('/licenses/npm.txt');
+  await chooseOption(about, about.getByLabel('许可文件'), 'JavaScript 依赖许可');
   await expect(text).toContainText('Permission is hereby granted');
-  await about.getByLabel('许可文件').selectOption('/licenses/rust.html');
+  await chooseOption(about, about.getByLabel('许可文件'), 'Rust 依赖许可');
   await expect(text).toContainText('Mozilla Public License');
   await expect(text).toContainText('2.0');
   await expect(text).toContainText('https://crates.io/crates/');
-  await about.getByLabel('许可文件').selectOption('/licenses/vtubeleaf.txt');
+  await chooseOption(about, about.getByLabel('许可文件'), 'VTubeLeaf（MIT）');
   await expect(text).toContainText('MIT License');
   await expect(text).toContainText('Copyright (c) 2026 moonrailgun');
   await expect(text).toContainText('Permission is hereby granted');
@@ -3551,7 +3560,7 @@ test('standalone about window groups FAQs and licenses under desktop CSP', async
   await about.route('**/runtime/licenses/Core/LICENSE.md', (route) =>
     route.fulfill({ status: 404, body: 'missing' }),
   );
-  await about.getByLabel('许可文件').selectOption('/runtime/licenses/Core/LICENSE.md');
+  await chooseOption(about, about.getByLabel('许可文件'), 'Cubism Core（已配置时）');
   await expect(text).toHaveText('许可文件未包含在当前构建中。');
   await about.setViewportSize({ width: 480, height: 480 });
   expect(await about.evaluate(() => document.documentElement.scrollWidth)).toBe(480);

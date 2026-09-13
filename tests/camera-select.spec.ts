@@ -7,6 +7,7 @@ async function openCameraSettings(page: Page, deviceId = '', permissionRequired 
         'vtubeleaf-preview',
         JSON.stringify({
           deviceId: selectedDevice,
+          micDeviceId: 'disconnected-mic',
           modelVisible: true,
           globalHotkeys: { 'toggle-model': 'U' },
         }),
@@ -134,4 +135,31 @@ test('a saved output camera selection returns to automatic camera selection', as
     .toBe('');
   await camera.click();
   await expect(page.getByRole('option', { name: 'VTubeLeaf Camera', exact: false })).toBeDisabled();
+});
+
+test('custom settings menus preserve numeric values and the default microphone', async ({
+  page,
+}) => {
+  await openCameraSettings(page);
+  const renderFps = page.getByRole('combobox', { name: '角色渲染帧率', exact: true });
+  await renderFps.click();
+  await page.getByRole('option', { name: '60 FPS · 流畅', exact: true }).click();
+  await expect(renderFps).toHaveText('60 FPS · 流畅');
+  await expect
+    .poll(() =>
+      page.evaluate(() => JSON.parse(localStorage.getItem('vtubeleaf-preview')!).renderFps),
+    )
+    .toBe(60);
+
+  await page.getByRole('button', { name: '麦克风口型', exact: true }).click();
+  const microphone = page.getByRole('combobox', { name: '麦克风', exact: true });
+  await expect(microphone).toHaveText('上次选择的麦克风（当前不可用）');
+  await microphone.click();
+  await page.getByRole('option', { name: '系统默认麦克风', exact: true }).click();
+  await expect(microphone).toHaveText('系统默认麦克风');
+  await expect
+    .poll(() =>
+      page.evaluate(() => JSON.parse(localStorage.getItem('vtubeleaf-preview')!).micDeviceId),
+    )
+    .toBe('');
 });

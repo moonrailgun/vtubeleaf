@@ -94,8 +94,7 @@
 [hidden] {
   display: none !important;
 }
-[data-slot='input'],
-[data-slot='native-select'] {
+[data-slot='input'] {
   min-height: 40px;
   background: #fcfafd;
   border-radius: 10px;

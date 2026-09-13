@@ -17,9 +17,8 @@ import {
 } from 'lucide-react';
 import { Button } from './components/ui/button';
 import { Input } from './components/ui/input';
-import { NativeSelect as Select } from './components/ui/native-select';
 import {
-  Select as CameraSelect,
+  Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
@@ -513,18 +512,22 @@ export function App() {
             </div>
             <label htmlFor="engine">跟踪引擎</label>
             <Select
-              id="engine"
               disabled={active || !view.ready}
               value={s.engine}
-              onChange={(e) => set('engine', e.target.value as Settings['engine'])}
+              onValueChange={(value) => set('engine', value as Settings['engine'])}
             >
-              <option value="mediapipe">MediaPipe · 默认</option>
-              <option value="openseeface">OpenSeeFace · 备选</option>
-              {(/Win/.test(navigator.platform) || s.engine === 'nvidia') && (
-                <option value="nvidia" disabled={!/Win/.test(navigator.platform)}>
-                  NVIDIA RTX · 实验中
-                </option>
-              )}
+              <SelectTrigger id="engine">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="mediapipe">MediaPipe · 默认</SelectItem>
+                <SelectItem value="openseeface">OpenSeeFace · 备选</SelectItem>
+                {(/Win/.test(navigator.platform) || s.engine === 'nvidia') && (
+                  <SelectItem value="nvidia" disabled={!/Win/.test(navigator.platform)}>
+                    NVIDIA RTX · 实验中
+                  </SelectItem>
+                )}
+              </SelectContent>
             </Select>
             <div id="mediapipe-options" hidden={s.engine !== 'mediapipe'}>
               <div className="label-row">
@@ -538,7 +541,7 @@ export function App() {
                   刷新
                 </Button>
               </div>
-              <CameraSelect
+              <Select
                 disabled={active || !view.ready}
                 value={s.deviceId || 'auto-camera'}
                 onValueChange={(value) => set('deviceId', value === 'auto-camera' ? '' : value)}
@@ -563,50 +566,63 @@ export function App() {
                     </SelectItem>
                   )}
                 </SelectContent>
-              </CameraSelect>
+              </Select>
               {view.cameraLabel && <p className="hint break-all">正在使用：{view.cameraLabel}</p>}
               <Fold title="采集质量与帧率">
                 <label htmlFor="camera-resolution">采集分辨率</label>
                 <Select
-                  id="camera-resolution"
                   disabled={active}
                   value={s.cameraResolution}
-                  onChange={(e) =>
-                    set('cameraResolution', e.target.value as Settings['cameraResolution'])
+                  onValueChange={(value) =>
+                    set('cameraResolution', value as Settings['cameraResolution'])
                   }
                 >
-                  <option value="360p">640 × 360 · 省电</option>
-                  <option value="720p">1280 × 720 · 推荐</option>
-                  <option value="1080p">1920 × 1080 · 高清</option>
+                  <SelectTrigger id="camera-resolution">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="360p">640 × 360 · 省电</SelectItem>
+                    <SelectItem value="720p">1280 × 720 · 推荐</SelectItem>
+                    <SelectItem value="1080p">1920 × 1080 · 高清</SelectItem>
+                  </SelectContent>
                 </Select>
                 <label htmlFor="tracking-fps">面部识别帧率</label>
                 <Select
-                  id="tracking-fps"
                   disabled={active}
-                  value={s.trackingFps}
-                  onChange={(e) =>
-                    set('trackingFps', Number(e.target.value) as Settings['trackingFps'])
+                  value={String(s.trackingFps)}
+                  onValueChange={(value) =>
+                    set('trackingFps', Number(value) as Settings['trackingFps'])
                   }
                 >
-                  {[15, 24, 30, 60].map((fps) => (
-                    <option key={fps} value={fps}>
-                      {fps} FPS
-                    </option>
-                  ))}
+                  <SelectTrigger id="tracking-fps">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {[15, 24, 30, 60].map((fps) => (
+                      <SelectItem key={fps} value={String(fps)}>
+                        {fps} FPS
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
                 </Select>
                 {(['bodyFps', 'handFps'] as const).map((key) => (
                   <label key={key}>
                     {key === 'bodyFps' ? '上半身识别帧率' : '手部识别帧率'}
                     <Select
                       disabled={active}
-                      value={s[key]}
-                      onChange={(e) => set(key, Number(e.target.value) as Settings[typeof key])}
+                      value={String(s[key])}
+                      onValueChange={(value) => set(key, Number(value) as Settings[typeof key])}
                     >
-                      {[5, 10, 15, 30].map((fps) => (
-                        <option key={fps} value={fps}>
-                          {fps} FPS
-                        </option>
-                      ))}
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {[5, 10, 15, 30].map((fps) => (
+                          <SelectItem key={fps} value={String(fps)}>
+                            {fps} FPS
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
                     </Select>
                   </label>
                 ))}
@@ -783,33 +799,41 @@ export function App() {
                 <label>
                   面捕帧率
                   <Select
-                    id="nvidia-fps"
                     disabled={active}
-                    value={s.trackingFps}
-                    onChange={(e) =>
-                      set('trackingFps', Number(e.target.value) as Settings['trackingFps'])
+                    value={String(s.trackingFps)}
+                    onValueChange={(value) =>
+                      set('trackingFps', Number(value) as Settings['trackingFps'])
                     }
                   >
-                    {[15, 24, 30, 60].map((fps) => (
-                      <option key={fps} value={fps}>
-                        {fps} FPS
-                      </option>
-                    ))}
+                    <SelectTrigger id="nvidia-fps">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {[15, 24, 30, 60].map((fps) => (
+                        <SelectItem key={fps} value={String(fps)}>
+                          {fps} FPS
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
                   </Select>
                 </label>
               </div>
               <label htmlFor="nvidia-resolution">摄像头分辨率</label>
               <Select
-                id="nvidia-resolution"
                 disabled={active}
                 value={s.cameraResolution}
-                onChange={(e) =>
-                  set('cameraResolution', e.target.value as Settings['cameraResolution'])
+                onValueChange={(value) =>
+                  set('cameraResolution', value as Settings['cameraResolution'])
                 }
               >
-                <option value="360p">640 × 360</option>
-                <option value="720p">1280 × 720</option>
-                <option value="1080p">1920 × 1080</option>
+                <SelectTrigger id="nvidia-resolution">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="360p">640 × 360</SelectItem>
+                  <SelectItem value="720p">1280 × 720</SelectItem>
+                  <SelectItem value="1080p">1920 × 1080</SelectItem>
+                </SelectContent>
               </Select>
             </div>
             <div className="divider" />
@@ -826,12 +850,16 @@ export function App() {
             </div>
             <label htmlFor="render-fps">角色渲染帧率</label>
             <Select
-              id="render-fps"
-              value={s.renderFps}
-              onChange={(e) => set('renderFps', Number(e.target.value) as Settings['renderFps'])}
+              value={String(s.renderFps)}
+              onValueChange={(value) => set('renderFps', Number(value) as Settings['renderFps'])}
             >
-              <option value={30}>30 FPS · 省电</option>
-              <option value={60}>60 FPS · 流畅</option>
+              <SelectTrigger id="render-fps">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="30">30 FPS · 省电</SelectItem>
+                <SelectItem value="60">60 FPS · 流畅</SelectItem>
+              </SelectContent>
             </Select>
             {toggle('motionMirror', '镜像角色转头方向')}
             {range('sensitivity', '头部灵敏度', 0.2, 3, 0.1)}
@@ -839,13 +867,17 @@ export function App() {
             <Fold title="眼睛、嘴部与丢脸恢复">
               <label htmlFor="eye-link">双眼联动</label>
               <Select
-                id="eye-link"
                 value={s.eyeLink}
-                onChange={(e) => set('eyeLink', e.target.value as Settings['eyeLink'])}
+                onValueChange={(value) => set('eyeLink', value as Settings['eyeLink'])}
               >
-                <option value="off">关闭 · 独立眨眼</option>
-                <option value="side">侧脸时同步 · 保留正脸单眼眨眼</option>
-                <option value="always">始终同步 · 取双眼平均</option>
+                <SelectTrigger id="eye-link">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="off">关闭 · 独立眨眼</SelectItem>
+                  <SelectItem value="side">侧脸时同步 · 保留正脸单眼眨眼</SelectItem>
+                  <SelectItem value="always">始终同步 · 取双眼平均</SelectItem>
+                </SelectContent>
               </Select>
               {s.eyeLink === 'side' && range('eyeLinkAngle', '侧脸联动起始角度', 10, 60, 1)}
               <Button
@@ -869,12 +901,16 @@ export function App() {
               {range('lostDelay', '丢脸容错时间', 0.1, 2, 0.1)}
               <label htmlFor="lost-mode">丢失跟踪后</label>
               <Select
-                id="lost-mode"
                 value={s.lostMode}
-                onChange={(e) => set('lostMode', e.target.value as Settings['lostMode'])}
+                onValueChange={(value) => set('lostMode', value as Settings['lostMode'])}
               >
-                <option value="neutral">平滑回到中立姿态</option>
-                <option value="hold">保持最后姿态</option>
+                <SelectTrigger id="lost-mode">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="neutral">平滑回到中立姿态</SelectItem>
+                  <SelectItem value="hold">保持最后姿态</SelectItem>
+                </SelectContent>
               </Select>
             </Fold>
             <p className="hint">面向镜头，睁眼、闭嘴，保持自然姿态后校准。平滑越高，跟随越柔和。</p>
@@ -884,20 +920,24 @@ export function App() {
               </p>
               <label htmlFor="mic-device">麦克风</label>
               <Select
-                id="mic-device"
                 disabled={view.micActive || view.micStarting}
-                value={s.micDeviceId}
-                onChange={(e) => set('micDeviceId', e.target.value)}
+                value={s.micDeviceId || 'default-mic'}
+                onValueChange={(value) => set('micDeviceId', value === 'default-mic' ? '' : value)}
               >
-                <option value="">系统默认麦克风</option>
-                {view.micDevices.map((d, i) => (
-                  <option key={d.deviceId} value={d.deviceId}>
-                    {d.label || `麦克风 ${i + 1}`}
-                  </option>
-                ))}
-                {s.micDeviceId && !view.micDevices.some((d) => d.deviceId === s.micDeviceId) && (
-                  <option value={s.micDeviceId}>上次选择的麦克风（当前不可用）</option>
-                )}
+                <SelectTrigger id="mic-device">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="default-mic">系统默认麦克风</SelectItem>
+                  {view.micDevices.map((d, i) => (
+                    <SelectItem key={d.deviceId} value={d.deviceId}>
+                      {d.label || `麦克风 ${i + 1}`}
+                    </SelectItem>
+                  ))}
+                  {s.micDeviceId && !view.micDevices.some((d) => d.deviceId === s.micDeviceId) && (
+                    <SelectItem value={s.micDeviceId}>上次选择的麦克风（当前不可用）</SelectItem>
+                  )}
+                </SelectContent>
               </Select>
               <Button
                 id="mic-toggle"
@@ -910,13 +950,17 @@ export function App() {
               {view.micLabel && <p className="hint break-all">正在使用：{view.micLabel}</p>}
               <label htmlFor="lip-sync-mode">口型来源</label>
               <Select
-                id="lip-sync-mode"
                 value={s.lipSyncMode}
-                onChange={(e) => set('lipSyncMode', e.target.value as Settings['lipSyncMode'])}
+                onValueChange={(value) => set('lipSyncMode', value as Settings['lipSyncMode'])}
               >
-                <option value="off">仅摄像头</option>
-                <option value="volume">声音音量</option>
-                <option value="vowels">校准元音</option>
+                <SelectTrigger id="lip-sync-mode">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="off">仅摄像头</SelectItem>
+                  <SelectItem value="volume">声音音量</SelectItem>
+                  <SelectItem value="vowels">校准元音</SelectItem>
+                </SelectContent>
               </Select>
               {range('lipSyncBlend', '声音口型占比', 0, 1, 0.05)}
               {range('micGain', '麦克风增益', 0.1, 20, 0.1)}
@@ -1425,36 +1469,44 @@ function ModelControls({ view, actions: a }: { view: StudioView; actions: Studio
           />
           <label htmlFor="parameter-group">参数分组</label>
           <Select
-            id="parameter-group"
-            value={parameterGroup}
-            onChange={(e) => setParameterGroup(e.target.value)}
+            value={parameterGroup || 'all-groups'}
+            onValueChange={(value) => setParameterGroup(value === 'all-groups' ? '' : value)}
             disabled={!view.parameters.length}
           >
-            <option value="">全部分组</option>
-            {groups.map((group) => (
-              <option key={group} value={group}>
-                {group}
-              </option>
-            ))}
+            <SelectTrigger id="parameter-group">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all-groups">全部分组</SelectItem>
+              {groups.map((group) => (
+                <SelectItem key={group} value={group}>
+                  {group}
+                </SelectItem>
+              ))}
+            </SelectContent>
           </Select>
           <label htmlFor="mapping-parameter">输出参数（{parameters.length}）</label>
           <Select
-            id="mapping-parameter"
             disabled={!parameters.length}
-            value={parameter?.id ?? ''}
-            onChange={(e) => setParameter(e.target.value)}
+            value={(parameter?.id ?? '') || 'no-parameter'}
+            onValueChange={(value) => setParameter(value === 'no-parameter' ? '' : value)}
           >
-            {!parameters.length && (
-              <option value="">
-                {view.parameters.length ? '没有匹配的参数' : '加载模型后可用'}
-              </option>
-            )}
-            {parameters.map((p) => (
-              <option key={p.id} value={p.id}>
-                {p.name || parameterNames[p.id] || p.id}
-                {p.name || parameterNames[p.id] ? ` (${p.id})` : ''}
-              </option>
-            ))}
+            <SelectTrigger id="mapping-parameter">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {!parameters.length && (
+                <SelectItem value="no-parameter">
+                  {view.parameters.length ? '没有匹配的参数' : '加载模型后可用'}
+                </SelectItem>
+              )}
+              {parameters.map((p) => (
+                <SelectItem key={p.id} value={p.id}>
+                  {p.name || parameterNames[p.id] || p.id}
+                  {p.name || parameterNames[p.id] ? ` (${p.id})` : ''}
+                </SelectItem>
+              ))}
+            </SelectContent>
           </Select>
           {parameter && (
             <>
@@ -1494,15 +1546,19 @@ function ModelControls({ view, actions: a }: { view: StudioView; actions: Studio
                 />
                 <label htmlFor="physics-fps">物理计算帧率</label>
                 <Select
-                  id="physics-fps"
-                  value={view.settings.physicsFps}
-                  onChange={(e) =>
-                    a.setSetting('physicsFps', Number(e.target.value) as 0 | 30 | 60)
+                  value={String(view.settings.physicsFps)}
+                  onValueChange={(value) =>
+                    a.setSetting('physicsFps', Number(value) as 0 | 30 | 60)
                   }
                 >
-                  <option value="0">跟随画面帧率</option>
-                  <option value="30">30 FPS</option>
-                  <option value="60">60 FPS</option>
+                  <SelectTrigger id="physics-fps">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="0">跟随画面帧率</SelectItem>
+                    <SelectItem value="30">30 FPS</SelectItem>
+                    <SelectItem value="60">60 FPS</SelectItem>
+                  </SelectContent>
                 </Select>
                 {view.physicsGroups.map((group) => (
                   <Range
@@ -1530,44 +1586,60 @@ function ModelControls({ view, actions: a }: { view: StudioView; actions: Studio
           </div>
           <label htmlFor="motion-mode">播放方式</label>
           <Select
-            id="motion-mode"
             value={mode}
-            onChange={(e) => {
-              const next = e.target.value as MotionMode | 'default';
+            onValueChange={(value) => {
+              const next = value as MotionMode | 'default';
               a.motionMode = next === 'default' ? 'once' : next;
               setMode(next);
             }}
           >
-            <option value="default">跟随动作设置</option>
-            <option value="once">单次</option>
-            <option value="loop">循环</option>
-            <option value="hold">保持末帧</option>
+            <SelectTrigger id="motion-mode">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="default">跟随动作设置</SelectItem>
+              <SelectItem value="once">单次</SelectItem>
+              <SelectItem value="loop">循环</SelectItem>
+              <SelectItem value="hold">保持末帧</SelectItem>
+            </SelectContent>
           </Select>
           <label htmlFor="idle-motion">待机动作</label>
           <Select
-            id="idle-motion"
-            value={view.settings.idleMotion}
-            onChange={(e) => a.setSetting('idleMotion', e.target.value)}
+            value={view.settings.idleMotion || 'no-motion'}
+            onValueChange={(value) =>
+              a.setSetting('idleMotion', value === 'no-motion' ? '' : value)
+            }
           >
-            <option value="">不播放</option>
-            {view.motions.map((m) => (
-              <option key={m.id} value={m.id}>
-                {m.name}
-              </option>
-            ))}
+            <SelectTrigger id="idle-motion">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="no-motion">不播放</SelectItem>
+              {view.motions.map((m) => (
+                <SelectItem key={m.id} value={m.id}>
+                  {m.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
           </Select>
           <label htmlFor="lost-idle-motion">跟踪丢失时的待机动作</label>
           <Select
-            id="lost-idle-motion"
-            value={view.settings.lostIdleMotion}
-            onChange={(e) => a.setSetting('lostIdleMotion', e.target.value)}
+            value={view.settings.lostIdleMotion || 'default-motion'}
+            onValueChange={(value) =>
+              a.setSetting('lostIdleMotion', value === 'default-motion' ? '' : value)
+            }
           >
-            <option value="">跟随普通待机</option>
-            {view.motions.map((m) => (
-              <option key={m.id} value={m.id}>
-                {m.name}
-              </option>
-            ))}
+            <SelectTrigger id="lost-idle-motion">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="default-motion">跟随普通待机</SelectItem>
+              {view.motions.map((m) => (
+                <SelectItem key={m.id} value={m.id}>
+                  {m.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
           </Select>
           <Toggle
             id="motion-sound"
@@ -1587,50 +1659,55 @@ function ModelControls({ view, actions: a }: { view: StudioView; actions: Studio
               Control+Shift+1。仅在应用窗口激活时生效，输入文字时不触发。表情的按住、定时和过渡行为可单独设置。
             </p>
             <label htmlFor="hotkey-action">操作</label>
-            <Select id="hotkey-action" value={hotkeyId} onChange={(e) => setHotkey(e.target.value)}>
-              <option value="toggle-tracking">开始 / 停止跟踪</option>
-              <option value="calibrate">校准中立姿态</option>
-              <option value="toggle-mic">开启 / 关闭麦克风口型</option>
-              <option value="toggle-model">显示 / 隐藏主角色</option>
-              <option value="toggle-camera">启动 / 停止虚拟摄像头</option>
-              <option value="pause-tracking">暂停 / 恢复跟踪</option>
-              <option value="stop-tracking">停止跟踪并释放采集设备</option>
-              <option value="reset-display">复位角色构图</option>
-              <option value="open-output">打开输出窗口</option>
-              {view.settings.scenes.map((scene) => (
-                <option key={scene.id} value={`scene:${scene.id}`}>
-                  场景 · {scene.name}
-                </option>
-              ))}
-              {view.settings.composition.items.map((item) => (
-                <option key={item.id} value={`item:${item.id}`}>
-                  显示 / 隐藏 · {item.name}
-                </option>
-              ))}
-              <option value="stop-motion">
-                停止动作
-                {view.settings.hotkeys['stop-motion'] &&
-                  ` · ${hotkeyLabel(view.settings.hotkeys['stop-motion'])}`}
-              </option>
-              <option value="clear-expressions">
-                关闭全部表情
-                {view.settings.hotkeys['clear-expressions'] &&
-                  ` · ${hotkeyLabel(view.settings.hotkeys['clear-expressions'])}`}
-              </option>
-              {view.expressions.map((e) => (
-                <option key={e.id} value={`expression:${e.id}`}>
-                  表情 · {e.name}
-                  {view.settings.hotkeys[`expression:${e.id}`] &&
-                    ` · ${hotkeyLabel(view.settings.hotkeys[`expression:${e.id}`])}`}
-                </option>
-              ))}
-              {view.motions.map((m) => (
-                <option key={m.id} value={`motion:${m.id}`}>
-                  动作 · {m.name}
-                  {view.settings.hotkeys[`motion:${m.id}`] &&
-                    ` · ${hotkeyLabel(view.settings.hotkeys[`motion:${m.id}`])}`}
-                </option>
-              ))}
+            <Select value={hotkeyId} onValueChange={(value) => setHotkey(value)}>
+              <SelectTrigger id="hotkey-action">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="toggle-tracking">开始 / 停止跟踪</SelectItem>
+                <SelectItem value="calibrate">校准中立姿态</SelectItem>
+                <SelectItem value="toggle-mic">开启 / 关闭麦克风口型</SelectItem>
+                <SelectItem value="toggle-model">显示 / 隐藏主角色</SelectItem>
+                <SelectItem value="toggle-camera">启动 / 停止虚拟摄像头</SelectItem>
+                <SelectItem value="pause-tracking">暂停 / 恢复跟踪</SelectItem>
+                <SelectItem value="stop-tracking">停止跟踪并释放采集设备</SelectItem>
+                <SelectItem value="reset-display">复位角色构图</SelectItem>
+                <SelectItem value="open-output">打开输出窗口</SelectItem>
+                {view.settings.scenes.map((scene) => (
+                  <SelectItem key={scene.id} value={`scene:${scene.id}`}>
+                    场景 · {scene.name}
+                  </SelectItem>
+                ))}
+                {view.settings.composition.items.map((item) => (
+                  <SelectItem key={item.id} value={`item:${item.id}`}>
+                    显示 / 隐藏 · {item.name}
+                  </SelectItem>
+                ))}
+                <SelectItem value="stop-motion">
+                  停止动作
+                  {view.settings.hotkeys['stop-motion'] &&
+                    ` · ${hotkeyLabel(view.settings.hotkeys['stop-motion'])}`}
+                </SelectItem>
+                <SelectItem value="clear-expressions">
+                  关闭全部表情
+                  {view.settings.hotkeys['clear-expressions'] &&
+                    ` · ${hotkeyLabel(view.settings.hotkeys['clear-expressions'])}`}
+                </SelectItem>
+                {view.expressions.map((e) => (
+                  <SelectItem key={e.id} value={`expression:${e.id}`}>
+                    表情 · {e.name}
+                    {view.settings.hotkeys[`expression:${e.id}`] &&
+                      ` · ${hotkeyLabel(view.settings.hotkeys[`expression:${e.id}`])}`}
+                  </SelectItem>
+                ))}
+                {view.motions.map((m) => (
+                  <SelectItem key={m.id} value={`motion:${m.id}`}>
+                    动作 · {m.name}
+                    {view.settings.hotkeys[`motion:${m.id}`] &&
+                      ` · ${hotkeyLabel(view.settings.hotkeys[`motion:${m.id}`])}`}
+                  </SelectItem>
+                ))}
+              </SelectContent>
             </Select>
             <HotkeyEditor
               key={`${hotkeyId}:${view.profileRevision}`}
@@ -1819,12 +1896,16 @@ function HotkeyEditor({
         <>
           <label htmlFor="hotkey-motion-mode">此动作的播放方式</label>
           <Select
-            id="hotkey-motion-mode"
             value={motionMode}
-            onChange={(e) => setMotionMode(e.target.value as 'once' | 'hold')}
+            onValueChange={(value) => setMotionMode(value as 'once' | 'hold')}
           >
-            <option value="once">单次</option>
-            <option value="hold">保持末帧</option>
+            <SelectTrigger id="hotkey-motion-mode">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="once">单次</SelectItem>
+              <SelectItem value="hold">保持末帧</SelectItem>
+            </SelectContent>
           </Select>
           <p className="hint">动作按钮的播放方式为「跟随动作设置」时，也使用此设置。</p>
         </>
@@ -1910,16 +1991,17 @@ function MappingEditor({
           onChange={setEnabled}
         />
         <label htmlFor="mapping-source">跟踪输入</label>
-        <Select
-          id="mapping-source"
-          value={source}
-          onChange={(e) => setSource(e.target.value as FaceKey)}
-        >
-          {Object.entries(faceSources).map(([id, label]) => (
-            <option key={id} value={id}>
-              {label}
-            </option>
-          ))}
+        <Select value={source} onValueChange={(value) => setSource(value as FaceKey)}>
+          <SelectTrigger id="mapping-source">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            {Object.entries(faceSources).map(([id, label]) => (
+              <SelectItem key={id} value={id}>
+                {label}
+              </SelectItem>
+            ))}
+          </SelectContent>
         </Select>
         <Toggle
           id="mapping-clamp"

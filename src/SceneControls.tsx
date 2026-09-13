@@ -2,7 +2,13 @@ import { useState } from 'react';
 import { Check, Image as ImageIcon, Save, UserRound } from 'lucide-react';
 import { Button } from './components/ui/button';
 import { Input } from './components/ui/input';
-import { NativeSelect as Select } from './components/ui/native-select';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from './components/ui/select';
 import type { Studio, StudioView } from './studio';
 import { builtinBackgrounds } from './scenes';
 
@@ -68,13 +74,21 @@ export function SceneControls({
       </div>
       <label htmlFor="item-model">Live2D 道具</label>
       <div className="two-fields">
-        <Select id="item-model" value={modelPath} onChange={(e) => setModelPath(e.target.value)}>
-          <option value="">从角色库选择</option>
-          {view.library.map((model) => (
-            <option key={model.path} value={model.path}>
-              {model.name}
-            </option>
-          ))}
+        <Select
+          value={modelPath || 'no-model'}
+          onValueChange={(value) => setModelPath(value === 'no-model' ? '' : value)}
+        >
+          <SelectTrigger id="item-model">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="no-model">从角色库选择</SelectItem>
+            {view.library.map((model) => (
+              <SelectItem key={model.path} value={model.path}>
+                {model.name}
+              </SelectItem>
+            ))}
+          </SelectContent>
         </Select>
         <Button
           variant="outline"
@@ -147,12 +161,16 @@ export function SceneControls({
           </div>
           <label htmlFor="item-attach">位置参照</label>
           <Select
-            id="item-attach"
             value={item.attach}
-            onChange={(e) => a.updateItem(item.id, { attach: e.target.value as 'stage' | 'model' })}
+            onValueChange={(value) => a.updateItem(item.id, { attach: value as 'stage' | 'model' })}
           >
-            <option value="stage">固定在画面</option>
-            <option value="model">跟随角色构图</option>
+            <SelectTrigger id="item-attach">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="stage">固定在画面</SelectItem>
+              <SelectItem value="model">跟随角色构图</SelectItem>
+            </SelectContent>
           </Select>
           {(
             [
@@ -220,20 +238,24 @@ export function SceneControls({
       </div>
       <label htmlFor="saved-scene">已保存场景</label>
       <Select
-        id="saved-scene"
-        value={sceneId}
-        onChange={(e) => {
-          setSceneId(e.target.value);
-          const next = s.scenes.find((s) => s.id === e.target.value);
+        value={sceneId || 'no-scene'}
+        onValueChange={(value) => {
+          setSceneId(value === 'no-scene' ? '' : value);
+          const next = s.scenes.find((s) => s.id === (value === 'no-scene' ? '' : value));
           if (next) setName(next.name);
         }}
       >
-        <option value="">选择场景</option>
-        {s.scenes.map((scene) => (
-          <option key={scene.id} value={scene.id}>
-            {scene.name}
-          </option>
-        ))}
+        <SelectTrigger id="saved-scene">
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent>
+          <SelectItem value="no-scene">选择场景</SelectItem>
+          {s.scenes.map((scene) => (
+            <SelectItem key={scene.id} value={scene.id}>
+              {scene.name}
+            </SelectItem>
+          ))}
+        </SelectContent>
       </Select>
       <div className="two-fields">
         <Button

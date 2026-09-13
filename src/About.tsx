@@ -2,7 +2,13 @@ import { useEffect, useState } from 'react';
 import { isTauri } from '@tauri-apps/api/core';
 import { emitTo, listen, type UnlistenFn } from '@tauri-apps/api/event';
 import { ChevronDown } from 'lucide-react';
-import { NativeSelect as Select } from './components/ui/native-select';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from './components/ui/select';
 import { version } from '../package.json';
 
 export function About() {
@@ -111,15 +117,20 @@ function LicenseNotices() {
   }, [file]);
   return (
     <>
-      <Select aria-label="许可文件" value={file} onChange={(event) => setFile(event.target.value)}>
-        <option value="/licenses/vtubeleaf.txt">VTubeLeaf（MIT）</option>
-        <option value="/licenses/resources.txt">资源来源与许可状态</option>
-        <option value="/licenses/npm.txt">JavaScript 依赖许可</option>
-        <option value="/licenses/rust.html">Rust 依赖许可</option>
-        <option value="/licenses/cubism-framework.md">Cubism Framework</option>
-        <option value="/runtime/licenses/Core/LICENSE.md">Cubism Core（已配置时）</option>
-        <option value="/licenses/windows-microsoft.txt">Microsoft BaseClasses</option>
-        <option value="/licenses/windows-softcam.txt">Softcam BaseClasses</option>
+      <Select value={file} onValueChange={(value) => setFile(value)}>
+        <SelectTrigger aria-label="许可文件">
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent>
+          <SelectItem value="/licenses/vtubeleaf.txt">VTubeLeaf（MIT）</SelectItem>
+          <SelectItem value="/licenses/resources.txt">资源来源与许可状态</SelectItem>
+          <SelectItem value="/licenses/npm.txt">JavaScript 依赖许可</SelectItem>
+          <SelectItem value="/licenses/rust.html">Rust 依赖许可</SelectItem>
+          <SelectItem value="/licenses/cubism-framework.md">Cubism Framework</SelectItem>
+          <SelectItem value="/runtime/licenses/Core/LICENSE.md">Cubism Core（已配置时）</SelectItem>
+          <SelectItem value="/licenses/windows-microsoft.txt">Microsoft BaseClasses</SelectItem>
+          <SelectItem value="/licenses/windows-softcam.txt">Softcam BaseClasses</SelectItem>
+        </SelectContent>
       </Select>
       <pre aria-label="许可正文" tabIndex={0} className="license-text">
         {text}
