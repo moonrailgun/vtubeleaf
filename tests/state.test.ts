@@ -200,6 +200,7 @@ test('body mapping overrides head imitation, calibrates, mirrors and falls back 
 test('untrusted settings recover and clamp without carrying unknown fields', () => {
   const s = readSettings({
     zoom: 100,
+    y: 100,
     sensitivity: NaN,
     engine: 'remote',
     port: -1,
@@ -208,7 +209,8 @@ test('untrusted settings recover and clamp without carrying unknown fields', () 
     neutral: { yaw: Infinity },
     evil: true,
   });
-  assert.equal(s.zoom, 2.5);
+  assert.equal(s.zoom, 5);
+  assert.equal(s.y, 1);
   assert.equal(s.port, 1024);
   assert.equal(s.sensitivity, 1);
   assert.equal(s.engine, 'mediapipe');
@@ -469,6 +471,7 @@ test('settings reject malformed mappings and prototype keys, and sanitize stored
         profiles: {
           '/a': {
             zoom: 20,
+            y: -20,
             neutral: { ...NEUTRAL, gazeX: 'bad' },
             mappings: { good: mapping },
             background: '#abcdef',
@@ -479,7 +482,8 @@ test('settings reject malformed mappings and prototype keys, and sanitize stored
     ),
   );
   assert.deepEqual(Object.keys(s.mappings), ['good']);
-  assert.equal(s.profiles['/a'].zoom, 2.5);
+  assert.equal(s.profiles['/a'].zoom, 5);
+  assert.equal(s.profiles['/a'].y, -1);
   assert.equal(s.profiles['/a'].neutral, null);
   assert.equal('background' in s.profiles['/a'], false);
   assert.deepEqual(s.hotkeys, { 'expression:smile': 'Alt+KeyS' });

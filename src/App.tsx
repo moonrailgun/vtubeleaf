@@ -1104,9 +1104,9 @@ export function App() {
               checked={s.modelVisible}
               onChange={(value) => set('modelVisible', value)}
             />
-            {range('zoom', '角色缩放', 0.25, 2.5, 0.05)}
+            {range('zoom', '角色缩放', 0.25, 5, 0.05)}
             {range('x', '水平位置', -0.8, 0.8, 0.01)}
-            {range('y', '垂直位置', -0.8, 0.8, 0.01)}
+            {range('y', '垂直位置', -1, 1, 0.01)}
             {range('rotation', '角色旋转', -180, 180, 1)}
             <label htmlFor="background">输出背景</label>
             <div className="color-row">

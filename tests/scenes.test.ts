@@ -70,12 +70,15 @@ test('scene documents bound untrusted values and snapshots do not share items', 
     'Desk',
     '/model',
     '#123456',
-    { x: 0, y: 0, zoom: 1, rotation: 0, modelVisible: false },
+    { x: 0, y: 1, zoom: 5, rotation: 0, modelVisible: false },
     composition,
   );
   composition.items[0].visible = false;
   assert.equal(scene.composition.items[0].visible, true);
   assert.equal(readScenes([scene, scene]).length, 1);
   assert.equal(readScenes([scene])[0].placement.modelVisible, false);
+  assert.equal(readScenes([scene])[0].placement.zoom, 5);
+  assert.equal(readScenes([scene])[0].placement.y, 1);
+  assert.equal(readScenes([{ ...scene, placement: { y: -1 } }])[0].placement.y, -1);
   assert.equal(readScenes([{ ...scene, placement: {} }])[0].placement.modelVisible, true);
 });
