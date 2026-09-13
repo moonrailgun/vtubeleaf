@@ -6,6 +6,7 @@ import { AvatarStage, type ModelInfo } from './renderer';
 import { defaults, readSettings, type Settings } from './state';
 import type { SceneFrames } from './scene-renderer';
 import { Hotkeys } from './hotkeys';
+import { startFrameLoop } from './frame-loop';
 
 export type OutputState = {
   model: ModelInfo | null;
@@ -15,6 +16,7 @@ export type OutputState = {
 };
 export type OutputFrame = {
   revision: number;
+  tracking: boolean;
   parameters: Record<string, number>;
   parts: Record<string, number>;
   sceneFrames: SceneFrames;
@@ -34,6 +36,7 @@ export function Output() {
     let parts: Record<string, number> = {};
     let sceneFrames: SceneFrames = {};
     let received = 0;
+    let tracking = false;
     let disposed = false;
     let stateOperation = 0;
     let pendingState: OutputState | undefined;
@@ -126,7 +129,9 @@ export function Output() {
       if (disposed) return;
       await own(
         listen<OutputFrame>('output-frame', ({ payload }) => {
-          if (disposed || payload.revision !== revision) return;
+          if (disposed) return;
+          tracking = payload.tracking;
+          if (payload.revision !== revision) return;
           values = payload.parameters;
           parts = payload.parts;
           sceneFrames = payload.sceneFrames ?? {};
@@ -145,19 +150,23 @@ export function Output() {
     }
     void connect().catch(report);
     let before = performance.now();
-    const timer = window.setInterval(() => {
-      const now = performance.now();
-      if (now - received > 1000)
-        for (const p of stage?.parameters ?? [])
-          values[p.id] =
-            (values[p.id] ?? p.default) + (p.default - (values[p.id] ?? p.default)) * 0.15;
-      stage?.draw(values, now - before, parts, sceneFrames);
-      before = now;
-    }, 1000 / 30);
+    const stopRendering = startFrameLoop(
+      () => {
+        const now = performance.now();
+        if (now - received > 1000)
+          for (const p of stage?.parameters ?? [])
+            values[p.id] =
+              (values[p.id] ?? p.default) + (p.default - (values[p.id] ?? p.default)) * 0.15;
+        stage?.draw(values, now - before, parts, sceneFrames);
+        before = now;
+      },
+      () => 30,
+      () => tracking,
+    );
     return () => {
       disposed = true;
       void hotkeys.destroy();
-      window.clearInterval(timer);
+      stopRendering();
       unlisteners.forEach((unlisten) => unlisten());
       stage?.destroy();
       document.body.classList.remove('output');

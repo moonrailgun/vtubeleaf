@@ -9,6 +9,7 @@ import type {
 import { fromHands, type HandSignals } from './hands.ts';
 import { fromNvidia } from './nvidia.ts';
 import { openTrackingCamera } from './camera-devices';
+import { startFrameLoop } from './frame-loop';
 import {
   fromMediaPipe,
   fromPose,
@@ -38,7 +39,7 @@ export class Tracker {
   cameraLabel = '';
   cameraSettings = '';
   private unlisten: UnlistenFn[] = [];
-  private timer = 0;
+  private stopFrames?: () => void;
   private generation = 0;
   private paused = false;
   private previousTime = -1;
@@ -291,7 +292,10 @@ export class Tracker {
           };
         }
         this.previousTime = -1;
-        this.tick(generation);
+        this.stopFrames = startFrameLoop(
+          () => this.tick(generation),
+          () => this.trackingFps,
+        );
       }
       return generation === this.generation;
     } catch (error) {
@@ -323,6 +327,7 @@ export class Tracker {
 
   private tick(generation: number) {
     if (generation !== this.generation) return;
+    // ponytail: inference stays synchronous; move it to workers only if profiling justifies it.
     const started = performance.now();
     try {
       if (
@@ -381,12 +386,6 @@ export class Tracker {
       this.fail('面捕运行中断。请停止后重新开始；反复失败时可改用 OpenSeeFace。');
       return;
     }
-    // ponytail: MediaPipe's VIDEO calls are synchronous; keep one latest-frame loop and profile
-    // before paying the complexity cost of moving the auxiliary tasks into workers.
-    this.timer = window.setTimeout(
-      () => this.tick(generation),
-      Math.max(0, 1000 / this.trackingFps - (performance.now() - started)),
-    );
   }
 
   get inferenceMs() {
@@ -415,7 +414,8 @@ export class Tracker {
     ++this.generation;
     this.clearPreview();
     this.drawPreview = undefined;
-    window.clearTimeout(this.timer);
+    this.stopFrames?.();
+    this.stopFrames = undefined;
     this.unlisten.forEach((unlisten) => unlisten());
     this.unlisten = [];
     this.stream?.getTracks().forEach((track) => track.stop());

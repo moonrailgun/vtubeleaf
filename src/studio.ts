@@ -4,6 +4,7 @@ import { WebviewWindow } from '@tauri-apps/api/webviewWindow';
 import { getCurrentWindow, type BackgroundThrottlingPolicy } from '@tauri-apps/api/window';
 import { AvatarStage, type ModelInfo, type MotionMode } from './renderer';
 import { Tracker } from './tracker';
+import { startFrameLoop } from './frame-loop';
 import { enumerateCaptureDevices, isVTubeLeafCamera } from './camera-devices';
 import {
   defaults,
@@ -27,7 +28,7 @@ import { AudioLipSync, type Vowel } from './lipsync';
 import { VirtualCamera, type CameraStatus } from './virtual-camera';
 import { importVtsConfig } from './vts';
 import { readComposition, snapshotScene, type Composition, type SceneItem } from './scenes';
-import type { OutputState } from './output';
+import type { OutputFrame, OutputState } from './output';
 
 export function createStudio(
   container: HTMLElement,
@@ -1314,7 +1315,6 @@ export function createStudio(
   let before = performance.now(),
     frames = 0,
     since = before;
-  let timer = 0;
   let failedRevision = -1;
   function tick() {
     if (disposed) return;
@@ -1347,10 +1347,11 @@ export function createStudio(
       frameSending = true;
       void emitTo('output', 'output-frame', {
         revision: modelRevision,
+        tracking: tracking === 'running' || tracking === 'paused',
         parameters: stage?.frame ?? {},
         parts: stage?.parts ?? {},
         sceneFrames: stage?.sceneFrames ?? {},
-      })
+      } satisfies OutputFrame)
         .catch(() => {
           outputOpen = false;
         })
@@ -1377,12 +1378,12 @@ export function createStudio(
       since = now;
       publish();
     }
-    timer = window.setTimeout(
-      tick,
-      Math.max(0, 1000 / settings.renderFps - (performance.now() - now)),
-    );
   }
-  timer = window.setTimeout(tick, 1000 / settings.renderFps);
+  const stopRendering = startFrameLoop(
+    tick,
+    () => settings.renderFps,
+    () => tracking === 'running' || tracking === 'paused',
+  );
   return {
     actions,
     snapshot,
@@ -1390,7 +1391,7 @@ export function createStudio(
       disposed = true;
       modelOperation++;
       trackingOperation++;
-      window.clearTimeout(timer);
+      stopRendering();
       cancelCalibration();
       if (saveTimer) void save();
       unlisteners.forEach((unlisten) => unlisten());
