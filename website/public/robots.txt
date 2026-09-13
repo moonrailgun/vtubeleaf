@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://vtubeleaf.vercel.app/sitemap.xml

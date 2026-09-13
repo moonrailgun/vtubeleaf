@@ -9,8 +9,22 @@
       content="VTubeLeaf 用一颗普通摄像头让你的 Live2D 角色替你出镜：直播、视频会议、录视频、上网课都能用。免费、无水印，全部在你的电脑上运行。"
     />
     <meta name="theme-color" content="#d34477" />
+    <link rel="canonical" href="https://vtubeleaf.vercel.app/" />
     <meta property="og:type" content="website" />
     <meta property="og:locale" content="zh_CN" />
+    <meta property="og:site_name" content="VTubeLeaf" />
+    <meta property="og:url" content="https://vtubeleaf.vercel.app/" />
+    <meta property="og:image" content="https://vtubeleaf.vercel.app/assets/brand/logo.png" />
+    <meta property="og:image:width" content="512" />
+    <meta property="og:image:height" content="512" />
+    <meta property="og:image:alt" content="VTubeLeaf 叶芽精灵标志" />
+    <meta name="twitter:card" content="summary" />
+    <meta name="twitter:title" content="VTubeLeaf — 免费的 Live2D 虚拟形象桌面应用" />
+    <meta
+      name="twitter:description"
+      content="一颗普通摄像头，让 Live2D 角色替你出镜。免费下载 Windows 与 macOS 版。"
+    />
+    <meta name="twitter:image" content="https://vtubeleaf.vercel.app/assets/brand/logo.png" />
     <meta property="og:title" content="VTubeLeaf — 让你的 Live2D 角色，替你出镜。" />
     <meta
       property="og:description"
@@ -21,8 +35,15 @@
   <body>
     <div id="root"></div>
     <noscript
-      >请启用 JavaScript 查看 VTubeLeaf 官网，或前往
-      <a href="https://github.com/moonrailgun/vtubeleaf">GitHub 项目页</a>了解更多。</noscript
+      ><style>
+        .tabs {
+          display: none;
+        }
+        .panel[hidden] {
+          display: block;
+          margin-top: 24px;
+        }
+      </style></noscript
     >
     <script type="module" src="/src/main.tsx"></script>
   </body>

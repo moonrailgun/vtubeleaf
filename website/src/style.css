@@ -643,6 +643,17 @@ section {
   gap: 64px;
   align-items: start;
 }
+.download-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin: 24px 0 12px;
+}
+.download-note {
+  font-size: 13px;
+  color: var(--muted);
+  margin-top: 6px;
+}
 .tabs {
   display: inline-flex;
   border: 1px solid var(--border);

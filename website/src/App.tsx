@@ -1,4 +1,5 @@
-import { useRef, useState, type KeyboardEvent } from 'react';
+import { useEffect, useRef, useState, type KeyboardEvent } from 'react';
+import { release } from './release';
 
 type Platform = 'win' | 'mac';
 function initialPlatform(): Platform {
@@ -16,7 +17,8 @@ export default function App() {
   const [switches, setSwitches] = useState([true, true, true, false]);
   const [amplitude, setAmplitude] = useState(70);
   const [speed, setSpeed] = useState(2);
-  const [platform, setPlatform] = useState<Platform>(initialPlatform);
+  const [platform, setPlatform] = useState<Platform>('win');
+  useEffect(() => setPlatform(initialPlatform()), []);
   const tabs = useRef<Array<HTMLButtonElement | null>>([]);
   function selectPlatform(next: Platform) {
     setPlatform(next);
@@ -43,6 +45,26 @@ export default function App() {
 
   return (
     <>
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{
+          __html: JSON.stringify({
+            '@context': 'https://schema.org',
+            '@type': 'SoftwareApplication',
+            name: 'VTubeLeaf',
+            url: 'https://vtubeleaf.vercel.app/',
+            image: 'https://vtubeleaf.vercel.app/assets/brand/logo.png',
+            description: '免费的 Live2D 虚拟形象桌面应用，使用普通摄像头进行本地面部与手势追踪。',
+            applicationCategory: 'MultimediaApplication',
+            operatingSystem:
+              'Windows 10 or later (x64), macOS 14 or later (Apple Silicon and Intel)',
+            softwareVersion: release.version,
+            downloadUrl: [release.windows, release.mac],
+            releaseNotes: release.url,
+            offers: { '@type': 'Offer', price: '0', priceCurrency: 'CNY' },
+          }).replace(/</g, '\\u003c'),
+        }}
+      />
       <a href="#content" className="skip">
         跳到正文
       </a>
@@ -68,7 +90,7 @@ export default function App() {
               <a href="#faq">常见问题</a>
             </li>
           </ul>
-          <button className="nav-dl" type="button" disabled data-od-id="nav-download">
+          <a className="nav-dl" href="#install" data-od-id="nav-download">
             <svg
               viewBox="0 0 24 24"
               fill="none"
@@ -80,8 +102,8 @@ export default function App() {
             >
               <path d="M12 3v12m0 0l-4-4m4 4l4-4M4 17v2a2 2 0 002 2h12a2 2 0 002-2v-2"></path>
             </svg>
-            待发布
-          </button>
+            免费下载
+          </a>
         </div>
       </header>
 
@@ -96,7 +118,7 @@ export default function App() {
               一颗普通摄像头，就能让你的虚拟形象跟着你眨眼、说话、转头。直播、开会、录视频、上网课——想不露脸的时候，就让角色上场。
             </p>
             <div className="hero-actions">
-              <button className="btn btn-primary" type="button" disabled data-od-id="hero-cta">
+              <a className="btn btn-primary" href="#install" data-od-id="hero-cta">
                 <svg
                   width="18"
                   height="18"
@@ -110,13 +132,15 @@ export default function App() {
                 >
                   <path d="M12 3v12m0 0l-4-4m4 4l4-4M4 17v2a2 2 0 002 2h12a2 2 0 002-2v-2"></path>
                 </svg>
-                待发布
-              </button>
+                免费下载
+              </a>
               <a className="btn btn-ghost" href="#scenes" data-od-id="hero-secondary">
                 看看能做什么
               </a>
             </div>
-            <p className="hero-note">支持 Windows 10 及以上、macOS 14 及以上 · 当前版本 0.1.0</p>
+            <p className="hero-note">
+              支持 Windows 10 及以上、macOS 14 及以上 · 当前版本 {release.version}
+            </p>
 
             <div
               className="app"
@@ -530,7 +554,10 @@ export default function App() {
               </article>
               <article className="step" data-od-id="step-use">
                 <h3>在其他软件里选它</h3>
-                <p>在直播、会议或录屏软件的摄像头列表中选择 VTubeLeaf，角色就出镜了。</p>
+                <p>
+                  在「接入」中安装并启动虚拟摄像头，再到直播、会议或录屏软件里选择 VTubeLeaf
+                  Camera。
+                </p>
               </article>
             </div>
           </div>
@@ -542,7 +569,21 @@ export default function App() {
               <p className="eyebrow">安装</p>
               <h2 style={{ fontSize: 'clamp(30px,3.6vw,44px)' }}>选择你的系统</h2>
               <p style={{ marginTop: '14px', color: 'var(--muted)', fontSize: '17px' }}>
-                两个系统都免费，功能一致。
+                最新稳定版 v{release.version}，两个系统都免费。
+              </p>
+              <div className="download-actions">
+                <a className="btn btn-primary" href={release.windows}>
+                  下载 Windows 版
+                </a>
+                <a className="btn btn-ghost" href={release.mac}>
+                  下载 macOS 版
+                </a>
+              </div>
+              <p className="download-note">Windows x64 · macOS 通用版（Apple Silicon / Intel）</p>
+              <p className="download-note">
+                <a href={release.url}>更新说明与全部安装包</a>
+                {' · '}
+                <a href={release.macZip}>macOS ZIP 下载</a>
               </p>
               <div
                 className="tabs"
@@ -593,17 +634,16 @@ export default function App() {
               >
                 <ol>
                   <li>
-                    <b>下载安装包</b>并运行，按提示完成安装。需要 Windows 10 或更新版本。
+                    <b>下载 Windows 安装包</b>并运行，按提示完成安装。需要 Windows 10 或更新版本的
+                    x64 系统。
                   </li>
                   <li>首次打开时，点击「允许」让应用使用摄像头。</li>
-                  <li>
-                    如果要在会议软件里使用，请同时安装免费的
-                    OBS，并在其中开启「虚拟摄像头」；VTubeLeaf 的画面会通过它输出。
-                  </li>
+                  <li>在应用的「接入」页面点击「安装虚拟摄像头」，再点击「启动虚拟摄像头」。</li>
+                  <li>重新打开会议或直播软件的摄像头列表，选择「VTubeLeaf Camera」。</li>
                 </ol>
                 <p className="hint">
-                  Windows 版目前需要借助 OBS
-                  才能出现在会议软件的摄像头列表里；直播与录制则可以直接使用。
+                  已内置虚拟摄像头，无需安装 OBS。支持使用 DirectShow 的桌面客户端；
+                  若目标软件无法识别，也可通过 OBS 输出。
                 </p>
               </div>
               <div
@@ -620,10 +660,12 @@ export default function App() {
                     或更新版本。
                   </li>
                   <li>首次打开时，在系统弹窗中允许使用摄像头。</li>
-                  <li>在会议或直播软件的摄像头列表中直接选择「VTubeLeaf」即可，不需要其他软件。</li>
+                  <li>在「接入」中安装虚拟摄像头，按应用提示到系统设置批准摄像头扩展。</li>
+                  <li>回到应用启动虚拟摄像头，再到会议或直播软件中选择「VTubeLeaf Camera」。</li>
                 </ol>
                 <p className="hint">
-                  macOS 版自带摄像头输出，飞书、Zoom、腾讯会议等都能直接选到它。
+                  macOS 15 及以上：系统设置 → 通用 → 登录项与扩展 → 摄像头扩展。 macOS 14：系统设置
+                  → 隐私与安全性。启用 VTubeLeaf 后按应用提示继续。
                 </p>
               </div>
             </div>
@@ -641,7 +683,7 @@ export default function App() {
                   <span className="dot">2</span>
                   <div>
                     <b>一个 Live2D 角色</b>
-                    <span>应用不附带角色。你可以使用自己委托制作、或已获得使用授权的角色。</span>
+                    <span>内置 Haru、Hiyori、Mao 示例角色，也可导入自己已获得使用授权的角色。</span>
                   </div>
                 </li>
                 <li>
@@ -653,8 +695,8 @@ export default function App() {
                 </li>
               </ul>
               <p className="req-note">
-                没有角色？各大 Live2D
-                角色商店与创作者社区都有免费或付费的成品可以选择，注意查看使用授权。
+                可以先用内置示例体验。直播或商业使用前，请查看对应模型的授权； 也可在 Live2D
+                角色商店与创作者社区寻找适合自己的角色。
               </p>
             </aside>
           </div>
@@ -824,7 +866,8 @@ export default function App() {
                   <tr>
                     <th scope="row">在会议软件里当摄像头</th>
                     <td className="me">
-                      macOS 直接选用<span className="sub">Windows 需配合 OBS</span>
+                      <span className="yes">内置</span>
+                      <span className="sub">Windows / macOS，首次使用需安装或激活</span>
                     </td>
                     <td>需配合 OBS</td>
                     <td>需配合 OBS 插件</td>
@@ -889,7 +932,8 @@ export default function App() {
               <details name="faq">
                 <summary>我没有 Live2D 角色，怎么办？</summary>
                 <div className="a">
-                  VTubeLeaf 本身不附带角色。你可以委托画师与建模师制作，也可以在 Live2D
+                  可以先使用内置的 Haru、Hiyori、Mao
+                  官方示例角色。你也可以委托画师与建模师制作，或在 Live2D
                   角色商店或创作者社区购买、下载成品。使用前请留意角色的授权范围，尤其是用于直播或商业用途时。
                 </div>
               </details>
@@ -931,14 +975,9 @@ export default function App() {
                   换你的角色上场。
                 </h2>
                 <p>下载只需几分钟，不注册、不付费、不留水印。</p>
-                <button
-                  className="btn btn-primary"
-                  type="button"
-                  disabled
-                  data-od-id="cta-download"
-                >
-                  待发布
-                </button>
+                <a className="btn btn-primary" href="#install" data-od-id="cta-download">
+                  免费下载
+                </a>
               </div>
               <div className="promise" data-od-id="cta-promise">
                 <div>
@@ -970,7 +1009,7 @@ export default function App() {
 
       <footer data-od-id="footer">
         <div className="wrap">
-          <span>© 2026 VTubeLeaf · 开源项目 · 版本 0.1.0</span>
+          <span>© 2026 VTubeLeaf · 开源项目 · 版本 {release.version}</span>
           <ul>
             <li>
               <a href="https://github.com/moonrailgun/vtubeleaf">GitHub</a>
