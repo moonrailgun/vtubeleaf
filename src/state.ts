@@ -269,7 +269,7 @@ const profileRanges = {
   rotation: [-180, 180],
   zoom: [0.25, 5],
   x: [-0.8, 0.8],
-  y: [-1, 1],
+  y: [-1.5, 1.5],
 } as const;
 
 export function isFace(v: unknown): v is Face {
