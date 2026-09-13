@@ -209,8 +209,8 @@ test('untrusted settings recover and clamp without carrying unknown fields', () 
     neutral: { yaw: Infinity },
     evil: true,
   });
-  assert.equal(s.zoom, 5);
-  assert.equal(s.y, 1.5);
+  assert.equal(s.zoom, 10);
+  assert.equal(s.y, 3);
   assert.equal(s.port, 1024);
   assert.equal(s.sensitivity, 1);
   assert.equal(s.engine, 'mediapipe');
@@ -482,8 +482,8 @@ test('settings reject malformed mappings and prototype keys, and sanitize stored
     ),
   );
   assert.deepEqual(Object.keys(s.mappings), ['good']);
-  assert.equal(s.profiles['/a'].zoom, 5);
-  assert.equal(s.profiles['/a'].y, -1.5);
+  assert.equal(s.profiles['/a'].zoom, 10);
+  assert.equal(s.profiles['/a'].y, -3);
   assert.equal(s.profiles['/a'].neutral, null);
   assert.equal('background' in s.profiles['/a'], false);
   assert.deepEqual(s.hotkeys, { 'expression:smile': 'Alt+KeyS' });

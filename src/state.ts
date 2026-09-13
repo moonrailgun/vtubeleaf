@@ -267,9 +267,9 @@ const profileRanges = {
   mouthSmooth: [0, 0.4],
   lostDelay: [0.1, 2],
   rotation: [-180, 180],
-  zoom: [0.25, 5],
+  zoom: [0.25, 10],
   x: [-0.8, 0.8],
-  y: [-1.5, 1.5],
+  y: [-3, 3],
 } as const;
 
 export function isFace(v: unknown): v is Face {
