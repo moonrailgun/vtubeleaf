@@ -43,6 +43,7 @@ export class Tracker {
   private generation = 0;
   private paused = false;
   private previousTime = -1;
+  private input?: CanvasRenderingContext2D;
   private lastDetection = 0;
   private engine?: Settings['engine'];
   private nativeOperation: Promise<unknown> = Promise.resolve();
@@ -330,20 +331,28 @@ export class Tracker {
     // ponytail: inference stays synchronous; move it to workers only if profiling justifies it.
     const started = performance.now();
     try {
-      if (
-        !this.paused &&
-        this.landmarker &&
-        this.video.readyState >= 2 &&
-        this.video.currentTime !== this.previousTime
-      ) {
+      if (!this.paused && this.landmarker && this.video.readyState >= 2) {
+        const input = (this.input ??= document.createElement('canvas').getContext('2d')!);
+        if (
+          input.canvas.width !== this.video.videoWidth ||
+          input.canvas.height !== this.video.videoHeight
+        ) {
+          input.canvas.width = this.video.videoWidth;
+          input.canvas.height = this.video.videoHeight;
+        }
+        // WebKit pauses hidden videos read only through WebGL (MediaPipe's input path).
+        // Drawing to 2D keeps capture playback active, including when resuming in the background.
+        // Do this before checking currentTime: a suspended video's clock cannot advance yet.
+        input.drawImage(this.video, 0, 0);
+        if (this.video.currentTime === this.previousTime) return;
         this.previousTime = this.video.currentTime;
-        const result = this.landmarker.detectForVideo(this.video, started);
+        const result = this.landmarker.detectForVideo(input.canvas, started);
         const matrix = result.facialTransformationMatrixes[0]?.data;
         const face = matrix && fromMediaPipe(result.faceBlendshapes[0]?.categories ?? [], matrix);
         if (this.pose && started - this.lastPoseAt >= 1000 / this.bodyFps) {
           this.lastPoseAt = started;
           try {
-            const pose = this.pose.detectForVideo(this.video, started);
+            const pose = this.pose.detectForVideo(input.canvas, started);
             this.body = fromPose(pose.landmarks[0] ?? [], pose.worldLandmarks[0] ?? []);
             this.poseLandmarks = this.body.bodyYaw === undefined ? [] : pose.landmarks[0];
             this.bodyStatus =
@@ -363,7 +372,7 @@ export class Tracker {
         if (this.hand && started - this.lastHandAt >= 1000 / this.handFps) {
           this.lastHandAt = started;
           try {
-            const result = this.hand.detectForVideo(this.video, started);
+            const result = this.hand.detectForVideo(input.canvas, started);
             this.hands = fromHands(result.landmarks, result.worldLandmarks, result.handedness);
             this.handLandmarks = result.landmarks;
             this.handStatus =
@@ -424,6 +433,7 @@ export class Tracker {
     this.cameraSettings = '';
     this.video.pause();
     this.video.srcObject = null;
+    this.input = undefined;
     this.landmarker?.close();
     this.landmarker = undefined;
     this.pose?.close();
