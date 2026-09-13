@@ -1,5 +1,7 @@
 import { useEffect, useRef, useState, type KeyboardEvent } from 'react';
-import { release } from './release';
+import { loadLatestRelease } from './release';
+
+declare const __RELEASE__: Awaited<ReturnType<typeof loadLatestRelease>>;
 
 type Platform = 'win' | 'mac';
 function initialPlatform(): Platform {
@@ -13,6 +15,20 @@ function initialPlatform(): Platform {
 }
 
 export default function App() {
+  const [release, setRelease] = useState(__RELEASE__);
+  useEffect(() => {
+    let active = true;
+    loadLatestRelease()
+      .then((latest) => {
+        if (active) setRelease(latest);
+      })
+      .catch(() => {
+        // Keep the prerendered downloads when the release manifest is unavailable or invalid.
+      });
+    return () => {
+      active = false;
+    };
+  }, []);
   const [model, setModel] = useState(0);
   const [switches, setSwitches] = useState([true, true, true, false]);
   const [amplitude, setAmplitude] = useState(70);
@@ -572,18 +588,19 @@ export default function App() {
                 最新稳定版 v{release.version}，两个系统都免费。
               </p>
               <div className="download-actions">
-                <a className="btn btn-primary" href={release.windows}>
-                  下载 Windows 版
-                </a>
-                <a className="btn btn-ghost" href={release.mac}>
-                  下载 macOS 版
-                </a>
+                {(platform === 'mac' ? ['mac', 'win'] : ['win', 'mac']).map((system) => (
+                  <a
+                    key={system}
+                    className={`btn ${system === platform ? 'btn-primary' : 'btn-ghost'}`}
+                    href={system === 'mac' ? release.mac : release.windows}
+                  >
+                    下载 {system === 'mac' ? 'macOS' : 'Windows'} 版
+                  </a>
+                ))}
               </div>
               <p className="download-note">Windows x64 · macOS 通用版（Apple Silicon / Intel）</p>
               <p className="download-note">
                 <a href={release.url}>更新说明与全部安装包</a>
-                {' · '}
-                <a href={release.macZip}>macOS ZIP 下载</a>
               </p>
               <div
                 className="tabs"

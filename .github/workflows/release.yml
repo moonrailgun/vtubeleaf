@@ -65,3 +65,20 @@ jobs:
           sha256sum ./*.dmg ./*.zip ./*.exe > SHA256SUMS.txt
           gh release create "$RELEASE_TAG" ./*.dmg ./*.zip ./*.exe SHA256SUMS.txt \
             --verify-tag --title "$RELEASE_TAG" --generate-notes --prerelease="$PRERELEASE"
+  website:
+    needs: [version, publish]
+    if: needs.version.outputs.prerelease == 'false'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    concurrency:
+      group: website-release-manifest
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - name: Update website release manifest
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: node scripts/update-website-release.mjs

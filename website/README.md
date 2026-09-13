@@ -31,7 +31,9 @@ npm run preview -- --port 4173
 
 构建包含 TypeScript 检查和 React 静态预渲染，完整正文、下载链接及应用结构化数据会写入 `website/dist/index.html`，关闭 JavaScript 也能阅读和下载；加载 JavaScript 后通过 hydration 恢复交互。预览地址为 <http://127.0.0.1:4173>，适合部署在站点根路径。
 
-开发启动和构建时会读取 GitHub 最新公开稳定 Release，并核对 Windows x64 EXE、macOS 通用 DMG / ZIP 资产。版本与下载地址使用同一份构建快照，不需要访客请求 GitHub API。构建需要联网；Release 获取失败或缺少安装包时会明确报错。发布新版本后，重新部署官网即可更新下载链接。
+版本来源是 `public/release.json`，包含最新稳定版版本号、Release 页面、Windows x64 EXE 和 macOS 通用 DMG 地址。Release 工作流在发布成功后运行 `scripts/update-website-release.mjs`：读取 GitHub 当前最新稳定版，按版本号推断文件地址并核对已上传的安装包，再仅更新 `main` 分支的这份文件。预发布和失败的发布不会更新官网版本；重跑旧版本时仍以 GitHub 当前 latest 为准。可在仓库根目录运行 `node scripts/update-website-release.mjs --dry-run` 预览生成结果，不写入 GitHub。
+
+构建从本地版本文件生成完整 HTML，无需联网查询 Release。浏览器加载后从 GitHub 原始文件地址读取最新清单，同步版本文字、下载地址和结构化数据，因此后续更新不依赖网站重新部署。读取失败或文件无效时保留构建快照；关闭 JavaScript 的访客和不执行 JavaScript 的爬虫仍使用构建时版本。下载按钮首次按访客系统排序和高亮，手动切换系统后跟随选择并记忆。
 
 生产地址为 <https://vtubeleaf.vercel.app/>。更换域名时，同步修改 `index.html` 的 canonical / 分享地址、`src/App.tsx` 的结构化数据及 `public/robots.txt`、`public/sitemap.xml`。
 
@@ -51,8 +53,9 @@ npm test
 - `src/style.css`：原稿视觉样式、响应式布局、键盘焦点及减少动态效果设置。
 - `public/assets/brand/`：当前叶芽精灵 Logo；在仓库根目录运行 `node scripts/brand.mjs` 同步 SVG，分享图 `logo.png` 取自 `public/brand/png/512x512.png`。
 - `index.html`：页面标题、简介、分享元信息和图标。
-- `vite.config.ts`：Release 获取、安装包校验与构建时预渲染。
-- `src/release.ts`：供页面使用的构建期 Release 数据类型。
+- `vite.config.ts`：Release 构建快照与首页预渲染。
+- `src/release.ts`：版本文件校验和浏览器更新。
+- `public/release.json`：由 Release 工作流自动维护的版本和下载地址。
 - `public/robots.txt`、`public/sitemap.xml`：爬虫规则与站点地图。
 
 首屏应用界面是交互示意，不会请求摄像头或加载 Live2D。下载区直接指向 GitHub Release 安装包，并按两端内置虚拟摄像头的安装和激活流程提供说明。
