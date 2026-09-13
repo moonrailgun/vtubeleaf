@@ -191,7 +191,7 @@ test('missing and ambiguous resources identify the control and source file with 
     );
   }
 });
-test('resolved motions and clear expressions import; disabled keyboard actions do not', () => {
+test('keyboard master switch imports without losing bindings; inactive actions stay excluded', () => {
   const raw = fixture();
   raw.Hotkeys[0].Action = 'TriggerAnimation';
   raw.Hotkeys[0].File = 'idle.motion3.json';
@@ -204,8 +204,16 @@ test('resolved motions and clear expressions import; disabled keyboard actions d
     'motion:Idle:0': 'Digit1',
     'clear-expressions': 'F2',
   });
+  assert.equal(importVtsConfig(raw, model).profile.useKeyboardHotkeys, true);
   raw.HotkeySettings.UseKeyboardHotkeys = false;
-  assert.deepEqual(importVtsConfig(raw, model).profile.hotkeys, {});
+  const { profile } = importVtsConfig(raw, model);
+  assert.equal(profile.useKeyboardHotkeys, false);
+  assert.deepEqual(profile.hotkeys, {
+    'motion:Idle:0': 'Digit1',
+    'clear-expressions': 'F2',
+  });
+  raw.Hotkeys[0].IsActive = false;
+  assert.deepEqual(importVtsConfig(raw, model).profile.hotkeys, { 'clear-expressions': 'F2' });
   raw.PhysicsSettings = { Use: false };
   assert.equal(importVtsConfig(raw, model).profile.physicsStrength, 0);
 });

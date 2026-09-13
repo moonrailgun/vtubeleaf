@@ -129,6 +129,7 @@ export type ModelProfile = {
   parameterOverrides: Record<string, number>;
   defaultParameterOverrides: Record<string, number>;
   defaultExpressions: string[];
+  useKeyboardHotkeys: boolean;
   hotkeys: Record<string, string>;
   hotkeyOptions: Record<string, HotkeyOptions>;
   vtsImportReport: string[];
@@ -237,6 +238,7 @@ export const defaults: Settings = {
   parameterOverrides: {},
   defaultParameterOverrides: {},
   defaultExpressions: [],
+  useKeyboardHotkeys: true,
   hotkeys: {},
   hotkeyOptions: {},
   vtsImportReport: [],
@@ -354,6 +356,7 @@ function readProfile(v: unknown): ModelProfile {
     parameterOverrides: {},
     defaultParameterOverrides: {},
     defaultExpressions: [],
+    useKeyboardHotkeys: true,
     hotkeys: {},
     hotkeyOptions: {},
     vtsImportReport: [],
@@ -388,7 +391,13 @@ function readProfile(v: unknown): ModelProfile {
         p.voiceTemplates[vowel] = [...template];
     }
 
-  for (const key of ['motionMirror', 'autoBlink', 'modelVisible', 'motionSound'] as const)
+  for (const key of [
+    'motionMirror',
+    'autoBlink',
+    'modelVisible',
+    'motionSound',
+    'useKeyboardHotkeys',
+  ] as const)
     if (typeof v[key] === 'boolean') p[key] = v[key];
   for (const key of Object.keys(profileRanges) as (keyof typeof profileRanges)[])
     if (typeof v[key] === 'number' && Number.isFinite(v[key]))

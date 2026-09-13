@@ -2,6 +2,34 @@ import { test, expect, type Page } from '@playwright/test';
 import { readFileSync, readdirSync, writeFileSync } from 'node:fs';
 import { basename, dirname, resolve } from 'node:path';
 
+test('keyboard hotkey switch persists and restores existing application bindings', async ({
+  page,
+}) => {
+  await page.addInitScript(() => {
+    if (!localStorage.getItem('vtubeleaf-preview'))
+      localStorage.setItem(
+        'vtubeleaf-preview',
+        JSON.stringify({ globalHotkeys: { 'toggle-model': 'KeyK' } }),
+      );
+  });
+  await page.goto('/');
+  await page.getByRole('button', { name: '角色', exact: true }).click();
+  const toggle = page.getByRole('switch', { name: '使用键盘快捷键', exact: true });
+  await expect(toggle).toBeChecked();
+  await toggle.click();
+  const saved = () => page.evaluate(() => JSON.parse(localStorage.getItem('vtubeleaf-preview')!));
+  await expect.poll(async () => (await saved()).useKeyboardHotkeys).toBe(false);
+  await page.reload();
+  await page.getByRole('button', { name: '角色', exact: true }).click();
+  await expect(toggle).not.toBeChecked();
+  await page.keyboard.press('k');
+  expect((await saved()).modelVisible).toBe(true);
+  expect((await saved()).globalHotkeys).toEqual({ 'toggle-model': 'KeyK' });
+  await toggle.click();
+  await page.keyboard.press('k');
+  await expect.poll(async () => (await saved()).modelVisible).toBe(false);
+});
+
 test('VTS-only expressions and motions drive the model without model3 declarations', async ({
   page,
 }) => {
@@ -3213,6 +3241,24 @@ test('model switches restore default appearance without releasing the new model 
   try {
     await expect.poll(async () => (await snapshot()).ready).toBe(true);
     expect((await snapshot()).path).toBe(models[0].path);
+    await page.keyboard.down('f');
+    await expect.poll(async () => (await snapshot()).active).toEqual(['0']);
+    await page.evaluate(() =>
+      (window as any).modelSwitch.studio.actions.setSetting('useKeyboardHotkeys', false),
+    );
+    await expect.poll(async () => (await snapshot()).active).toEqual([]);
+    await page.keyboard.up('f');
+    await page.keyboard.press('f');
+    expect((await snapshot()).active).toEqual([]);
+    await page.evaluate(() =>
+      (window as any).modelSwitch.studio.actions.modelAction('expression:0'),
+    );
+    expect((await snapshot()).active).toEqual(['0']);
+    await page.evaluate(() => {
+      const { actions } = (window as any).modelSwitch.studio;
+      actions.modelAction('clear-expressions');
+      actions.setSetting('useKeyboardHotkeys', true);
+    });
     // Rebinding held keys emits a synthetic keyup; it must still belong to model A.
     await page.keyboard.down('f');
     await expect.poll(async () => (await snapshot()).active).toEqual(['0']);
@@ -3611,18 +3657,18 @@ test('focused output forwards application shortcuts and releases held actions wi
   });
   await page.goto('/?output=1');
   await expect.poll(() => page.evaluate(() => (window as any).outputKeys?.ready)).toBe(true);
-  const update = (binding: string, background = '#000000') =>
+  const update = (binding: string, background = '#000000', useKeyboardHotkeys = true) =>
     page.evaluate(
-      async ({ binding, background }) => {
+      async ({ binding, background, useKeyboardHotkeys }) => {
         const { emit } = await import('/node_modules/@tauri-apps/api/event.js');
         await emit('output-state', {
           model: null,
           models: [],
           revision: 0,
-          settings: { background, hotkeys: { 'clear-expressions': binding } },
+          settings: { background, useKeyboardHotkeys, hotkeys: { 'clear-expressions': binding } },
         });
       },
-      { binding, background },
+      { binding, background, useKeyboardHotkeys },
     );
   const expected: { action: string; pressed: boolean }[] = [];
   const expectEvents = async (...presses: boolean[]) => {
@@ -3649,6 +3695,14 @@ test('focused output forwards application shortcuts and releases held actions wi
   await expectEvents();
   await page.keyboard.up('Space');
   await expectEvents(false);
+  await page.keyboard.down('Space');
+  await expectEvents(true);
+  await update('Space', '#ff0000', false);
+  await expectEvents(false);
+  await page.keyboard.up('Space');
+  await page.keyboard.press('Space');
+  await expectEvents();
+  await update('Space');
   await page.keyboard.down('Space');
   await expectEvents(true);
   await update('KeyA');
@@ -3710,6 +3764,21 @@ test('focused output forwards application shortcuts and releases held actions wi
     false,
   );
   expect(await page.evaluate(() => (window as any).outputKeys.view.micActive)).toBe(false);
+  await page.evaluate(async () => {
+    const { emit } = await import('/node_modules/@tauri-apps/api/event.js');
+    (window as any).outputKeys.studio.actions.setSetting('useKeyboardHotkeys', false);
+    await emit('output-hotkey', { action: 'toggle-model', pressed: true });
+    await emit('output-hotkey', { action: 'toggle-model', pressed: false });
+  });
+  expect(await page.evaluate(() => (window as any).outputKeys.synced.useKeyboardHotkeys)).toBe(
+    false,
+  );
+  expect(await page.evaluate(() => (window as any).outputKeys.view.settings.modelVisible)).toBe(
+    false,
+  );
+  await page.evaluate(() =>
+    (window as any).outputKeys.studio.actions.setSetting('useKeyboardHotkeys', true),
+  );
   await page.evaluate(async () => {
     const { emit } = await import('/node_modules/@tauri-apps/api/event.js');
     await emit('output-hotkey', { action: 'toggle-model', pressed: false });

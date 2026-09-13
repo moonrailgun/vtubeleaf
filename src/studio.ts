@@ -245,7 +245,9 @@ export function createStudio(
   }
   const bindHotkeys = async () => {
     releaseOutputHotkeys();
-    await hotkeys.set({ ...settings.globalHotkeys, ...settings.hotkeys });
+    await hotkeys.set(
+      settings.useKeyboardHotkeys ? { ...settings.globalHotkeys, ...settings.hotkeys } : {},
+    );
     await syncOutput().catch(() => {
       outputOpen = false;
     });
@@ -260,6 +262,7 @@ export function createStudio(
       }
       return;
     }
+    if (!settings.useKeyboardHotkeys) return;
     if (options && id.startsWith('expression:')) {
       if (options.release) {
         heldExpressions.add(id);
@@ -743,6 +746,7 @@ export function createStudio(
     },
     setSetting<K extends keyof Settings>(key: K, value: Settings[K]) {
       settings = readSettings({ ...settings, [key]: value });
+      if (key === 'useKeyboardHotkeys') void run(bindHotkeys);
       if (key === 'engine' || key === 'deviceId') {
         cancelCalibration();
         settings.neutral = null;

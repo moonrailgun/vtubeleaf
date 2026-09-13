@@ -76,7 +76,9 @@ export function Output() {
         listen<OutputState>('output-state', async ({ payload }) => {
           if (disposed) return;
           const settings = readSettings(payload.settings);
-          const bindings = { ...settings.globalHotkeys, ...settings.hotkeys };
+          const bindings = settings.useKeyboardHotkeys
+            ? { ...settings.globalHotkeys, ...settings.hotkeys }
+            : {};
           const signature = JSON.stringify([payload.revision, bindings, settings.hotkeyOptions]);
           if (signature !== hotkeySignature) {
             hotkeySignature = signature;

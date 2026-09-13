@@ -622,6 +622,21 @@ test('imported hotkey behavior survives model profiles and rejects invalid optio
   );
 });
 
+test('keyboard hotkey switch defaults on and persists per model without clearing bindings', () => {
+  assert.equal(readSettings(null).useKeyboardHotkeys, true);
+  assert.equal(readSettings({ useKeyboardHotkeys: 'false' }).useKeyboardHotkeys, true);
+  const settings = readSettings({
+    modelPath: '/a',
+    useKeyboardHotkeys: false,
+    hotkeys: { 'expression:smile': 'KeyF' },
+  });
+  const other = state.switchProfile(settings, '/b');
+  assert.equal(other.useKeyboardHotkeys, true);
+  const restored = state.switchProfile(readSettings(JSON.parse(JSON.stringify(other))), '/a');
+  assert.equal(restored.useKeyboardHotkeys, false);
+  assert.deepEqual(restored.hotkeys, { 'expression:smile': 'KeyF' });
+});
+
 test('parameter metadata uses authored names and bounded groups without adding foreign parameters', () => {
   const parameters = [
     { id: 'Param15', min: 0, max: 1, default: 0 },

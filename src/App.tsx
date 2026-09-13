@@ -1249,6 +1249,13 @@ function ModelControls({ view, actions: a }: { view: StudioView; actions: Studio
   const run = a.run;
   return (
     <>
+      <Toggle
+        id="use-keyboard-hotkeys"
+        label="使用键盘快捷键"
+        checked={view.settings.useKeyboardHotkeys}
+        onChange={(value) => a.setSetting('useKeyboardHotkeys', value)}
+      />
+      <p className="hint">按角色保存。关闭后保留按键绑定，仍可点击表情和动作按钮。</p>
       <div className="section-title">
         <h2>表情</h2>
         <Button

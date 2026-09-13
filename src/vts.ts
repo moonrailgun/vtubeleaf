@@ -279,8 +279,9 @@ export function importVtsConfig(raw: unknown, model: Model): VtsImportResult {
     if (raw.PhysicsSettings.Use === false) profile.physicsStrength = 0;
     warn('物理设置：仅支持 Use=false 关闭物理；强度滑杆、风、帧率枚举及旧版算法未转换');
   }
-  const keyboardDisabled =
-    record(raw.HotkeySettings) && raw.HotkeySettings.UseKeyboardHotkeys === false;
+  profile.useKeyboardHotkeys = !(
+    record(raw.HotkeySettings) && raw.HotkeySettings.UseKeyboardHotkeys === false
+  );
   for (const [i, item] of raw.Hotkeys.entries()) {
     const label = `快捷键 ${i + 1}`;
     if (!record(item)) {
@@ -299,7 +300,7 @@ export function importVtsConfig(raw: unknown, model: Model): VtsImportResult {
       warn(`${label}：开关字段类型无效，已跳过`);
       continue;
     }
-    if (keyboardDisabled || item.IsActive === false) {
+    if (item.IsActive === false) {
       warn(`${label}：VTS 已禁用，未导入`);
       continue;
     }
