@@ -140,13 +140,10 @@ const extension = join(build, 'com.moonrailgun.vtubeleaf.camera.systemextension'
 rmSync(extension, { recursive: true, force: true });
 mkdirSync(join(extension, 'Contents/MacOS'), { recursive: true });
 const info = readPlist(join(native, 'Info.plist'));
+// Keep the extension's own version: app-only releases must not replace a working CMIO service.
 // CoreMediaIO requires the Mach service name to start with an entitled App Group.
 info.CMIOExtension.CMIOExtensionMachServiceName = appGroup;
 info.CameraTeamIdentifier = team;
-if (appInfo) {
-  info.CFBundleShortVersionString = appInfo.CFBundleShortVersionString;
-  info.CFBundleVersion = appInfo.CFBundleVersion;
-}
 writePlist(join(extension, 'Contents/Info.plist'), info);
 for (const cpu of architectures) {
   run('xcrun', [

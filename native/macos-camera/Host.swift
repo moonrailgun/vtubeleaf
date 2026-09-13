@@ -7,9 +7,9 @@ private let hostQueue = DispatchQueue(label: "com.vtubeleaf.camera.host", qos: .
 private let cameraHost = CameraHost()
 private let cameraDeviceUnavailable: String = {
     if #available(macOS 15, *) {
-        return "摄像头扩展已启用，macOS 尚未提供设备。可尝试退出 VTubeLeaf，在系统设置中关闭再开启 VTubeLeaf 相机扩展后重试"
+        return "相机扩展已启用，但摄像头尚未就绪。更新应用后可能出现此情况。请先打开「相机扩展」，退出 VTubeLeaf，将 VTubeLeaf Camera 关闭后重新开启，再打开 VTubeLeaf 重试。"
     }
-    return "摄像头扩展已启用，macOS 尚未提供设备。可尝试退出并重新打开 VTubeLeaf 后重试"
+    return "相机扩展已启用，但摄像头尚未就绪。请尝试退出并重新打开 VTubeLeaf 后重试。"
 }()
 private let cameraRebootRequired = "macOS 要求重启以完成摄像头扩展变更；请保存工作并重启 Mac"
 
@@ -60,22 +60,31 @@ class CameraHost: NSObject, OSSystemExtensionRequestDelegate {
     var extensionBundleURL = Bundle.main.bundleURL.appendingPathComponent("Contents/Library/SystemExtensions/\(cameraIdentifier).systemextension")
 
     func showApprovalPrompt() {
-        let settingsURL: String
         if #available(macOS 15, *) {
-            message = "请在系统设置 → 通用 → 登录项与扩展 → 相机扩展中开启 VTubeLeaf"
-            settingsURL = "x-apple.systempreferences:com.apple.LoginItems-Settings.extension"
+            message = "请在「相机扩展」中开启 VTubeLeaf Camera"
         } else {
             message = "请在系统设置 → 隐私与安全性中允许 VTubeLeaf Camera 扩展"
-            settingsURL = "x-apple.systempreferences:com.apple.preference.security"
         }
         guard !approvalPromptShown else { return }
         approvalPromptShown = true
-        let instructions = message
+        showSettingsPrompt(title: "需要启用 VTubeLeaf Camera", instructions: message + "。开启后回到应用，待处理的启动会自动继续。")
+    }
+
+    func showSettingsPrompt(title: String, instructions: String) {
+        let settingsURL: String
+        let buttonTitle: String
+        if #available(macOS 15, *) {
+            settingsURL = "x-apple.systempreferences:com.apple.ExtensionsPreferences?extensionPointIdentifier=com.apple.system_extension.cmio.extension-point"
+            buttonTitle = "打开相机扩展"
+        } else {
+            settingsURL = "x-apple.systempreferences:com.apple.preference.security"
+            buttonTitle = "打开隐私与安全性"
+        }
         DispatchQueue.main.async {
             let alert = NSAlert()
-            alert.messageText = "需要启用 VTubeLeaf Camera"
-            alert.informativeText = instructions + "。开启后回到应用，待处理的启动会自动继续。"
-            alert.addButton(withTitle: "打开系统设置")
+            alert.messageText = title
+            alert.informativeText = instructions
+            alert.addButton(withTitle: buttonTitle)
             alert.addButton(withTitle: "稍后")
             if alert.runModal() == .alertFirstButtonReturn {
                 NSWorkspace.shared.open(URL(string: settingsURL)!)
@@ -184,6 +193,7 @@ class CameraHost: NSObject, OSSystemExtensionRequestDelegate {
             deviceWaitDeadline = nil
             startAfterActivation = false
             message = cameraDeviceUnavailable
+            showSettingsPrompt(title: "虚拟摄像头暂时无法使用", instructions: message + "\n\n若仍无法恢复，可在应用中卸载并重新安装虚拟摄像头；若 macOS 提示需要重启，请重启 Mac。")
         }
     }
     func startStream() throws {

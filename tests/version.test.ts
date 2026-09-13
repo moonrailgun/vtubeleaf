@@ -4,6 +4,36 @@ import { copyFileSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSy
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test } from 'node:test';
+import { runInNewContext } from 'node:vm';
+
+test('camera packaging keeps the extension version independent of app releases', () => {
+  const script = readFileSync(new URL('../scripts/build-camera.mjs', import.meta.url), 'utf8');
+  // Exercise the plist packaging step without signing an app or installing an extension.
+  const metadata = script.match(
+    /const info = readPlist\([\s\S]*?writePlist\(join\(extension, 'Contents\/Info.plist'\), info\);/,
+  )?.[0];
+  assert.ok(metadata, 'Camera packaging must write its extension metadata');
+  for (const cameraVersion of ['0.1.12', '0.1.13']) {
+    for (const appVersion of ['0.1.13', '0.2.0', '1.0.0']) {
+      const info = runInNewContext(metadata, {
+        native: '/native',
+        extension: '/extension',
+        join,
+        team: 'TEAMID1234',
+        appGroup: 'TEAMID1234.com.vtubeleaf.camera',
+        appInfo: { CFBundleShortVersionString: appVersion, CFBundleVersion: appVersion },
+        readPlist: () => ({
+          CFBundleShortVersionString: cameraVersion,
+          CFBundleVersion: cameraVersion,
+          CMIOExtension: {},
+        }),
+        writePlist: (_path: string, value: unknown) => value,
+      });
+      assert.equal(info.CFBundleShortVersionString, cameraVersion);
+      assert.equal(info.CFBundleVersion, cameraVersion);
+    }
+  }
+});
 
 test('version sync updates only the app and rejects an unrecognized lockfile before writing', () => {
   const root = mkdtempSync(join(tmpdir(), 'vtubeleaf-version-'));

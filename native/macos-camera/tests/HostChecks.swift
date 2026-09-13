@@ -9,6 +9,11 @@ private final class StartingCameraHost: CameraHost {
     var streamError: Error?
     var availableDevice: CMIODeviceID? = 1
     var deviceLookups = 0
+    var settingsPrompts: [(title: String, instructions: String)] = []
+
+    override func showSettingsPrompt(title: String, instructions: String) {
+        settingsPrompts.append((title, instructions))
+    }
 
     override func findDevice() -> CMIODeviceID? {
         deviceLookups += 1
@@ -41,7 +46,7 @@ private final class EnabledCameraProperties: OSSystemExtensionProperties {
                 polling.request(polling.submitted.last!, foundProperties: [enabledProperties])
             }
             assert(polling.deviceLookups == 0, "Startup status must not bind CMIO to an installed extension before its version is checked")
-            assert(polling.installed && !polling.waitingForDevice && !polling.message.contains("尚未提供设备"), "Enabled but uninspected devices must not be reported missing")
+            assert(polling.installed && !polling.waitingForDevice && !polling.message.contains("尚未就绪"), "Enabled but uninspected devices must not be reported missing")
             polling.request(kind)
             _ = polling.snapshot()
             assert(polling.deviceLookups == 0, "Pending activation must not discover an old device")
@@ -175,14 +180,19 @@ private final class EnabledCameraProperties: OSSystemExtensionProperties {
             return host
         }
         let timedOut = try waitingHost()
+        timedOut.showApprovalPrompt()
+        timedOut.showApprovalPrompt()
+        assert(timedOut.settingsPrompts.count == 1, "Repeated approval callbacks must show settings guidance only once")
         timedOut.advanceStart(now: 0)
         assert(timedOut.startAfterActivation && timedOut.streamStarts == 0, "Device arrival must get a grace period")
+        assert(timedOut.settingsPrompts.count == 1, "Device arrival must get a grace period before recovery guidance appears")
         timedOut.advanceStart(now: .max)
         timedOut.advanceStart(now: .max)
         assert(timedOut.submitted.count == 1 && timedOut.installed && timedOut.requests.isEmpty, "A device timeout must leave the extension installed without submitting deactivation")
-        assert(!timedOut.startAfterActivation && timedOut.streamStarts == 0 && timedOut.message.contains("后重试"), "A device timeout must end the pending start with retry feedback")
+        assert(!timedOut.startAfterActivation && timedOut.streamStarts == 0 && timedOut.message.contains("重试"), "A device timeout must end the pending start with retry feedback")
+        assert(timedOut.settingsPrompts.count == 2 && timedOut.settingsPrompts.last!.instructions.contains("重试"), "A device timeout must show recovery guidance once, even after an approval prompt")
         timedOut.updateInstallation(enabled: true, deviceAvailable: false)
-        assert(timedOut.message.contains("后重试"), "Status polling must preserve device-unavailable feedback")
+        assert(timedOut.message.contains("重试") && timedOut.settingsPrompts.count == 2, "Status polling must preserve feedback without repeating recovery guidance")
         timedOut.availableDevice = 1
         timedOut.advanceStart(now: .max)
         assert(timedOut.streamStarts == 0, "A timed-out request must not start unexpectedly when a device later appears")
@@ -195,6 +205,7 @@ private final class EnabledCameraProperties: OSSystemExtensionProperties {
         cancelledWait.availableDevice = 1
         cancelledWait.advanceStart(now: .max)
         assert(cancelledWait.installed && cancelledWait.submitted.count == 1 && cancelledWait.streamStarts == 0, "Stopping during device wait must cancel output and preserve the installation")
+        assert(cancelledWait.settingsPrompts.isEmpty, "A cancelled start must not show recovery guidance")
 
         let removedWait = try waitingHost()
         removedWait.request("uninstall")
@@ -208,7 +219,7 @@ private final class EnabledCameraProperties: OSSystemExtensionProperties {
         host.message = "等待系统设置中的摄像头扩展批准"
         host.updateInstallation(enabled: true, deviceAvailable: false)
         assert(host.installed && host.stream == 0)
-        assert(host.message.contains("已启用") && host.message.contains("尚未提供设备"), "An enabled extension without a device must not claim readiness")
+        assert(host.message.contains("已启用") && host.message.contains("尚未就绪"), "An enabled extension without a device must not claim readiness")
         host.updateInstallation(enabled: true, deviceAvailable: true)
         assert(host.message == "摄像头已安装，可以启动输出", "Device arrival must clear the stale approval or restart message")
         host.message = "无法启动摄像头输入流：-4"
