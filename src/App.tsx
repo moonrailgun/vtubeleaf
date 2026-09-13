@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
-import { DropdownMenu, Tabs } from 'radix-ui';
+import { AlertDialog, DropdownMenu, Tabs } from 'radix-ui';
 import {
   Image,
   FolderHeart,
@@ -12,6 +12,7 @@ import {
   ArrowUpRight,
   Plus,
   ChevronDown,
+  Ellipsis,
   Video,
   Sparkles,
 } from 'lucide-react';
@@ -178,11 +179,14 @@ export function App() {
   const nav = useRef<HTMLButtonElement[]>([]);
   const runtime = useRef<Studio | null>(null);
   const liveButton = useRef<HTMLButtonElement>(null);
+  const cameraMoreButton = useRef<HTMLButtonElement>(null);
   const [view, setView] = useState(initialView);
   const [tab, setTab] = useState('capture');
   const [collapsed, setCollapsed] = useState(false);
   const [live, setLive] = useState(false);
   const [preview, setPreview] = useState(false);
+  const [cameraPending, setCameraPending] = useState('');
+  const [uninstallCameraOpen, setUninstallCameraOpen] = useState(false);
   useEffect(() => {
     const studio = createStudio(container.current!, video.current!, setView, mesh.current!);
     runtime.current = studio;
@@ -226,6 +230,17 @@ export function App() {
   }, [live]);
   const a = runtime.current?.actions;
   const run = (fn: () => unknown) => a?.run(fn);
+  const camera = view.virtualCamera;
+  const cameraAction = !camera.installed ? '安装' : camera.active ? '停止' : '启动';
+  const runCamera = async (label: string, action: () => Promise<void>) => {
+    if (!a || cameraPending) return;
+    setCameraPending(label);
+    try {
+      await a.run(action);
+    } finally {
+      setCameraPending('');
+    }
+  };
   const s = view.settings;
   const active = view.tracking !== 'stopped';
   const busy = !view.ready || view.modelLoading || view.sceneBusy;
@@ -1157,31 +1172,90 @@ export function App() {
                 <p role="status" className="break-words" title={view.virtualCamera.message}>
                   {view.virtualCamera.message}
                 </p>
-                <div className="grid grid-cols-2 gap-2">
+                <div className="flex items-center gap-2" tabIndex={-1}>
                   <Button
                     variant="outline"
-                    disabled={!view.virtualCamera.supported || view.virtualCamera.installed}
-                    onClick={() => a?.run(a.installCamera)}
+                    className="flex-1"
+                    disabled={!camera.supported || !!cameraPending}
+                    onClick={() =>
+                      a &&
+                      runCamera(
+                        cameraAction,
+                        !camera.installed
+                          ? a.installCamera
+                          : camera.active
+                            ? a.stopCamera
+                            : a.startCamera,
+                      )
+                    }
                   >
-                    安装虚拟摄像头
+                    {cameraPending ? `${cameraPending}中…` : `${cameraAction}虚拟摄像头`}
                   </Button>
-                  <Button
-                    variant="outline"
-                    disabled={!view.virtualCamera.installed}
-                    onClick={() => a?.run(view.virtualCamera.active ? a.stopCamera : a.startCamera)}
+                  <DropdownMenu.Root>
+                    <DropdownMenu.Trigger asChild>
+                      <Button
+                        ref={cameraMoreButton}
+                        variant="outline"
+                        size="icon"
+                        disabled={!camera.installed || !!cameraPending}
+                        aria-label="虚拟摄像头更多操作"
+                        title="更多操作"
+                      >
+                        <Ellipsis aria-hidden="true" />
+                      </Button>
+                    </DropdownMenu.Trigger>
+                    <DropdownMenu.Portal>
+                      <DropdownMenu.Content
+                        className="model-import-menu"
+                        align="end"
+                        sideOffset={6}
+                      >
+                        <DropdownMenu.Item
+                          disabled={!camera.installed || !!cameraPending}
+                          onSelect={() => setUninstallCameraOpen(true)}
+                        >
+                          卸载虚拟摄像头
+                        </DropdownMenu.Item>
+                      </DropdownMenu.Content>
+                    </DropdownMenu.Portal>
+                  </DropdownMenu.Root>
+                  <AlertDialog.Root
+                    open={uninstallCameraOpen}
+                    onOpenChange={setUninstallCameraOpen}
                   >
-                    {view.virtualCamera.active ? '停止虚拟摄像头' : '启动虚拟摄像头'}
-                  </Button>
-                  <Button variant="ghost" onClick={() => a?.run(a.refreshCamera)}>
-                    刷新状态
-                  </Button>
-                  <Button
-                    variant="ghost"
-                    disabled={!view.virtualCamera.installed}
-                    onClick={() => a?.run(a.uninstallCamera)}
-                  >
-                    卸载虚拟摄像头
-                  </Button>
+                    <AlertDialog.Portal>
+                      <AlertDialog.Overlay className="fixed inset-0 z-40 bg-black/30" />
+                      <AlertDialog.Content
+                        className="fixed top-1/2 left-1/2 z-50 w-[calc(100%_-_2rem)] max-w-sm -translate-x-1/2 -translate-y-1/2 rounded-2xl border bg-background p-6 shadow-lg"
+                        onCloseAutoFocus={(event) => {
+                          event.preventDefault();
+                          const button = cameraMoreButton.current;
+                          (button?.disabled ? button.parentElement : button)?.focus();
+                        }}
+                      >
+                        <AlertDialog.Title className="text-lg font-medium">
+                          卸载虚拟摄像头？
+                        </AlertDialog.Title>
+                        <AlertDialog.Description className="mt-2 text-sm text-muted-foreground">
+                          卸载后，其他软件将无法使用 VTubeLeaf Camera，需要重新安装才能恢复。
+                        </AlertDialog.Description>
+                        <div className="mt-5 flex justify-end gap-2">
+                          <AlertDialog.Cancel asChild>
+                            <Button variant="outline">取消</Button>
+                          </AlertDialog.Cancel>
+                          <AlertDialog.Action asChild>
+                            <Button
+                              variant="destructive"
+                              disabled={!camera.installed || !!cameraPending}
+                              onClick={() => a && runCamera('卸载', a.uninstallCamera)}
+                            >
+                              确认卸载
+                            </Button>
+                          </AlertDialog.Action>
+                        </div>
+                      </AlertDialog.Content>
+                    </AlertDialog.Portal>
+                  </AlertDialog.Root>
                 </div>
                 <p className="hint">
                   Windows 安装到当前用户；macOS
