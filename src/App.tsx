@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
-import { DropdownMenu } from 'radix-ui';
+import { DropdownMenu, Tabs } from 'radix-ui';
 import {
   Image,
   FolderHeart,
@@ -1084,77 +1084,103 @@ export function App() {
             {a && <ModelControls key={view.model?.path} view={view} actions={a} />}
           </section>
           <section id="meeting" className="panel" hidden={tab !== 'meeting'}>
-            <div className="section-title">
-              <h2 className="shrink-0 whitespace-nowrap">内置虚拟摄像头</h2>
-              <span className="truncate" title="Windows / macOS · 720p / 30 FPS">
-                Windows / macOS · 720p / 30 FPS
-              </span>
-            </div>
-            <p role="status" className="break-words" title={view.virtualCamera.message}>
-              {view.virtualCamera.message}
-            </p>
-            <div className="grid grid-cols-2 gap-2">
-              <Button
-                variant="outline"
-                disabled={!view.virtualCamera.supported || view.virtualCamera.installed}
-                onClick={() => a?.run(a.installCamera)}
+            <Tabs.Root defaultValue="camera">
+              <Tabs.List
+                aria-label="接入方式"
+                className="mb-5 grid grid-cols-2 gap-1 rounded-xl bg-secondary p-1"
               >
-                安装虚拟摄像头
-              </Button>
-              <Button
-                variant="outline"
-                disabled={!view.virtualCamera.installed}
-                onClick={() => a?.run(view.virtualCamera.active ? a.stopCamera : a.startCamera)}
-              >
-                {view.virtualCamera.active ? '停止虚拟摄像头' : '启动虚拟摄像头'}
-              </Button>
-              <Button variant="ghost" onClick={() => a?.run(a.refreshCamera)}>
-                刷新状态
-              </Button>
-              <Button
-                variant="ghost"
-                disabled={!view.virtualCamera.installed}
-                onClick={() => a?.run(a.uninstallCamera)}
-              >
-                卸载虚拟摄像头
-              </Button>
-            </div>
-            <p className="hint">
-              Windows 安装到当前用户；macOS
-              首次安装需按系统提示允许摄像头扩展。启动后，在直播或视频软件中选择 VTubeLeaf
-              Camera。只输出角色、道具和背景；麦克风在所用软件中单独选择。
-            </p>
-            <div className="divider" />
-            <div className="section-title">
-              <h2>接入直播或视频软件</h2>
-              <span>OBS → 直播 / 视频</span>
-            </div>
-            <ol className="guide">
-              {[
-                [
-                  '进入直播模式',
-                  '调整角色构图和背景后，点击顶部「直播模式」隐藏面板。按 Esc 恢复界面。',
-                ],
-                [
-                  '在 OBS 添加捕获源',
-                  '选择 VTubeLeaf 主窗口。Windows 使用「窗口捕获」；macOS 使用「macOS 屏幕捕获」并授予屏幕录制权限。裁掉系统标题栏。',
-                ],
-                ['启动虚拟摄像头', '在 OBS 点击「启动虚拟摄像头」。可在场景中添加背景或使用色键。'],
-                [
-                  '在直播或视频软件中选择摄像头',
-                  '选择 OBS Virtual Camera；麦克风仍使用你原来的设备。',
-                ],
-              ].map(([title, text]) => (
-                <li key={title}>
-                  <b>{title}</b>
-                  <p>{text}</p>
-                </li>
-              ))}
-            </ol>
-            <p className="hint">
-              需要边调整边输出时，可使用「独立输出窗口」并在 OBS 捕获 VTubeLeaf
-              Output。先用另一参会端确认画面，后台与最小化表现需按平台实测。
-            </p>
+                {[
+                  ['camera', '内置虚拟摄像头'],
+                  ['obs', 'OBS 接入'],
+                ].map(([value, label]) => (
+                  <Tabs.Trigger key={value} value={value} asChild>
+                    <Button
+                      variant="ghost"
+                      className="data-[state=active]:bg-background data-[state=active]:text-accent-foreground data-[state=active]:shadow-sm"
+                    >
+                      {label}
+                    </Button>
+                  </Tabs.Trigger>
+                ))}
+              </Tabs.List>
+              <Tabs.Content value="camera">
+                <div className="section-title">
+                  <h2 className="shrink-0 whitespace-nowrap">内置虚拟摄像头</h2>
+                  <span className="truncate" title="Windows / macOS · 720p / 30 FPS">
+                    Windows / macOS · 720p / 30 FPS
+                  </span>
+                </div>
+                <p role="status" className="break-words" title={view.virtualCamera.message}>
+                  {view.virtualCamera.message}
+                </p>
+                <div className="grid grid-cols-2 gap-2">
+                  <Button
+                    variant="outline"
+                    disabled={!view.virtualCamera.supported || view.virtualCamera.installed}
+                    onClick={() => a?.run(a.installCamera)}
+                  >
+                    安装虚拟摄像头
+                  </Button>
+                  <Button
+                    variant="outline"
+                    disabled={!view.virtualCamera.installed}
+                    onClick={() => a?.run(view.virtualCamera.active ? a.stopCamera : a.startCamera)}
+                  >
+                    {view.virtualCamera.active ? '停止虚拟摄像头' : '启动虚拟摄像头'}
+                  </Button>
+                  <Button variant="ghost" onClick={() => a?.run(a.refreshCamera)}>
+                    刷新状态
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    disabled={!view.virtualCamera.installed}
+                    onClick={() => a?.run(a.uninstallCamera)}
+                  >
+                    卸载虚拟摄像头
+                  </Button>
+                </div>
+                <p className="hint">
+                  Windows 安装到当前用户；macOS
+                  首次安装需按系统提示允许摄像头扩展。启动后，在直播或视频软件中选择 VTubeLeaf
+                  Camera。只输出角色、道具和背景；麦克风在所用软件中单独选择。
+                </p>
+              </Tabs.Content>
+              <Tabs.Content value="obs">
+                <div className="section-title">
+                  <h2>接入直播或视频软件</h2>
+                  <span>OBS → 直播 / 视频</span>
+                </div>
+                <ol className="guide">
+                  {[
+                    [
+                      '进入直播模式',
+                      '调整角色构图和背景后，点击顶部「直播模式」隐藏面板。按 Esc 恢复界面。',
+                    ],
+                    [
+                      '在 OBS 添加捕获源',
+                      '选择 VTubeLeaf 主窗口。Windows 使用「窗口捕获」；macOS 使用「macOS 屏幕捕获」并授予屏幕录制权限。裁掉系统标题栏。',
+                    ],
+                    [
+                      '启动虚拟摄像头',
+                      '在 OBS 点击「启动虚拟摄像头」。可在场景中添加背景或使用色键。',
+                    ],
+                    [
+                      '在直播或视频软件中选择摄像头',
+                      '选择 OBS Virtual Camera；麦克风仍使用你原来的设备。',
+                    ],
+                  ].map(([title, text]) => (
+                    <li key={title}>
+                      <b>{title}</b>
+                      <p>{text}</p>
+                    </li>
+                  ))}
+                </ol>
+                <p className="hint">
+                  需要边调整边输出时，可使用「独立输出窗口」并在 OBS 捕获 VTubeLeaf
+                  Output。先用另一参会端确认画面，后台与最小化表现需按平台实测。
+                </p>
+              </Tabs.Content>
+            </Tabs.Root>
             <div className="privacy-note">
               <b>你的人脸，留在你的电脑。</b>
               <p>
