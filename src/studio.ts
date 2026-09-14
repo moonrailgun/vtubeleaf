@@ -400,7 +400,8 @@ export function createStudio(
       const image = new Image();
       image.src = url;
       await image.decode();
-      if (disposed || previews[entry.path]) return;
+      if (disposed || previews[entry.path] || !library.some((item) => item.path === entry.path))
+        return;
       previews[entry.path] = url;
       url = '';
       publish();
@@ -417,7 +418,8 @@ export function createStudio(
         'image/png',
       ),
     );
-    if (disposed || previews[entry.path]) return;
+    if (disposed || previews[entry.path] || !library.some((item) => item.path === entry.path))
+      return;
     previews[entry.path] = URL.createObjectURL(png);
     publish();
     await invoke('save_model_preview', {
@@ -942,6 +944,58 @@ export function createStudio(
     async recentModel(path: string) {
       if (!sceneBusy && path && path !== model?.path && native)
         await loadModel(() => invoke<ModelInfo>('load_model', { path }));
+    },
+    async removeModel(id: string) {
+      if (!native || !ready || disposed || modelLoading || sceneBusy) return;
+      const entry = library.find((item) => item.id === id);
+      if (!entry || entry.builtin) return;
+      sceneBusy = true;
+      publish();
+      try {
+        await invoke('remove_model', { id });
+        if (disposed) return;
+        const active = model?.path === entry.path;
+        if (active) {
+          cancelCalibration();
+          stage?.clear();
+          model = null;
+          modelRevision++;
+          profileRevision++;
+          recording.stop();
+          mapper.reset();
+          heldExpressions.clear();
+        }
+        if (settings.modelPath === entry.path) settings = switchProfile(settings, '');
+        delete settings.profiles[entry.path];
+        settings.recentModels = settings.recentModels.filter((item) => item.path !== entry.path);
+        const withoutModel = (composition: Composition): Composition => ({
+          ...composition,
+          items: composition.items.filter((item) => {
+            if (item.kind !== 'live2d' || item.source !== entry.path) return true;
+            delete settings.globalHotkeys[`item:${item.id}`];
+            return false;
+          }),
+        });
+        settings.composition = withoutModel(settings.composition);
+        settings.scenes = settings.scenes.map((scene) => ({
+          ...scene,
+          modelPath: scene.modelPath === entry.path ? '' : scene.modelPath,
+          composition: withoutModel(scene.composition),
+        }));
+        if (!settings.composition.items.some((item) => item.id === selectedItem)) selectedItem = '';
+        library = library.filter((item) => item.id !== id);
+        if (previews[entry.path]) URL.revokeObjectURL(previews[entry.path]);
+        delete previews[entry.path];
+        changed();
+        if (active) await stopAudio();
+        await save(true);
+        await stage?.compose(settings, library);
+        await bindHotkeys();
+        notify(`已移除「${entry.name}」，导入来源文件未改动。`);
+      } finally {
+        sceneBusy = false;
+        publish();
+      }
     },
     async importPaths(paths: string[]) {
       if (!native || disposed) return;

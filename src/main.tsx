@@ -5,7 +5,7 @@ import { App } from './App';
 import { Output } from './output';
 import { About } from './About';
 
-window.addEventListener('contextmenu', (event) => event.preventDefault(), { capture: true });
+window.addEventListener('contextmenu', (event) => event.preventDefault());
 
 const params = new URLSearchParams(location.search);
 

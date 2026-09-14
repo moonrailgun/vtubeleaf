@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
-import { AlertDialog, DropdownMenu, Tabs } from 'radix-ui';
+import { AlertDialog, ContextMenu, DropdownMenu, Tabs } from 'radix-ui';
 import {
   Image,
   FolderHeart,
@@ -15,6 +15,7 @@ import {
   Ellipsis,
   Video,
   Sparkles,
+  Trash2,
 } from 'lucide-react';
 import { Button } from './components/ui/button';
 import { Input } from './components/ui/input';
@@ -39,7 +40,7 @@ import {
   type Mapping,
   type FaceKey,
 } from './state';
-import type { MotionMode } from './renderer';
+import type { ModelInfo, MotionMode } from './renderer';
 import { SceneControls } from './SceneControls';
 import { vowels } from './lipsync';
 import { version } from '../package.json';
@@ -189,6 +190,7 @@ export function App() {
   const [preview, setPreview] = useState(false);
   const [cameraPending, setCameraPending] = useState('');
   const [uninstallCameraOpen, setUninstallCameraOpen] = useState(false);
+  const [modelToRemove, setModelToRemove] = useState<ModelInfo | null>(null);
   useEffect(() => {
     const studio = createStudio(container.current!, video.current!, setView, mesh.current!);
     runtime.current = studio;
@@ -1010,11 +1012,13 @@ export function App() {
           </section>
           <section id="library" className="panel" hidden={tab !== 'library'}>
             <div className="section-title">
-              <h2>我的角色</h2>
+              <h2 id="library-title" tabIndex={-1}>
+                我的角色
+              </h2>
               <span>{view.library.length} 个角色</span>
             </div>
             <p className="library-drop-hint">
-              把模型文件夹、.model3.json 或 ZIP 拖到窗口中，自动复制到角色库。
+              把模型文件夹、.model3.json 或 ZIP 拖到窗口中，自动复制到角色库。右键角色可移除。
             </p>
             <div className="library-actions">
               <DropdownMenu.Root>
@@ -1040,28 +1044,80 @@ export function App() {
             </div>
             <div className="model-library" aria-label="已保存的角色" aria-busy={busy}>
               {view.library.map((entry) => (
-                <Button
-                  key={entry.path}
-                  variant="outline"
-                  className="model-card"
-                  disabled={busy}
-                  aria-label={`切换到 ${entry.name}`}
-                  aria-pressed={view.model?.path === entry.path}
-                  title={entry.path}
-                  onClick={() => run(() => a?.recentModel(entry.path))}
-                >
-                  <span className="model-thumbnail">
-                    {view.previews[entry.path] ? (
-                      <img src={view.previews[entry.path]} alt={`${entry.name} 角色预览`} />
-                    ) : (
-                      <UserRound aria-hidden="true" />
-                    )}
-                  </span>
-                  <span className="model-card-name">{entry.name}</span>
-                  <small>{view.model?.path === entry.path ? '使用中' : '点击切换'}</small>
-                </Button>
+                <ContextMenu.Root key={entry.path}>
+                  <ContextMenu.Trigger asChild disabled={busy}>
+                    <Button
+                      variant="outline"
+                      className="model-card"
+                      disabled={busy}
+                      aria-label={`切换到 ${entry.name}`}
+                      aria-pressed={view.model?.path === entry.path}
+                      title={entry.path}
+                      onClick={() => run(() => a?.recentModel(entry.path))}
+                    >
+                      <span className="model-thumbnail">
+                        {view.previews[entry.path] ? (
+                          <img src={view.previews[entry.path]} alt={`${entry.name} 角色预览`} />
+                        ) : (
+                          <UserRound aria-hidden="true" />
+                        )}
+                      </span>
+                      <span className="model-card-name">{entry.name}</span>
+                      <small>{view.model?.path === entry.path ? '使用中' : '点击切换'}</small>
+                    </Button>
+                  </ContextMenu.Trigger>
+                  <ContextMenu.Portal>
+                    <ContextMenu.Content className="model-import-menu">
+                      <ContextMenu.Item
+                        className="flex items-center gap-2 text-destructive data-[disabled]:opacity-50"
+                        disabled={busy || entry.builtin}
+                        onSelect={() => setModelToRemove(entry)}
+                      >
+                        <Trash2 aria-hidden="true" size={14} />
+                        {entry.builtin ? '内置角色不可移除' : '移除角色'}
+                      </ContextMenu.Item>
+                    </ContextMenu.Content>
+                  </ContextMenu.Portal>
+                </ContextMenu.Root>
               ))}
             </div>
+            <AlertDialog.Root
+              open={!!modelToRemove}
+              onOpenChange={(open) => !open && setModelToRemove(null)}
+            >
+              <AlertDialog.Portal>
+                <AlertDialog.Overlay className="fixed inset-0 z-40 bg-black/30" />
+                <AlertDialog.Content
+                  className="fixed top-1/2 left-1/2 z-50 w-[calc(100%_-_2rem)] max-w-sm -translate-x-1/2 -translate-y-1/2 rounded-2xl border bg-background p-6 shadow-lg"
+                  onCloseAutoFocus={(event) => {
+                    event.preventDefault();
+                    document.getElementById('library-title')?.focus();
+                  }}
+                >
+                  <AlertDialog.Title className="text-lg font-medium">
+                    移除「{modelToRemove?.name}」？
+                  </AlertDialog.Title>
+                  <AlertDialog.Description className="mt-2 text-sm text-muted-foreground">
+                    将删除角色库中的副本和该角色的配置，导入来源文件会保留。
+                    正在使用的角色会退出舞台，场景中对该角色的引用也会清除。此操作无法撤销，可重新导入角色。
+                  </AlertDialog.Description>
+                  <div className="mt-5 flex justify-end gap-2">
+                    <AlertDialog.Cancel asChild>
+                      <Button variant="outline">取消</Button>
+                    </AlertDialog.Cancel>
+                    <AlertDialog.Action asChild>
+                      <Button
+                        variant="destructive"
+                        disabled={busy}
+                        onClick={() => modelToRemove && run(() => a?.removeModel(modelToRemove.id))}
+                      >
+                        确认移除
+                      </Button>
+                    </AlertDialog.Action>
+                  </div>
+                </AlertDialog.Content>
+              </AlertDialog.Portal>
+            </AlertDialog.Root>
             {!view.library.length && (
               <p className="hint">还没有角色。加入后会保存在本机，重启也能直接切换。</p>
             )}

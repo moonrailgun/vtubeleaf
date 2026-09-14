@@ -15,6 +15,7 @@ export type ModelInfo = {
   name: string;
   entry: string;
   files: string[];
+  builtin?: boolean;
   vtsResources?: {
     expressions: { name: string; file: string }[];
     motions: { name: string; file: string }[];

@@ -20,6 +20,7 @@ pub struct ModelInfo {
     pub name: String,
     pub entry: String,
     pub files: Vec<String>,
+    pub builtin: bool,
     #[serde(rename = "vtsResources", skip_serializing_if = "Option::is_none")]
     pub vts_resources: Option<VtsResources>,
 }
@@ -107,6 +108,10 @@ impl Registry {
             name: entry.trim_end_matches(".model3.json").to_owned(),
             entry,
             files: model.files.clone(),
+            builtin: model
+                .root
+                .file_name()
+                .is_some_and(|name| name.to_string_lossy().starts_with("builtin-")),
             vts_resources: model.vts_resources.clone(),
         };
         self.models.insert(id, model);
@@ -175,6 +180,39 @@ impl Registry {
             }
         }
         Ok(library)
+    }
+
+    pub fn remove(&mut self, id: &str, data_dir: &Path) -> Result<(), String> {
+        let model = self.models.get(id).ok_or("角色不在库中")?;
+        let directory = data_dir
+            .join("models")
+            .canonicalize()
+            .map_err(|_| "无法访问角色文件夹")?;
+        let relative = model
+            .entry
+            .strip_prefix(&directory)
+            .map_err(|_| "只能移除角色库内的副本")?;
+        let mut components = relative.components();
+        let key = components.next().ok_or("角色路径无效")?.as_os_str();
+        if components.next().is_none() {
+            return Err("角色路径无效".into());
+        }
+        if key.to_string_lossy().starts_with("builtin-") {
+            return Err("内置角色不能移除".into());
+        }
+        // ZIP imports can have nested folders: remove only their top-level managed directory.
+        let target = directory.join(key);
+        if target.canonicalize().map_err(|_| "角色文件夹不存在")? != target
+            || model.entry.canonicalize().map_err(|_| "角色文件不存在")? != model.entry
+        {
+            return Err("角色路径已改变，请重新打开应用后再试".into());
+        }
+        let preview = self.preview_path(id, data_dir)?;
+        fs::remove_dir_all(&target).map_err(|error| format!("无法移除角色文件夹：{error}"))?;
+        self.models
+            .retain(|_, model| !model.entry.starts_with(&target));
+        let _ = fs::remove_file(preview);
+        Ok(())
     }
 
     fn preview_path(&self, id: &str, data_dir: &Path) -> Result<PathBuf, String> {
@@ -1367,6 +1405,54 @@ mod tests {
     }
 
     #[test]
+    fn removing_an_import_preserves_source_and_other_models() {
+        let source = tempfile::tempdir().unwrap();
+        let data = tempfile::tempdir().unwrap();
+        fixture(source.path());
+        let mut registry = Registry::default();
+        let imported = registry.load(source.path(), data.path()).unwrap();
+        let other = registry.load(source.path(), data.path()).unwrap();
+        let directory = Path::new(&imported.path).parent().unwrap().to_owned();
+        let png = b"\x89PNG\r\n\x1a\n\0\0\0\x0dIHDR\0\0\x01\0\0\0\x01\0";
+        registry
+            .save_preview(&imported.id, data.path(), png)
+            .unwrap();
+        let preview = registry.preview_path(&imported.id, data.path()).unwrap();
+
+        registry.remove(&imported.id, data.path()).unwrap();
+        assert!(!directory.exists());
+        assert!(!preview.exists());
+        assert!(registry.read(&imported.id, "leaf.moc3").is_err());
+        assert_eq!(fs::read(source.path().join("leaf.moc3")).unwrap(), b"MOC3");
+        assert_eq!(registry.read(&other.id, "leaf.moc3").unwrap(), b"MOC3");
+        let remaining = Registry::default().list(data.path()).unwrap();
+        assert_eq!(remaining.models.len(), 1);
+        assert_eq!(remaining.models[0].path, other.path);
+        assert!(registry.remove(&imported.id, data.path()).is_err());
+
+        let external = registry
+            .register(validate_model(source.path()).unwrap())
+            .unwrap();
+        assert!(registry.remove(&external.id, data.path()).is_err());
+        assert!(source.path().join("leaf.model3.json").exists());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn removing_an_import_rejects_a_replaced_directory_symlink() {
+        let source = tempfile::tempdir().unwrap();
+        let data = tempfile::tempdir().unwrap();
+        fixture(source.path());
+        let mut registry = Registry::default();
+        let imported = registry.load(source.path(), data.path()).unwrap();
+        let directory = Path::new(&imported.path).parent().unwrap();
+        fs::remove_dir_all(directory).unwrap();
+        std::os::unix::fs::symlink(source.path(), directory).unwrap();
+        assert!(registry.remove(&imported.id, data.path()).is_err());
+        assert_eq!(fs::read(source.path().join("leaf.moc3")).unwrap(), b"MOC3");
+    }
+
+    #[test]
     fn bundled_models_populate_the_library_once_and_preserve_user_data() {
         let bundled = Path::new(env!("CARGO_MANIFEST_DIR")).join("../vendor/models");
         let data = tempfile::tempdir().unwrap();
@@ -1382,6 +1468,8 @@ mod tests {
             BTreeSet::from(["Haru", "Hiyori", "Mao"])
         );
         for model in &library.models {
+            assert!(model.builtin);
+            assert!(registry.remove(&model.id, data.path()).is_err());
             for resource in &model.files {
                 assert_eq!(
                     registry.read(&model.id, resource).unwrap(),
@@ -1726,7 +1814,14 @@ mod tests {
         assert_eq!(first.icon.as_deref(), Some("icon.png"));
         assert!(first.entry.is_file());
         assert!(first.root.starts_with(destination.canonicalize().unwrap()));
-        assert_eq!(fs::read_dir(destination).unwrap().count(), 2);
+        assert_eq!(fs::read_dir(&destination).unwrap().count(), 2);
+        let mut registry = Registry::default();
+        let imported = registry.register(first).unwrap();
+        registry.remove(&imported.id, root.path()).unwrap();
+        assert!(!Path::new(&imported.path).exists());
+        assert_eq!(fs::read_dir(&destination).unwrap().count(), 1);
+        assert!(second.entry.is_file());
+        assert!(archive.is_file());
     }
 
     #[test]

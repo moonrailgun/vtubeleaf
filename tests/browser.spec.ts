@@ -171,7 +171,7 @@ async function bindPauseHotkey(page: Page) {
   return () => page.keyboard.press('Control+Shift+P');
 }
 
-test('bundled Haru, Hiyori and Mao render previews and can be selected from the empty stage', async ({
+test('bundled Haru, Hiyori and Mao render previews, and imported models can be selected and removed', async ({
   page,
 }, testInfo) => {
   const resources = new Map<string, string>();
@@ -191,6 +191,7 @@ test('bundled Haru, Hiyori and Mao render previews and can be selected from the 
       path: `${root}/${name}.model3.json`,
       entry: `${name}.model3.json`,
       files,
+      builtin: true,
     };
   });
   await page.route('**/builtin-fixture/**', (route) => {
@@ -205,7 +206,7 @@ test('bundled Haru, Hiyori and Mao render previews and can be selected from the 
     const bootstrap = `import { mockIPC, mockWindows } from '/node_modules/@tauri-apps/api/mocks.js';
       window.isTauri = true; mockWindows('main');
       const models = ${JSON.stringify(models)};
-      const imported = { ...models[2], name: 'Imported Mao', path: '/managed/models/imported/Mao.model3.json' };
+      const imported = { ...models[2], id: 'imported-Mao', builtin: false, name: 'Imported Mao', path: '/managed/models/imported/Mao.model3.json' };
       const previews = {};
       mockIPC(async (cmd, args) => {
         if (cmd === 'load_settings') return JSON.parse(localStorage.getItem('test-settings') ?? 'null');
@@ -216,9 +217,15 @@ test('bundled Haru, Hiyori and Mao render previews and can be selected from the 
           if (args.path === '/dropped/Mao.zip') { localStorage.setItem('test-imported', 'true'); return imported; }
           return [imported, ...models].find((model) => model.path === args.path);
         }
+        if (cmd === 'remove_model') {
+          if (args.id !== imported.id) throw new Error('内置角色不能移除');
+          if (localStorage.getItem('test-remove-fails')) throw new Error('无法移除角色文件夹');
+          localStorage.removeItem('test-imported');
+          return;
+        }
         if (cmd === 'read_model_preview') return new Uint8Array(previews[args.id] ?? []).buffer;
         if (cmd === 'save_model_preview') { previews[args.id] = args.png; return; }
-        if (cmd === 'read_model_resource') return (await fetch('/builtin-fixture/' + args.id + '/' + encodeURI(args.resource))).arrayBuffer();
+        if (cmd === 'read_model_resource') return (await fetch('/builtin-fixture/' + (args.id === imported.id ? 'Mao' : args.id) + '/' + encodeURI(args.resource))).arrayBuffer();
       }, { shouldMockEvents: true });\n`;
     await route.fulfill({ response, body: bootstrap + (await response.text()) });
   });
@@ -246,6 +253,80 @@ test('bundled Haru, Hiyori and Mao render previews and can be selected from the 
   await expect(page.locator('#model-name')).toHaveText('Haru');
   await page.getByRole('button', { name: '角色库', exact: true }).click();
   await expect(page.locator('.model-card-name')).toHaveText(order);
+  const importedCard = page.getByRole('button', { name: '切换到 Imported Mao', exact: true });
+  await importedCard.click({ button: 'right' });
+  await expect(page.locator('#model-name')).toHaveText('Haru');
+  await page.getByRole('menuitem', { name: '移除角色', exact: true }).click();
+  await page.getByRole('button', { name: '取消', exact: true }).click();
+  await expect(importedCard).toBeVisible();
+  await page.evaluate(() => localStorage.setItem('test-remove-fails', 'true'));
+  await importedCard.click({ button: 'right' });
+  await page.getByRole('menuitem', { name: '移除角色', exact: true }).click();
+  await page.getByRole('button', { name: '确认移除', exact: true }).click();
+  await expect(page.locator('#notice')).toContainText('无法移除角色文件夹');
+  await expect(importedCard).toBeVisible();
+  await expect(page.locator('#model-name')).toHaveText('Haru');
+  await page.evaluate(() => localStorage.removeItem('test-remove-fails'));
+  await importedCard.click({ button: 'right' });
+  await page.getByRole('menuitem', { name: '移除角色', exact: true }).click();
+  await page.getByRole('button', { name: '确认移除', exact: true }).click();
+  await expect(importedCard).toHaveCount(0);
+  await expect(page.locator('#model-name')).toHaveText('Haru');
+  await page.reload();
+  await expect(page.locator('#model-name')).toHaveText('Haru');
+  await page.getByRole('button', { name: '角色库', exact: true }).click();
+  await expect(page.locator('.model-card-name')).toHaveText(['Haru', 'Hiyori', 'Mao']);
+  await page.getByRole('button', { name: '切换到 Haru', exact: true }).click({ button: 'right' });
+  await expect(page.getByRole('menuitem', { name: '内置角色不可移除' })).toBeDisabled();
+  await page.keyboard.press('Escape');
+  await page.evaluate(async () => {
+    const { emit } = await import('/node_modules/@tauri-apps/api/event.js');
+    await emit('tauri://drag-drop', { paths: ['/dropped/Mao.zip'], position: { x: 300, y: 300 } });
+  });
+  await expect(page.locator('#model-name')).toHaveText('Imported Mao');
+  await page.getByRole('button', { name: '画面', exact: true }).click();
+  await page.getByRole('button', { name: '海滩', exact: true }).click();
+  await chooseOption(page, page.locator('#item-model'), 'Imported Mao');
+  await page.getByRole('button', { name: '添加 Live2D', exact: true }).click();
+  await chooseOption(page, page.locator('#item-model'), 'Haru');
+  await page.getByRole('button', { name: '添加 Live2D', exact: true }).click();
+  await page.locator('#scene-name').fill('双人场景');
+  await page.getByRole('button', { name: '保存为新场景', exact: true }).click();
+  await expect
+    .poll(() =>
+      page.evaluate(
+        () =>
+          JSON.parse(localStorage.getItem('test-settings') ?? '{}').scenes?.[0]?.composition.items
+            .length,
+      ),
+    )
+    .toBe(2);
+  await page.getByRole('button', { name: '角色库', exact: true }).click();
+  await importedCard.click({ button: 'right' });
+  await page.screenshot({ path: testInfo.outputPath('remove-model-menu.png') });
+  await page.getByRole('menuitem', { name: '移除角色', exact: true }).click();
+  await expect(page.getByRole('alertdialog')).toContainText('导入来源文件会保留');
+  await page.screenshot({ path: testInfo.outputPath('remove-model-confirm.png') });
+  await page.getByRole('button', { name: '确认移除', exact: true }).click();
+  await expect(page.locator('#model-name')).toHaveText('未加载角色');
+  await expect(importedCard).toHaveCount(0);
+  await expect(page.locator('#notice')).toContainText('已移除「Imported Mao」');
+  const saved = await page.evaluate(() => JSON.parse(localStorage.getItem('test-settings')!));
+  expect(JSON.stringify(saved)).not.toContain('/managed/models/imported/Mao.model3.json');
+  expect(saved.composition.backgroundImage).toBe('builtin:beach');
+  expect(saved.composition.items.map((item: { name: string }) => item.name)).toEqual(['Haru']);
+  expect(saved.scenes[0]).toMatchObject({
+    name: '双人场景',
+    modelPath: '',
+    composition: saved.composition,
+  });
+  await page.reload();
+  await expect(page.locator('#model-name')).toHaveText('未加载角色');
+  await page.getByRole('button', { name: '画面', exact: true }).click();
+  await chooseOption(page, page.locator('#saved-scene'), '双人场景');
+  await page.getByRole('button', { name: '切换场景', exact: true }).click();
+  await expect(page.locator('#notice')).toContainText('已切换到场景「双人场景」');
+  await expect(page.locator('#model-name')).toHaveText('未加载角色');
 });
 
 test('official Cubism Core renders a supplied model and applies head, body, eye, and mouth parameters', async ({

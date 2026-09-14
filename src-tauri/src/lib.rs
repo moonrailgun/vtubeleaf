@@ -171,6 +171,26 @@ async fn list_models(window: WebviewWindow, app: tauri::AppHandle) -> Result<Lib
 }
 
 #[tauri::command]
+async fn remove_model(
+    window: WebviewWindow,
+    app: tauri::AppHandle,
+    id: String,
+) -> Result<(), String> {
+    require_main(&window)?;
+    tauri::async_runtime::spawn_blocking(move || {
+        let state = app.state::<AppState>();
+        let result = state
+            .models
+            .lock()
+            .map_err(|_| "模型状态不可用")?
+            .remove(&id, &state.data_dir);
+        result
+    })
+    .await
+    .map_err(|_| "移除角色任务中断")?
+}
+
+#[tauri::command]
 async fn open_models_directory(window: WebviewWindow, app: tauri::AppHandle) -> Result<(), String> {
     require_main(&window)?;
     tauri::async_runtime::spawn_blocking(move || {
@@ -437,6 +457,7 @@ pub fn run() {
             load_model,
             list_models,
             open_models_directory,
+            remove_model,
             read_model_preview,
             save_model_preview,
             read_model_resource,
