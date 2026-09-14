@@ -34,6 +34,7 @@ import { createStudio, type Studio, type StudioView } from './studio';
 import {
   defaults,
   defaultMapping,
+  clampMouthMapping,
   parameterNames,
   faceSources,
   type Settings,
@@ -920,6 +921,7 @@ export function App() {
               {range('eyeSmooth', '眼睛平滑', 0, 0.3, 0.01)}
               {range('mouthSensitivity', '嘴部灵敏度', 0.2, 3, 0.1)}
               {range('mouthSmooth', '嘴部平滑', 0, 0.4, 0.01)}
+              <p className="hint">调整嘴部平滑会同步已有嘴部映射；仍可在角色参数中单独微调。</p>
               {range('lostDelay', '丢脸容错时间', 0.1, 2, 0.1)}
               <label htmlFor="lost-mode">丢失跟踪后</label>
               <Select
@@ -2092,16 +2094,19 @@ function MappingEditor({
   view: StudioView;
   actions: Studio['actions'];
 }) {
-  const initial = view.settings.mappings[parameter.id] ??
-    defaultMapping(parameter, view.settings) ?? {
-      source: 'yaw',
-      inputMin: -1,
-      inputMax: 1,
-      outputMin: parameter.min,
-      outputMax: parameter.max,
-      smoothing: 0.12,
-      enabled: false,
-    };
+  const initial = clampMouthMapping(
+    view.settings.mappings[parameter.id] ??
+      defaultMapping(parameter, view.settings) ?? {
+        source: 'yaw',
+        inputMin: -1,
+        inputMax: 1,
+        outputMin: parameter.min,
+        outputMax: parameter.max,
+        smoothing: 0.12,
+        enabled: false,
+      },
+    parameter,
+  );
   const [source, setSource] = useState<FaceKey>(initial.source);
   const [enabled, setEnabled] = useState(initial.enabled);
   const [clamp, setClamp] = useState(initial.clamp ?? true);
@@ -2197,6 +2202,8 @@ function MappingEditor({
         </div>
         <p className="hint">
           输入为校准后的归一化数值，实时显示在上方。交换输出上下限可反向。位移在两个引擎中的尺度不同，切换后请重新校准。
+          {source === 'mouthOpen' &&
+            '嘴部开合输出端点会限制到模型范围；放大幅度请调整输入范围或嘴部灵敏度。'}
         </p>
       </div>
     </>

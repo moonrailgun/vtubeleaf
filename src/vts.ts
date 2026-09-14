@@ -1,4 +1,10 @@
-import type { FaceKey, HotkeyOptions, Mapping, ModelProfile } from './state.ts';
+import {
+  clampMouthMapping,
+  type FaceKey,
+  type HotkeyOptions,
+  type Mapping,
+  type ModelProfile,
+} from './state.ts';
 
 export type VtsImportResult = {
   profile: Partial<ModelProfile>;
@@ -217,20 +223,27 @@ export function importVtsConfig(raw: unknown, model: Model): VtsImportResult {
     }
     // ponytail: slider proportion only; exact VTS smoothing needs its unpublished algorithm.
     if (item.Smoothing !== 0) warn(`${id}：平滑滑杆按 0–100 → 0–0.5 秒近似，非 VTS 原算法`);
-    mappings[id] = {
-      source,
-      inputMin: lo,
-      inputMax: hi,
-      outputMin: outLo,
-      outputMax: outHi,
-      smoothing: (item.Smoothing as number) / 200,
-      enabled: true,
-      ...(item.ClampInput === false && item.ClampOutput === false ? { clamp: false } : {}),
-    };
+    mappings[id] = clampMouthMapping(
+      {
+        source,
+        inputMin: lo,
+        inputMax: hi,
+        outputMin: outLo,
+        outputMax: outHi,
+        smoothing: (item.Smoothing as number) / 200,
+        enabled: true,
+        ...(item.ClampInput === false && item.ClampOutput === false ? { clamp: false } : {}),
+      },
+      p,
+    );
+    if (mappings[id].outputMin !== outLo || mappings[id].outputMax !== outHi)
+      warn(
+        `${id}：嘴部开合输出端点已限制到模型范围，避免提前达到张嘴上限；可调整输入范围或嘴部灵敏度改变幅度`,
+      );
   }
   if (Object.keys(mappings).length)
     warn(
-      '追踪范围按当前输入源归一化，保留作者输出范围及外推设置；最终值受模型本身范围限制，灵敏度、镜像、校准仍生效，需在预览中校准方向和幅度',
+      '追踪范围按当前输入源归一化，嘴部开合输出端点限制到模型范围，其余保留作者输出范围及外推设置；最终值受模型本身范围限制，灵敏度、镜像、校准仍生效，需在预览中校准方向和幅度',
     );
   const refs = record(raw.FileReferences) ? raw.FileReferences : {};
   for (const [field, target, label] of [

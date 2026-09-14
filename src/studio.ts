@@ -10,6 +10,7 @@ import {
   defaults,
   readSettings,
   FaceMapper,
+  clampMouthMapping,
   faceSources,
   rememberProfile,
   switchProfile,
@@ -781,6 +782,11 @@ export function createStudio(
     },
     setSetting<K extends keyof Settings>(key: K, value: Settings[K]) {
       settings = readSettings({ ...settings, [key]: value });
+      if (key === 'mouthSmooth') {
+        for (const mapping of Object.values(settings.mappings))
+          if (mapping.source.startsWith('mouth')) mapping.smoothing = settings.mouthSmooth;
+        profileRevision++;
+      }
       if (key === 'useKeyboardHotkeys') void run(bindHotkeys);
       if (key === 'engine' || key === 'deviceId') {
         cancelCalibration();
@@ -1093,7 +1099,6 @@ export function createStudio(
         'mouthSensitivity',
         'headSmooth',
         'eyeSmooth',
-        'mouthSmooth',
         'lostDelay',
         'lostMode',
         'motionMirror',
@@ -1101,7 +1106,7 @@ export function createStudio(
       ] as const)
         Object.assign(settings, { [key]: defaults[key] });
       mapper.reset();
-      changed();
+      actions.setSetting('mouthSmooth', defaults.mouthSmooth);
     },
     saveMapping(id: string, mapping: Mapping) {
       const parameter = stage?.parameters.find((p) => p.id === id);
@@ -1125,7 +1130,8 @@ export function createStudio(
         throw new Error(
           `请填写有效范围：输入下限小于上限，输出绝对值不超过 1000000，平滑时间为 0 至 0.5 秒。最终参数会限制在模型范围内。`,
         );
-      settings.mappings[id] = mapping;
+      settings.mappings[id] = clampMouthMapping(mapping, parameter);
+      profileRevision++;
       mapper.reset();
       changed();
       notify('映射已应用，并自动保存到当前模型。');

@@ -280,6 +280,30 @@ test('author output overshoot is preserved and either range clamp limits extrapo
   }
 });
 
+test('mouth opening imports fit output endpoints to the model while preserving direction', () => {
+  const raw = fixture();
+  Object.assign(raw.ParameterSettings[0], {
+    Input: 'MouthOpen',
+    OutputLive2D: 'Mouth',
+    InputRangeLower: 0,
+    InputRangeUpper: 1,
+    OutputRangeLower: -0.1,
+    OutputRangeUpper: 2.1,
+  });
+  const metadata = { ...model, parameters: [{ id: 'Mouth', min: 0, max: 1 }] };
+  const before = structuredClone(raw);
+  const result = importVtsConfig(raw, metadata);
+  assert.equal(result.profile.mappings.Mouth.outputMin, 0);
+  assert.equal(result.profile.mappings.Mouth.outputMax, 1);
+  assert.ok(result.warnings.some((w) => w.includes('Mouth') && w.includes('输出')));
+  assert.deepEqual(raw, before);
+  raw.ParameterSettings[0].InputRangeLower = 1;
+  raw.ParameterSettings[0].InputRangeUpper = 0;
+  const reversed = importVtsConfig(raw, metadata).profile.mappings.Mouth;
+  assert.equal(reversed.outputMin, 1);
+  assert.equal(reversed.outputMax, 0);
+});
+
 test('gaze, brows, mouth movement and source-limited inputs retain their calibrated ranges', () => {
   const raw = fixture();
   const cases = [

@@ -380,6 +380,52 @@ test('custom position ranges retain calibrated movement beyond the default unit 
   assert.equal(result.Custom, 15);
 });
 
+test('stored mouth opening mappings use reachable endpoints without early saturation', () => {
+  const mapping = {
+    source: 'mouthOpen',
+    inputMin: 0,
+    inputMax: 1,
+    outputMin: 0,
+    outputMax: 2.1,
+    smoothing: 0,
+    enabled: true,
+  };
+  // Old imports have no provenance/version flag and may use a nonstandard parameter ID.
+  const settings = readSettings(JSON.parse(JSON.stringify({ mappings: { Mouth: mapping } })));
+  const parameters = [{ id: 'Mouth', min: 0, max: 1, default: 0 }];
+  for (const [mouthOpen, expected] of [
+    [0, 0],
+    [0.3, 0.42],
+    [0.5, 0.7],
+    [1, 1],
+  ]) {
+    const result = new FaceMapper().map({ mouthOpen }, parameters, settings, 0.1);
+    assert.ok(Math.abs(result.Mouth - expected) < 1e-8, `${mouthOpen}: ${result.Mouth}`);
+  }
+  const voice = new FaceMapper().map(
+    { voiceVolume: 0.5 },
+    parameters,
+    { ...settings, lipSyncMode: 'volume' },
+    0.1,
+  );
+  assert.equal(voice.Mouth, 0.5);
+  // Reversed endpoints and models with genuinely wider ranges remain supported.
+  settings.mappings.Mouth.outputMin = 2.1;
+  settings.mappings.Mouth.outputMax = 0;
+  assert.equal(new FaceMapper().map({ mouthOpen: 0 }, parameters, settings, 0.1).Mouth, 1);
+  assert.ok(
+    Math.abs(new FaceMapper().map({ mouthOpen: 0.5 }, parameters, settings, 0.1).Mouth - 0.3) <
+      1e-8,
+  );
+  settings.mappings.Mouth.outputMin = 0;
+  settings.mappings.Mouth.outputMax = 2.1;
+  parameters[0].max = 3;
+  assert.ok(
+    Math.abs(new FaceMapper().map({ mouthOpen: 0.5 }, parameters, settings, 0.1).Mouth - 1.47) <
+      1e-8,
+  );
+});
+
 test('optional face channels are validated and remain absent when unavailable', () => {
   assert.equal(state.isFace(NEUTRAL), true);
   assert.equal(state.isFace({ ...NEUTRAL, gazeX: Infinity }), false);

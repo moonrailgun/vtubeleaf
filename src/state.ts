@@ -650,6 +650,16 @@ const sourceSmoothing = (source: FaceKey, s: Settings) =>
 const validParameter = (p: Parameter) =>
   safeKey(p.id) && [p.min, p.max, p.default].every(Number.isFinite) && p.min <= p.max;
 
+export function clampMouthMapping(mapping: Mapping, p: Pick<Parameter, 'min' | 'max'>): Mapping {
+  if (mapping.source !== 'mouthOpen') return mapping;
+  // Clip endpoints before interpolation so unreachable values do not amplify mouth opening.
+  return {
+    ...mapping,
+    outputMin: clamp(mapping.outputMin, p.min, p.max),
+    outputMax: clamp(mapping.outputMax, p.min, p.max),
+  };
+}
+
 export function defaultMapping(p: Parameter, s: Settings): Mapping | undefined {
   if (!validParameter(p) || !Object.hasOwn(parameterSources, p.id)) return;
 
@@ -831,7 +841,7 @@ export class FaceMapper {
       if (!validParameter(p)) continue;
 
       const custom = Object.hasOwn(s.mappings, p.id) ? s.mappings[p.id] : undefined;
-      const mapping = custom ?? defaultMapping(p, s);
+      const mapping = custom ? clampMouthMapping(custom, p) : defaultMapping(p, s);
       if (!mapping?.enabled) continue;
 
       let value = mapping.source === 'breath' ? breath : values?.[mapping.source];
