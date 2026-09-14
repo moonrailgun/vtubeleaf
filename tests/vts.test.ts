@@ -1,7 +1,8 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import test from 'node:test';
-import { importVtsConfig } from '../src/vts.ts';
+import { importVtsConfig, repairVtsSmileMappings } from '../src/vts.ts';
+import { FaceMapper, NEUTRAL, readSettings } from '../src/state.ts';
 
 const fixture = () =>
   JSON.parse(
@@ -302,6 +303,99 @@ test('mouth opening imports fit output endpoints to the model while preserving d
   const reversed = importVtsConfig(raw, metadata).profile.mappings.Mouth;
   assert.equal(reversed.outputMin, 1);
   assert.equal(reversed.outputMax, 0);
+});
+
+test('VTS smile imports keep neutral and calibrated faces at the model default without activating smile eyes', () => {
+  const raw = fixture();
+  const parameters = [
+    { id: 'ParamMouthForm', min: -1, max: 1, default: 0 },
+    { id: 'SmileEye', min: 0, max: 1, default: 0 },
+    { id: 'Reversed', min: -1, max: 1, default: 0 },
+    { id: 'Asymmetric', min: -1, max: 2, default: 0.5 },
+  ];
+  raw.ParameterSettings = parameters.map((p) => ({
+    ...raw.ParameterSettings[0],
+    Input: 'MouthSmile',
+    OutputLive2D: p.id,
+    InputRangeLower: 0,
+    InputRangeUpper: 1,
+    OutputRangeLower: p.id === 'Reversed' ? 1 : p.min,
+    OutputRangeUpper: p.id === 'Reversed' ? -1 : p.max,
+    Smoothing: 0,
+  }));
+  const before = structuredClone(raw);
+  const result = importVtsConfig(raw, { ...model, parameters });
+  const settings = readSettings(result.profile);
+  const map = (mouthSmile: number) =>
+    new FaceMapper().map({ ...NEUTRAL, mouthSmile }, parameters, settings, 0.1);
+  assert.deepEqual(map(0), { ParamMouthForm: 0, SmileEye: 0, Reversed: 0, Asymmetric: 0.5 });
+  assert.deepEqual(map(0.5), {
+    ParamMouthForm: 0.5,
+    SmileEye: 0.5,
+    Reversed: -0.5,
+    Asymmetric: 1.25,
+  });
+  assert.deepEqual(map(1), { ParamMouthForm: 1, SmileEye: 1, Reversed: -1, Asymmetric: 2 });
+  const neutral = map(0);
+  settings.neutral = { ...NEUTRAL, mouthSmile: 0.2 };
+  assert.deepEqual(map(0.2), neutral);
+  assert.equal(map(0.2).ParamMouthForm, 0);
+  assert.deepEqual(raw, before);
+  assert.ok(result.warnings.some((w) => w.includes('微笑') && w.includes('中立')));
+});
+
+test('legacy VTS smile repair preserves user tuning and survives saving without repeated conversion', () => {
+  const raw = fixture();
+  Object.assign(raw.ParameterSettings[0], {
+    Input: 'MouthSmile',
+    OutputLive2D: 'Mouth',
+    InputRangeLower: 0,
+    InputRangeUpper: 1,
+    OutputRangeLower: -1,
+    OutputRangeUpper: 1,
+    Smoothing: 0,
+  });
+  const parameters = [{ id: 'Mouth', min: -1, max: 1, default: 0 }];
+  const result = importVtsConfig(raw, { ...model, parameters });
+  const legacy = {
+    source: 'mouthSmile',
+    inputMin: 0,
+    inputMax: 1,
+    outputMin: -1,
+    outputMax: 1,
+    smoothing: 0.4,
+    enabled: false,
+    clamp: false,
+  };
+  const settings = readSettings({ mappings: { Mouth: legacy } });
+  assert.equal(repairVtsSmileMappings(settings.mappings, result), true);
+  assert.deepEqual(settings.mappings.Mouth, { ...legacy, inputMin: -1 });
+  const restored = readSettings(JSON.parse(JSON.stringify(settings)));
+  assert.equal(repairVtsSmileMappings(restored.mappings, result), false);
+  restored.mappings.Mouth.enabled = true;
+  assert.equal(new FaceMapper().map(NEUTRAL, parameters, restored, 0.1).Mouth, 0);
+  for (const edit of [
+    { inputMin: 0.2 },
+    { inputMax: 0.8 },
+    { outputMin: -0.5 },
+    { clamp: true },
+    { source: 'mouthOpen' },
+  ]) {
+    const tuned = readSettings({ mappings: { Mouth: { ...legacy, ...edit } } });
+    const before = structuredClone(tuned);
+    assert.equal(repairVtsSmileMappings(tuned.mappings, result), false);
+    assert.deepEqual(tuned, before);
+  }
+  for (const [lo, hi] of [
+    [-1, 1],
+    [0.2, 0.8],
+  ]) {
+    raw.ParameterSettings[0].InputRangeLower = lo;
+    raw.ParameterSettings[0].InputRangeUpper = hi;
+    const custom = importVtsConfig(raw, { ...model, parameters });
+    assert.equal(custom.profile.mappings!.Mouth.inputMin, lo);
+    assert.deepEqual(custom.legacySmileMappings, {});
+  }
 });
 
 test('gaze, brows, mouth movement and source-limited inputs retain their calibrated ranges', () => {

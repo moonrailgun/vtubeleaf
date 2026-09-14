@@ -10,9 +10,10 @@ export type VtsImportResult = {
   profile: Partial<ModelProfile>;
   warnings: string[];
   summary: string;
+  legacySmileMappings: Record<string, Mapping>;
 };
 type Model = {
-  parameters: { id: string; min: number; max: number }[];
+  parameters: { id: string; min: number; max: number; default?: number }[];
   expressions: { id: string; file: string }[];
   motions: { id: string; file: string }[];
 };
@@ -131,6 +132,7 @@ export function importVtsConfig(raw: unknown, model: Model): VtsImportResult {
     if (!warnings.includes(s)) warnings.push(s);
   };
   const mappings: Record<string, Mapping> = {};
+  const legacySmileMappings: Record<string, Mapping> = {};
   const hotkeys: Record<string, string> = {};
   const hotkeyOptions: Record<string, HotkeyOptions> = {};
   const profile: Partial<ModelProfile> = { mappings, hotkeys, hotkeyOptions };
@@ -240,6 +242,25 @@ export function importVtsConfig(raw: unknown, model: Model): VtsImportResult {
       warn(
         `${id}：嘴部开合输出端点已限制到模型范围，避免提前达到张嘴上限；可调整输入范围或嘴部灵敏度改变幅度`,
       );
+    // ponytail: adapt full-range smile inputs only; custom VTS calibration stays manual.
+    if (
+      source === 'mouthSmile' &&
+      lo === 0 &&
+      hi === 1 &&
+      number(p.default) &&
+      p.default > Math.min(outLo, outHi) &&
+      p.default < Math.max(outLo, outHi)
+    ) {
+      // Our smile signal rests at zero. Keep the smile endpoint and align zero to model neutral.
+      const inputMin = (outLo - p.default) / (outHi - p.default);
+      if (inputMin >= -1000) {
+        legacySmileMappings[id] = mappings[id];
+        mappings[id] = { ...mappings[id], inputMin };
+        warn(
+          `${id}：微笑输入的中立位置已对齐模型默认值，避免静止时嘴形落到变形端点；非 VTS 原算法`,
+        );
+      }
+    }
   }
   if (Object.keys(mappings).length)
     warn(
@@ -452,6 +473,25 @@ export function importVtsConfig(raw: unknown, model: Model): VtsImportResult {
   return {
     profile,
     warnings,
+    legacySmileMappings,
     summary: `导入 ${Object.keys(mappings).length} 个映射、${Object.keys(hotkeys).length} 个快捷键${profile.idleMotion ? '、待机动画' : ''}；${warnings.length} 条兼容性提示`,
   };
+}
+
+/** Repair only ranges still matching the bundled VTS import, preserving subsequent tuning. */
+export function repairVtsSmileMappings(mappings: Record<string, Mapping>, result: VtsImportResult) {
+  let changed = false;
+  for (const [id, legacy] of Object.entries(result.legacySmileMappings)) {
+    const current = Object.hasOwn(mappings, id) ? mappings[id] : undefined;
+    if (
+      current &&
+      (['source', 'inputMin', 'inputMax', 'outputMin', 'outputMax', 'clamp'] as const).every(
+        (key) => current[key] === legacy[key],
+      )
+    ) {
+      mappings[id] = { ...current, inputMin: result.profile.mappings![id].inputMin };
+      changed = true;
+    }
+  }
+  return changed;
 }

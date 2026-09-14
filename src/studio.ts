@@ -27,7 +27,7 @@ import { MotionRecording } from './recording';
 import { sampleCalibration } from './calibration';
 import { AudioLipSync, type Vowel } from './lipsync';
 import { VirtualCamera, type CameraStatus } from './virtual-camera';
-import { importVtsConfig } from './vts';
+import { importVtsConfig, repairVtsSmileMappings } from './vts';
 import { readComposition, snapshotScene, type Composition, type SceneItem } from './scenes';
 import type { OutputFrame, OutputState } from './output';
 import { AppUpdater } from './updater';
@@ -484,18 +484,33 @@ export function createStudio(
     if (!(await stage.load(next)) || disposed || operation !== modelOperation) return;
     let vts: ReturnType<typeof importVtsConfig> | undefined;
     let vtsError = '';
-    // Existing profiles own subsequent tuning, including restoration after restarting.
-    if (
-      native &&
-      next.path !== settings.modelPath &&
-      !Object.hasOwn(settings.profiles, next.path)
-    ) {
+    let vtsSummary = '';
+    const existingProfile =
+      next.path === settings.modelPath
+        ? settings
+        : Object.hasOwn(settings.profiles, next.path)
+          ? settings.profiles[next.path]
+          : undefined;
+    const needsSmileRepair =
+      existingProfile?.vtsImportReport.length &&
+      stage.parameters.some((p) => {
+        const m = existingProfile.mappings[p.id];
+        return (
+          m?.source === 'mouthSmile' &&
+          m.inputMin === 0 &&
+          m.inputMax === 1 &&
+          p.default > Math.min(m.outputMin, m.outputMax) &&
+          p.default < Math.max(m.outputMin, m.outputMax)
+        );
+      });
+    // Existing profiles retain their tuning; only unchanged legacy smile ranges are repaired.
+    if (native && (!existingProfile || needsSmileRepair)) {
       try {
         const raw = await invoke<unknown>('read_model_vts_config', { id: next.id });
         if (disposed || operation !== modelOperation) return;
         if (raw != null) vts = importVtsConfig(raw, stage);
       } catch (error) {
-        vtsError = `VTS 自动导入已跳过：${error instanceof Error ? error.message : String(error)}。可通过“导入 VTube Studio 配置”重试。`;
+        vtsError = `VTS ${existingProfile ? '旧嘴形修正' : '自动导入'}已跳过：${error instanceof Error ? error.message : String(error)}。可通过“导入 VTube Studio 配置”重试。`;
       }
     }
     if (disposed || operation !== modelOperation) return;
@@ -505,8 +520,13 @@ export function createStudio(
     profileRevision++;
     mapper.reset();
     settings = switchProfile(settings, next.path);
-    if (vts) applyVts(vts);
-    else if (vtsError) settings.vtsImportReport = [vtsError];
+    if (vts && !existingProfile) {
+      applyVts(vts);
+      vtsSummary = vts.summary;
+    } else if (vts && repairVtsSmileMappings(settings.mappings, vts)) {
+      vtsSummary = '已修正旧 VTS 微笑映射的中立位置。';
+      settings.vtsImportReport.push(vtsSummary);
+    } else if (vtsError && !existingProfile) settings.vtsImportReport = [vtsError];
     settings.parameterOverrides = { ...settings.defaultParameterOverrides };
     // Held keys belong to the model that received the press.
     heldExpressions.clear();
@@ -530,7 +550,7 @@ export function createStudio(
     }
     if (operation === modelOperation)
       notify(
-        `角色已就位。${vtsError || vts?.summary || '开始跟踪后，保持自然姿态并校准。'}`,
+        `角色已就位。${vtsError || vtsSummary || '开始跟踪后，保持自然姿态并校准。'}`,
         !!vtsError,
       );
     return vtsError;
