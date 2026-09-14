@@ -136,6 +136,8 @@ export type ModelProfile = {
 };
 
 export type Settings = ModelProfile & {
+  autoCheckUpdates: boolean;
+  skippedUpdateVersion: string;
   engine: 'mediapipe' | 'openseeface' | 'nvidia';
   deviceId: string;
   previewMirror: boolean;
@@ -176,6 +178,8 @@ export const NEUTRAL: Face = {
 };
 
 export const defaults: Settings = {
+  autoCheckUpdates: true,
+  skippedUpdateVersion: '',
   engine: 'mediapipe',
   deviceId: '',
   previewMirror: true,
@@ -492,6 +496,9 @@ export function readSettings(value: unknown): Settings {
     'nvidiaModelDir',
   ] as const)
     if (typeof v[key] === 'string' && v[key].length < 4096) s[key] = v[key];
+  if (typeof v.autoCheckUpdates === 'boolean') s.autoCheckUpdates = v.autoCheckUpdates;
+  if (typeof v.skippedUpdateVersion === 'string' && v.skippedUpdateVersion.length <= 128)
+    s.skippedUpdateVersion = v.skippedUpdateVersion;
   if (typeof v.previewMirror === 'boolean') s.previewMirror = v.previewMirror;
   if (typeof v.previewCamera === 'boolean') s.previewCamera = v.previewCamera;
   if (typeof v.upperBody === 'boolean') s.upperBody = v.upperBody;

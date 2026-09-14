@@ -29,6 +29,7 @@ import { VirtualCamera, type CameraStatus } from './virtual-camera';
 import { importVtsConfig } from './vts';
 import { readComposition, snapshotScene, type Composition, type SceneItem } from './scenes';
 import type { OutputFrame, OutputState } from './output';
+import { AppUpdater } from './updater';
 
 export function createStudio(
   container: HTMLElement,
@@ -90,8 +91,35 @@ export function createStudio(
   const unlisteners: UnlistenFn[] = [];
   const mapper = new FaceMapper();
   const recording = new MotionRecording();
+  let savedRecordingRevision = -1;
+  let updateTimer = 0;
+  let updateInterval = 0;
+  const updater = new AppUpdater(
+    () => {
+      publish();
+      sendUpdateState();
+    },
+    async () => {
+      if (recording.active) throw new Error('正在录制动作，请先停止录制并保存，再安装更新。');
+      if (recording.duration > 0 && savedRecordingRevision !== recording.revision)
+        throw new Error('有未保存的动作录制，请先在角色控制中保存，再安装更新。');
+      if (modelLoading || sceneBusy) throw new Error('正在加载角色或场景，请稍后再安装。');
+      await save(true);
+      await virtualCamera.stop(true);
+      await stop();
+      await (await WebviewWindow.getByLabel('output'))?.close();
+    },
+  );
+  function sendUpdateState() {
+    if (native && !disposed)
+      void emitTo('about', 'update-state', {
+        ...updater.state,
+        autoCheckUpdates: settings.autoCheckUpdates,
+      }).catch(() => {});
+  }
   const snapshot = () => ({
     ready,
+    updater: updater.state,
     settings: structuredClone(settings),
     model,
     library,
@@ -170,14 +198,14 @@ export function createStudio(
     calibration = null;
   }
   const run = async (fn: () => unknown) => {
-    if (disposed) return;
+    if (disposed || updater.state.status === 'installing') return;
     try {
       await fn();
     } catch (error) {
       report(error);
     }
   };
-  function save() {
+  function save(requireSuccess = false) {
     window.clearTimeout(saveTimer);
     saveTimer = 0;
     rememberProfile(settings);
@@ -189,7 +217,9 @@ export function createStudio(
           if (native) await invoke('save_settings', { settings: value });
           else localStorage.setItem('vtubeleaf-preview', JSON.stringify(value));
         } catch {
-          notify('设置保存失败。请检查磁盘空间和应用配置目录权限。', true);
+          const message = '设置保存失败。请检查磁盘空间和应用配置目录权限。';
+          notify(message, true);
+          if (requireSuccess) throw new Error(message);
         }
       });
     return saveQueue;
@@ -255,6 +285,7 @@ export function createStudio(
   };
   const heldExpressions = new Set<string>();
   async function shortcutAction(id: string, pressed: boolean) {
+    if (updater.state.status === 'installing') return;
     const options = settings.hotkeyOptions[id];
     if (!pressed) {
       if (heldExpressions.delete(id)) {
@@ -523,6 +554,7 @@ export function createStudio(
   };
   const actions = {
     run,
+    openAbout: () => (native ? invoke('open_about') : window.open('/?about=1', '_blank')),
     motionMode: 'once' as MotionMode,
     async importVts(source: 'file' | 'model' = 'file') {
       if (!native || !model || !stage || modelLoading || sceneBusy) return;
@@ -1128,9 +1160,13 @@ export function createStudio(
     async saveRecording() {
       const motion = recording.export();
       if (!motion) return;
+      const revision = recording.revision;
       if (native) {
-        if (await invoke<boolean>('save_motion', { motion }))
+        if (await invoke<boolean>('save_motion', { motion })) {
+          if (!recording.active && revision === recording.revision)
+            savedRecordingRevision = revision;
           notify('动作已保存为 .motion3.json。');
+        }
       } else {
         const url = URL.createObjectURL(
           new Blob([JSON.stringify(motion)], { type: 'application/json' }),
@@ -1224,6 +1260,25 @@ export function createStudio(
       await own(
         listen('about-ready', () => {
           void emitTo('about', 'about-events', [...events]).catch(() => {});
+          sendUpdateState();
+        }),
+      );
+      await own(
+        listen<unknown>('update-action', ({ payload }) => {
+          if (payload === 'check') void updater.check();
+          else if (payload === 'download') void updater.download();
+          else if (payload === 'install') void updater.install();
+          else if (payload === 'later')
+            void WebviewWindow.getByLabel('about')
+              .then((window) => window?.close())
+              .catch(report);
+          else if (payload === 'ignore' && updater.state.status === 'available') {
+            actions.setSetting('skippedUpdateVersion', updater.state.version);
+            updater.dismiss();
+          } else if (typeof payload === 'boolean' && updater.state.status !== 'installing') {
+            actions.setSetting('autoCheckUpdates', payload);
+            sendUpdateState();
+          }
         }),
       );
       if (disposed) return;
@@ -1269,6 +1324,7 @@ export function createStudio(
       await own(
         getCurrentWindow().onCloseRequested(async (event) => {
           event.preventDefault();
+          if (updater.state.status === 'installing') return;
           try {
             await virtualCamera.stop();
             await stop();
@@ -1306,6 +1362,13 @@ export function createStudio(
     await run(() => stage?.compose(settings, library));
     await bindHotkeys();
     ready = true;
+    if (native && !disposed) {
+      const checkAutomatically = () => {
+        if (settings.autoCheckUpdates) void updater.check(settings.skippedUpdateVersion, true);
+      };
+      updateTimer = window.setTimeout(checkAutomatically, 5000);
+      updateInterval = window.setInterval(checkAutomatically, 24 * 60 * 60 * 1000);
+    }
     publish();
   }
   void initialize().catch((error) => {
@@ -1389,6 +1452,9 @@ export function createStudio(
     snapshot,
     destroy() {
       disposed = true;
+      window.clearTimeout(updateTimer);
+      window.clearInterval(updateInterval);
+      updater.dispose();
       modelOperation++;
       trackingOperation++;
       stopRendering();

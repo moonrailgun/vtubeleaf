@@ -55,12 +55,26 @@ jobs:
             ctest --test-dir $output -C Release --output-on-failure
             if ($LASTEXITCODE) { exit $LASTEXITCODE }
           }
+      - name: Sign Windows updater installer
+        if: runner.os == 'Windows' && startsWith(github.ref, 'refs/tags/v')
+        shell: pwsh
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        run: |
+          if (!$env:TAURI_SIGNING_PRIVATE_KEY) { throw 'Missing updater signing key' }
+          $installers = @(Get-ChildItem src-tauri/target/release/bundle/nsis/*-setup.exe)
+          if ($installers.Count -ne 1) { throw 'Expected one Windows installer' }
+          npm run tauri -- signer sign ($installers[0].FullName)
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
       - name: Upload Windows release installer
         if: runner.os == 'Windows' && startsWith(github.ref, 'refs/tags/v')
         uses: actions/upload-artifact@v7
         with:
           name: VTubeLeaf-windows-${{ github.run_number }}
-          path: src-tauri/target/release/bundle/nsis/*-setup.exe
+          path: |
+            src-tauri/target/release/bundle/nsis/*-setup.exe
+            src-tauri/target/release/bundle/nsis/*-setup.exe.sig
           if-no-files-found: error
           compression-level: 0
           retention-days: 30

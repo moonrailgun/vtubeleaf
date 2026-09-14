@@ -43,6 +43,7 @@ import type { MotionMode } from './renderer';
 import { SceneControls } from './SceneControls';
 import { vowels } from './lipsync';
 import { version } from '../package.json';
+import { initialUpdateState } from './updater';
 
 function Fold({ title, children }: { title: string; children: ReactNode }) {
   return (
@@ -128,6 +129,7 @@ const tabs = [
   { id: 'meeting', label: '接入', title: '会议接入', icon: MonitorUp, color: 'meeting' },
 ];
 const initialView: StudioView = {
+  updater: initialUpdateState,
   ready: false,
   settings: defaults,
   model: null,
@@ -298,7 +300,10 @@ export function App() {
     </Button>
   );
   return (
-    <div className={`studio-shell${live ? ' live-mode' : ''}`}>
+    <div
+      className={`studio-shell${live ? ' live-mode' : ''}`}
+      inert={view.updater.status === 'installing'}
+    >
       <div
         className="model-drop-overlay studio-overlay"
         hidden={!view.dropActive}
@@ -1316,7 +1321,20 @@ export function App() {
           </section>
           <footer className="panel-footer">
             <Sparkles className="leaf-dot" aria-hidden="true" />
-            VTubeLeaf<span>v{version}</span>
+            VTubeLeaf
+            <button
+              className="ml-auto hover:text-foreground"
+              onClick={() => run(() => a?.openAbout())}
+              aria-label="关于与检查更新"
+            >
+              {['available', 'downloading', 'ready', 'installed'].includes(view.updater.status)
+                ? view.updater.status === 'downloading'
+                  ? '正在下载…'
+                  : view.updater.status === 'ready' || view.updater.status === 'installed'
+                    ? '更新已就绪'
+                    : '发现新版本'
+                : `v${version}`}
+            </button>
           </footer>
         </aside>
       </main>

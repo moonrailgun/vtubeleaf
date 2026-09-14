@@ -3,6 +3,22 @@ import assert from 'node:assert/strict';
 import { defaults, readSettings, FaceMapper, NEUTRAL, fromMediaPipe } from '../src/state.ts';
 import * as state from '../src/state.ts';
 
+test('update preferences default safely and remain global across model changes and reloads', () => {
+  assert.equal(readSettings({}).autoCheckUpdates, true);
+  assert.equal(
+    readSettings({ autoCheckUpdates: 'false', skippedUpdateVersion: 1 }).skippedUpdateVersion,
+    '',
+  );
+  const settings = readSettings({
+    autoCheckUpdates: false,
+    skippedUpdateVersion: '0.2.0',
+    modelPath: '/a',
+  });
+  const restored = readSettings(JSON.parse(JSON.stringify(state.switchProfile(settings, '/b'))));
+  assert.equal(restored.autoCheckUpdates, false);
+  assert.equal(restored.skippedUpdateVersion, '0.2.0');
+});
+
 test('hand sources mirror positions and sides without subtracting finger calibration', () => {
   const input = {
     handLeftFound: 1,

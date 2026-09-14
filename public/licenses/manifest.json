@@ -2,21 +2,21 @@
   "schema": 1,
   "inputs": {
     "LICENSE": "dbf5b94233912b21c2d6c30f6bc621c54feb014eb182e6ad8fe9fc3e55781e3d",
-    "package-lock.json": "5fe4d98d12943005229d669505cf2c7460cd96ef7b563e0f0dcb55775ad9513a",
+    "package-lock.json": "1bb5aeb7ad37f5b0d2019cfecbbb1881de20c3d4f13ebcc074c0903a9952b135",
     "scripts/licenses.hbs": "d610eaccb5fa21eda12278ccb82387c024deb4c65ebe64fdfa706c2a06cb620d",
     "scripts/licenses.mjs": "435e51b6bea761c64d7e8cae1e28797db5e12c808595be456f6737bb49e95ee0",
     "scripts/setup-assets.mjs": "266596132d87c5426fb8bb55601155a1c36570a31fdabdde358cb895595c176a",
-    "src-tauri/Cargo.lock": "2815be43005925fc3ae67ceb8522b1315af01077e158a60c64df7977f151a55f",
-    "src-tauri/Cargo.toml": "5507cbc5c5824c9e980db0c954f855c73f80d99e68a7f9e1c96b468dc757726f",
-    "src-tauri/about.toml": "0cb368ee5ad1dea608d39df62241acfee271e8158c44d50fd4a01dba4562e06d"
+    "src-tauri/Cargo.lock": "c2ee63921a838d668898fc350c797fd63a8b89c9816dc0dde09a64ed22f9d3ca",
+    "src-tauri/Cargo.toml": "0ea7ef1958d88154244f6acb223b2b227461960f66681e73da63305aee8d17b2",
+    "src-tauri/about.toml": "5023e7d6d9b2a82666774bce222a7e0c3296f21a90c4461dd2c46117b8f6afa8"
   },
   "outputs": {
     "public/licenses/cubism-framework.md": "7ed849bff1e6499aa7cd882e47d246ddbbe06817c1e84cb974df949488302614",
     "public/licenses/mediapipe.txt": "8707eef0533987efc5b155d64761eeb6e20793f50b9bd1a68dad1cf4719d0ed8",
-    "public/licenses/npm.txt": "81cec7f30e43e90bce68b22eb0595614d7e29fdea3c99404574ad4807ee366d6",
+    "public/licenses/npm.txt": "16b590d11df4275c8611a5f750f12ce0f770127a5f9eb9c53a65b9bcb0525d6e",
     "public/licenses/react-remove-scroll-bar.txt": "54b6e5731335b8952a0fe9eeda79bb9d0e1414a724544155f5ac890ab82571f2",
     "public/licenses/resources.txt": "709e3b1e2fe1fdb81983309ddbbfc9b6c9feb3f8ad15779bd78cd4bdfa13b237",
-    "public/licenses/rust.html": "45644a3aca15da0d0293977af42da31747bca41bb99059b5f671e9ce463939d3",
+    "public/licenses/rust.html": "91ebef2aa039980ba3a78402307bb93a912a99225ad5c4c61bf438b0a1a82358",
     "public/licenses/tauri-api.txt": "9dd42ea92cff2ede5cd477cbfcce051b2d0115c0ac7f368ee88cb545055dff1d",
     "public/licenses/vtubeleaf.txt": "dbf5b94233912b21c2d6c30f6bc621c54feb014eb182e6ad8fe9fc3e55781e3d",
     "public/licenses/windows-microsoft.txt": "3645a237b872306e4955bc2ce75783537bd7123bcb57332f8819e4cfbcf50b45",

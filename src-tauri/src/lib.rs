@@ -379,6 +379,7 @@ async fn stop_nvidia(window: WebviewWindow, app: tauri::AppHandle) -> Result<(),
 pub fn run() {
     let application = tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(camera::init())
         .setup(|app| {
             app.manage(AppState {
@@ -426,6 +427,8 @@ pub fn run() {
             load_settings,
             save_settings,
             save_motion,
+            open_about,
+            restart_app,
             assets::choose_asset,
             assets::read_asset,
             vts::choose_vts_config,
@@ -461,6 +464,18 @@ pub fn run() {
             }
         }
     });
+}
+
+#[tauri::command]
+async fn open_about(window: WebviewWindow, app: tauri::AppHandle) -> Result<(), String> {
+    require_main(&window)?;
+    show_about(&app).map_err(|error| error.to_string())
+}
+
+#[tauri::command]
+async fn restart_app(window: WebviewWindow, app: tauri::AppHandle) -> Result<(), String> {
+    require_main(&window)?;
+    app.restart();
 }
 
 fn show_about(app: &tauri::AppHandle) -> tauri::Result<()> {

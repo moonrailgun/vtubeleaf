@@ -19,6 +19,7 @@ test('serializes status and controls, letterboxes frames, and waits for transpor
   let finishStatus: (() => void) | undefined;
   let delayStatus = false;
   let invalidStatus = false;
+  let failStop = false;
   const state = { supported: true, installed: true, active: false, message: 'test' };
   const context = {
     fillStyle: '',
@@ -37,6 +38,8 @@ test('serializes status and controls, letterboxes frames, and waits for transpor
       __TAURI_INTERNALS__: {
         invoke(command: string, data: unknown) {
           calls.push(command);
+          if (failStop && command.endsWith('|stop'))
+            return Promise.reject(new Error('stop failed'));
           if (invalidStatus && command.endsWith('|status')) return Promise.resolve(null);
           if (delayStatus && command.endsWith('|status')) {
             const snapshot = { ...state };
@@ -97,6 +100,10 @@ test('serializes status and controls, letterboxes frames, and waits for transpor
     assert.equal(camera.status.active, false);
     camera.submit(stage, '#123456');
     assert.equal(calls.filter((x) => x.endsWith('|submit')).length, 1);
+    failStop = true;
+    await assert.rejects(camera.stop(true), /stop failed/);
+    failStop = false;
+    await camera.stop(true);
   } finally {
     camera.destroy();
     await new Promise((resolve) => setTimeout(resolve, 0));

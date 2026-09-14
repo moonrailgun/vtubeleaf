@@ -1,5 +1,6 @@
 export class MotionRecording {
   active = false;
+  revision = 0;
   private started?: number;
   private frames: { time: number; values: Record<string, number> }[] = [];
 
@@ -8,6 +9,7 @@ export class MotionRecording {
   }
 
   start() {
+    this.revision++;
     this.frames = [];
     this.started = undefined;
     this.active = true;

@@ -65,6 +65,10 @@ npm run release -- patch --dry-run  # 仅预览，不改文件、提交或推送
 
 如果同步或许可证生成失败，版本文件可能已经更新。修复报错后运行 `node scripts/sync-version.mjs` 和 `npm run licenses:generate`，检查 `git diff`，再手动完成该版本的提交、tag 和推送，无需再次递增版本。`website/package.json` 属于独立官网，不随桌面应用升级。
 
+应用更新默认在启动 5 秒后及运行期间每 24 小时检查一次。点击主界面底部版本号可手动检查、下载、忽略版本或关闭自动检查；下载完成后手动安装并重启。安装前会保存设置、停止跟踪和虚拟摄像头，有未保存的动作录制时需先保存。更新下载由主窗口持有，关闭关于窗口不影响下载，退出应用后需重新下载。
+
+发布需配置 GitHub Actions Secrets：`TAURI_SIGNING_PRIVATE_KEY` 填更新私钥文件的完整内容，`TAURI_SIGNING_PRIVATE_KEY_PASSWORD` 填生成时的密码；对应公钥保存在 `src-tauri/tauri.conf.json`。请长期备份这对密钥，后续版本继续使用。更新签名独立于 Apple/Windows 代码签名。CI 会签名 Windows 安装器及最终签名、公证后的 macOS `.app.tar.gz`，用配置公钥验证签名，生成 `.sig` 与 `latest.json` 并在资产全部上传后公开 Release。稳定版更新地址为 GitHub Releases 的 `latest/download/latest.json`，不推送预发布版本；此前未内置更新器的应用需要先手动安装一次新版。
+
 ## 可选 OpenSeeFace
 
 使用 Python 3.10 和 Git，按固定上游提交安装到项目的 `.local/`：

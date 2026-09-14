@@ -27,6 +27,15 @@
       "devCsp": "default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' blob: data:; media-src 'self' blob:; connect-src 'self' ipc: http://ipc.localhost blob: ws://localhost:1420; worker-src 'self' blob:; object-src 'none'; frame-src 'none'; base-uri 'self'"
     }
   },
+  "plugins": {
+    "updater": {
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDU2ODJENEJBMjhBOTZDODkKUldTSmJLa291dFNDVnJ4cDJCRXJGN3U2S091MTB0eWRtc1RmR283ZElTWGxWMjlGRFltdnNzcXgK",
+      "endpoints": [
+        "https://github.com/moonrailgun/vtubeleaf/releases/latest/download/latest.json"
+      ],
+      "windows": { "installMode": "passive" }
+    }
+  },
   "bundle": {
     "active": true,
     "targets": "all",

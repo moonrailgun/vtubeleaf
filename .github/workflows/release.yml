@@ -36,6 +36,7 @@ jobs:
   checks:
     needs: version
     uses: ./.github/workflows/check.yml
+    secrets: inherit
 
   macos:
     needs: version
@@ -48,6 +49,16 @@ jobs:
     permissions:
       contents: write
     steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+      - name: Install updater signature verifier
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y minisign
       - uses: actions/download-artifact@v8
         with:
           pattern: VTubeLeaf-*
@@ -62,9 +73,17 @@ jobs:
           PRERELEASE: ${{ needs.version.outputs.prerelease }}
         run: |
           sha256sum --check SHA256SUMS.txt
-          sha256sum ./*.dmg ./*.zip ./*.exe > SHA256SUMS.txt
-          gh release create "$RELEASE_TAG" ./*.dmg ./*.zip ./*.exe SHA256SUMS.txt \
-            --verify-tag --title "$RELEASE_TAG" --generate-notes --prerelease="$PRERELEASE"
+          node -e 'const fs = require("node:fs"); const config = require("../src-tauri/tauri.conf.json"); fs.writeFileSync(process.env.RUNNER_TEMP + "/updater.pub", Buffer.from(config.plugins.updater.pubkey, "base64"));'
+          for package in ./*.exe ./*.app.tar.gz; do
+            base64 --decode "$package.sig" > "$RUNNER_TEMP/updater.sig"
+            minisign -V -p "$RUNNER_TEMP/updater.pub" -m "$package" -x "$RUNNER_TEMP/updater.sig"
+          done
+          gh api "repos/$GH_REPO/releases/generate-notes" -f "tag_name=$RELEASE_TAG" --jq .body > "$RUNNER_TEMP/release-notes.md"
+          node ../scripts/create-updater-manifest.mjs . "$RELEASE_TAG" "$RUNNER_TEMP/release-notes.md"
+          sha256sum ./*.dmg ./*.zip ./*.exe ./*.app.tar.gz ./*.sig latest.json > SHA256SUMS.txt
+          gh release create "$RELEASE_TAG" ./*.dmg ./*.zip ./*.exe ./*.app.tar.gz ./*.sig latest.json SHA256SUMS.txt \
+            --draft --verify-tag --title "$RELEASE_TAG" --notes-file "$RUNNER_TEMP/release-notes.md" --prerelease="$PRERELEASE"
+          gh release edit "$RELEASE_TAG" --draft=false
   website:
     needs: [version, publish]
     if: needs.version.outputs.prerelease == 'false'

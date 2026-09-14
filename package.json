@@ -37,6 +37,7 @@
     "@mediapipe/tasks-vision": "0.10.32",
     "@pixi/unsafe-eval": "^6.5.10",
     "@tauri-apps/api": "2.11.1",
+    "@tauri-apps/plugin-updater": "^2.11.0",
     "@vtubeleaf/cubism-core": "file:vendor/vtubeleaf-cubism-core-5.0.0-r.4.tgz",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",

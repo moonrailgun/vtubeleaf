@@ -152,6 +152,22 @@ jobs:
           spctl --assess --type open --context context:primary-signature --verbose=2 "$RELEASE_DIR/$name.dmg"
           cd "$RELEASE_DIR"
           shasum -a 256 "$name.dmg" "$name.zip" > SHA256SUMS.txt
+      - name: Package and sign updater from the final notarized app
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        run: |
+          test -n "$TAURI_SIGNING_PRIVATE_KEY" || { echo 'Missing updater signing key'; exit 1; }
+          version=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$APP_PATH/Contents/Info.plist")
+          archive="$RELEASE_DIR/VTubeLeaf-${version}-macos-universal.app.tar.gz"
+          COPYFILE_DISABLE=1 tar -czf "$archive" -C "$(dirname "$APP_PATH")" VTubeLeaf.app
+          mkdir -p "$RUNNER_TEMP/updater-check"
+          tar -xzf "$archive" -C "$RUNNER_TEMP/updater-check"
+          codesign --verify --deep --strict --verbose=2 "$RUNNER_TEMP/updater-check/VTubeLeaf.app"
+          xcrun stapler validate "$RUNNER_TEMP/updater-check/VTubeLeaf.app"
+          npm run tauri -- signer sign "$archive"
+          cd "$RELEASE_DIR"
+          shasum -a 256 ./*.dmg ./*.zip ./*.app.tar.gz ./*.sig > SHA256SUMS.txt
       - name: Upload signed and notarized release packages
         uses: actions/upload-artifact@v7
         with:
@@ -159,6 +175,8 @@ jobs:
           path: |
             ${{ runner.temp }}/vtubeleaf-release/*.dmg
             ${{ runner.temp }}/vtubeleaf-release/*.zip
+            ${{ runner.temp }}/vtubeleaf-release/*.app.tar.gz
+            ${{ runner.temp }}/vtubeleaf-release/*.sig
             ${{ runner.temp }}/vtubeleaf-release/SHA256SUMS.txt
           if-no-files-found: error
           compression-level: 0

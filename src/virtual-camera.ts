@@ -62,10 +62,11 @@ export class VirtualCamera {
     return this.command('status');
   }
 
-  private command(action: string): Promise<void> {
+  private command(action: string, requireSuccess = false): Promise<void> {
     if (!isTauri() || this.destroyed) return Promise.resolve();
     const stopping = action === 'stop' || action === 'uninstall';
     if (stopping) this.stopping++;
+    let failure: unknown;
     this.control = this.control.then(async () => {
       if (this.destroyed) return;
       try {
@@ -73,12 +74,15 @@ export class VirtualCamera {
         this.update(await invoke<CameraStatus>(`plugin:virtual-camera|${action}`));
         if (action === 'start') this.lastFrame = -Infinity;
       } catch (error) {
+        failure = error;
         this.fail(error);
       } finally {
         if (stopping) this.stopping--;
       }
     });
-    return this.control;
+    return this.control.then(() => {
+      if (requireSuccess && failure !== undefined) throw failure;
+    });
   }
 
   install(): Promise<void> {
@@ -90,8 +94,8 @@ export class VirtualCamera {
   start(): Promise<void> {
     return this.command('start');
   }
-  stop(): Promise<void> {
-    return this.command('stop');
+  stop(requireSuccess = false): Promise<void> {
+    return this.command('stop', requireSuccess);
   }
 
   submit(canvas: HTMLCanvasElement, background: string): void {
