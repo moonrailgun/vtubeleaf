@@ -499,7 +499,7 @@ export class AvatarStage {
     try {
       if (info) await candidate.load(info);
       await candidate.compose(settings, models);
-      candidate.restoreExpressions(settings.defaultExpressions);
+      candidate.restoreDefaultAppearance(settings);
       return candidate;
     } catch (error) {
       candidate.destroy();
@@ -701,6 +701,20 @@ export class AvatarStage {
       this.playMotion(id, 'hold');
       this.heldMotion = id;
     }
+  }
+
+  captureHeldParameters() {
+    if (this.playing?.mode === 'hold') throw new Error('请等保持动作播放结束后，再保存默认外观。');
+    return { ...this.held };
+  }
+
+  restoreDefaultAppearance(settings: Settings) {
+    this.stopMotion();
+    for (const p of this.parameters) {
+      const value = settings.defaultHeldParameters[p.id];
+      if (Number.isFinite(value)) this.held[p.id] = clamp(value, p.min, p.max);
+    }
+    this.restoreExpressions(settings.defaultExpressions);
   }
 
   toggleExpression(id: string, seconds?: number, fadeSeconds?: number) {

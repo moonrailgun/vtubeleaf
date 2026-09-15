@@ -545,7 +545,7 @@ export function createStudio(
       ...settings.recentModels.filter((m) => m.path !== next.path),
     ].slice(0, 5);
     stage.display(settings);
-    stage.restoreExpressions(settings.defaultExpressions);
+    stage.restoreDefaultAppearance(settings);
     publish();
     await bindHotkeys();
     if (disposed || operation !== modelOperation) return;
@@ -1191,16 +1191,17 @@ export function createStudio(
       }
       changed();
     },
-    saveDefaultAppearance() {
+    async saveDefaultAppearance() {
       if (!stage || !model) return;
+      settings.defaultHeldParameters = stage.captureHeldParameters();
       settings.defaultExpressions = [...stage.activeExpressions];
       settings.defaultParameterOverrides = { ...settings.parameterOverrides };
-      changed();
-      notify('当前表情和手动参数已保存为默认外观，重新打开角色时会恢复。');
+      await save(true);
+      notify('默认外观已保存，下次打开时会自动恢复。');
     },
     restoreDefaultAppearance() {
       settings.parameterOverrides = { ...settings.defaultParameterOverrides };
-      stage?.restoreExpressions(settings.defaultExpressions);
+      stage?.restoreDefaultAppearance(settings);
       profileRevision++;
       changed();
     },

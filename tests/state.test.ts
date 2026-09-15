@@ -730,7 +730,8 @@ test('appearance and unbound action behavior survive reload and remain model-spe
     modelPath: '/a',
     parameterOverrides: { Param15: 1, broken: Infinity },
     defaultParameterOverrides: { Param15: 0.5 },
-    defaultExpressions: ['vts:sign.exp3.json', 'vts:sign.exp3.json', 42],
+    defaultHeldParameters: { ParamAngleX: 16, broken: Infinity, huge: 1e7, ['__proto__']: 1 },
+    defaultExpressions: ['vts:expressions/牌子.exp3.json', 'vts:expressions/牌子.exp3.json', 42],
     lostIdleMotion: 'Idle:1',
     motionSound: false,
     hotkeyOptions: {
@@ -738,7 +739,8 @@ test('appearance and unbound action behavior survive reload and remain model-spe
     },
   });
   assert.deepEqual(settings.parameterOverrides, { Param15: 1 });
-  assert.deepEqual(settings.defaultExpressions, ['vts:sign.exp3.json']);
+  assert.deepEqual(settings.defaultHeldParameters, { ParamAngleX: 16 });
+  assert.deepEqual(settings.defaultExpressions, ['vts:expressions/牌子.exp3.json']);
   assert.deepEqual(settings.hotkeyOptions['expression:sign'], {
     scope: 'local',
     release: true,
@@ -748,11 +750,13 @@ test('appearance and unbound action behavior survive reload and remain model-spe
   const other = state.switchProfile(settings, '/b');
   assert.deepEqual(other.parameterOverrides, {});
   assert.deepEqual(other.defaultExpressions, []);
+  assert.deepEqual(other.defaultHeldParameters, {});
   assert.equal(other.motionSound, true);
   const restored = state.switchProfile(readSettings(JSON.parse(JSON.stringify(other))), '/a');
   for (const key of [
     'parameterOverrides',
     'defaultParameterOverrides',
+    'defaultHeldParameters',
     'defaultExpressions',
     'hotkeyOptions',
     'lostIdleMotion',

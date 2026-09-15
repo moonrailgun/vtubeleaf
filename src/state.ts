@@ -128,6 +128,7 @@ export type ModelProfile = {
   motionSound: boolean;
   parameterOverrides: Record<string, number>;
   defaultParameterOverrides: Record<string, number>;
+  defaultHeldParameters: Record<string, number>;
   defaultExpressions: string[];
   useKeyboardHotkeys: boolean;
   hotkeys: Record<string, string>;
@@ -241,6 +242,7 @@ export const defaults: Settings = {
   motionSound: true,
   parameterOverrides: {},
   defaultParameterOverrides: {},
+  defaultHeldParameters: {},
   defaultExpressions: [],
   useKeyboardHotkeys: true,
   hotkeys: {},
@@ -359,6 +361,7 @@ function readProfile(v: unknown): ModelProfile {
     motionSound: true,
     parameterOverrides: {},
     defaultParameterOverrides: {},
+    defaultHeldParameters: {},
     defaultExpressions: [],
     useKeyboardHotkeys: true,
     hotkeys: {},
@@ -413,7 +416,11 @@ function readProfile(v: unknown): ModelProfile {
     ) as Face;
   for (const key of ['idleMotion', 'lostIdleMotion'] as const)
     if (typeof v[key] === 'string' && v[key].length <= 512) p[key] = v[key];
-  for (const key of ['parameterOverrides', 'defaultParameterOverrides'] as const)
+  for (const key of [
+    'parameterOverrides',
+    'defaultParameterOverrides',
+    'defaultHeldParameters',
+  ] as const)
     if (record(v[key]))
       for (const [id, value] of Object.entries(v[key]).slice(0, 512))
         if (

@@ -1511,7 +1511,7 @@ function ModelControls({ view, actions: a }: { view: StudioView; actions: Studio
         </Button>
       </div>
       <p className="hint">
-        保存当前启用的表情和手动参数；恢复时回到已保存的外观。手动参数可在进阶设置中调整。
+        保存当前启用的表情、保持动作的姿势和手动参数；请等动作播放结束后再保存。手动参数可在进阶设置中调整。
       </p>
       <div className="divider" />
       <div className="section-title">
