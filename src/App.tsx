@@ -320,9 +320,7 @@ export function App() {
       <header className="topbar studio-overlay" inert={live}>
         <a className="brand" href="#" aria-label="VTubeLeaf 首页">
           <img src="/brand/mark.svg" alt="" />
-          <span>
-            VTubeLeaf<small>LIVE2D STUDIO</small>
-          </span>
+          <span>VTubeLeaf</span>
         </a>
         <div className="header-actions">
           <span className="local-badge">

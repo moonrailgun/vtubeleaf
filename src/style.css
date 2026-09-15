@@ -280,14 +280,6 @@ body.about {
   font-size: 23px;
   letter-spacing: -0.8px;
 }
-.brand small {
-  display: block;
-  margin-top: 2px;
-  color: #968491;
-  font-size: 8px;
-  font-weight: 650;
-  letter-spacing: 2.2px;
-}
 .header-actions {
   display: flex;
   align-items: center;
