@@ -30,6 +30,7 @@
       "publish": false
     },
     "hooks": {
+      "after:git:init": "node scripts/check-release-sync.mjs",
       "after:bump": "node scripts/sync-version.mjs && npm run licenses:generate"
     }
   },
