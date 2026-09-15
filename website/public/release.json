@@ -1,6 +1,6 @@
 {
-  "version": "0.1.15",
-  "url": "https://github.com/moonrailgun/vtubeleaf/releases/tag/v0.1.15",
-  "windows": "https://github.com/moonrailgun/vtubeleaf/releases/download/v0.1.15/VTubeLeaf_0.1.15_x64-setup.exe",
-  "mac": "https://github.com/moonrailgun/vtubeleaf/releases/download/v0.1.15/VTubeLeaf-0.1.15-macos-universal.dmg"
+  "version": "0.1.16",
+  "url": "https://github.com/moonrailgun/vtubeleaf/releases/tag/v0.1.16",
+  "windows": "https://github.com/moonrailgun/vtubeleaf/releases/download/v0.1.16/VTubeLeaf_0.1.16_x64-setup.exe",
+  "mac": "https://github.com/moonrailgun/vtubeleaf/releases/download/v0.1.16/VTubeLeaf-0.1.16-macos-universal.dmg"
 }
