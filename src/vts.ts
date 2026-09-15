@@ -485,7 +485,7 @@ export function repairVtsSmileMappings(mappings: Record<string, Mapping>, result
     const current = Object.hasOwn(mappings, id) ? mappings[id] : undefined;
     if (
       current &&
-      (['source', 'inputMin', 'inputMax', 'outputMin', 'outputMax', 'clamp'] as const).every(
+      (['source', 'inputMin', 'inputMax', 'outputMin', 'outputMax'] as const).every(
         (key) => current[key] === legacy[key],
       )
     ) {

@@ -21,6 +21,7 @@ import {
   clamp,
   type Face,
   type Settings,
+  type ModelProfile,
 } from './state';
 import { Hotkeys, validateHotkey } from './hotkeys';
 import { MotionRecording } from './recording';
@@ -470,30 +471,17 @@ export function createStudio(
       ? library.map((entry) => (entry.path === next.path ? next : entry))
       : [next, ...library];
   }
-  async function useModel(next: ModelInfo, operation: number) {
-    if (disposed || operation !== modelOperation) return;
-    if (!stage) throw new Error('WebGL 渲染不可用。请检查显卡驱动或重新启动应用。');
-    cancelCalibration();
-    await stopAudio();
-    voiceCalibration = null;
-    notify('正在加载角色资源…');
-    updateLibrary(next);
-    publish();
-    await readPreview(next);
-    if (disposed || operation !== modelOperation) return;
-    if (!(await stage.load(next)) || disposed || operation !== modelOperation) return;
+  async function readModelVts(
+    next: ModelInfo,
+    target: AvatarStage,
+    existingProfile?: ModelProfile,
+  ) {
+    const operation = modelOperation;
     let vts: ReturnType<typeof importVtsConfig> | undefined;
     let vtsError = '';
-    let vtsSummary = '';
-    const existingProfile =
-      next.path === settings.modelPath
-        ? settings
-        : Object.hasOwn(settings.profiles, next.path)
-          ? settings.profiles[next.path]
-          : undefined;
     const needsSmileRepair =
       existingProfile?.vtsImportReport.length &&
-      stage.parameters.some((p) => {
+      target.parameters.some((p) => {
         const m = existingProfile.mappings[p.id];
         return (
           m?.source === 'mouthSmile' &&
@@ -507,12 +495,34 @@ export function createStudio(
     if (native && (!existingProfile || needsSmileRepair)) {
       try {
         const raw = await invoke<unknown>('read_model_vts_config', { id: next.id });
-        if (disposed || operation !== modelOperation) return;
-        if (raw != null) vts = importVtsConfig(raw, stage);
+        if (!disposed && operation === modelOperation && raw != null)
+          vts = importVtsConfig(raw, target);
       } catch (error) {
         vtsError = `VTS ${existingProfile ? '旧嘴形修正' : '自动导入'}已跳过：${error instanceof Error ? error.message : String(error)}。可通过“导入 VTube Studio 配置”重试。`;
       }
     }
+    return { vts, vtsError };
+  }
+  async function useModel(next: ModelInfo, operation: number) {
+    if (disposed || operation !== modelOperation) return;
+    if (!stage) throw new Error('WebGL 渲染不可用。请检查显卡驱动或重新启动应用。');
+    cancelCalibration();
+    await stopAudio();
+    voiceCalibration = null;
+    notify('正在加载角色资源…');
+    updateLibrary(next);
+    publish();
+    await readPreview(next);
+    if (disposed || operation !== modelOperation) return;
+    if (!(await stage.load(next)) || disposed || operation !== modelOperation) return;
+    const existingProfile =
+      next.path === settings.modelPath
+        ? settings
+        : Object.hasOwn(settings.profiles, next.path)
+          ? settings.profiles[next.path]
+          : undefined;
+    const { vts, vtsError } = await readModelVts(next, stage, existingProfile);
+    let vtsSummary = '';
     if (disposed || operation !== modelOperation) return;
     recording.stop();
     model = next;
@@ -766,12 +776,21 @@ export function createStudio(
         };
         candidate = await stage.prepare(nextModel, sceneSettings(), library);
         if (disposed || operation !== modelOperation) return;
+        const { vts, vtsError } = nextModel
+          ? await readModelVts(nextModel, candidate, sceneSettings())
+          : { vts: undefined, vtsError: '' };
+        if (disposed || operation !== modelOperation) return;
         if (nextModel?.path !== model?.path) {
           cancelCalibration();
           await stopAudio();
         }
         if (disposed || operation !== modelOperation) return;
         settings = sceneSettings();
+        let vtsSummary = '';
+        if (vts && repairVtsSmileMappings(settings.mappings, vts)) {
+          vtsSummary = '已修正旧 VTS 微笑映射的中立位置。';
+          settings.vtsImportReport.push(vtsSummary);
+        }
         heldExpressions.clear();
         candidate.display(settings);
         candidate.mount(container);
@@ -793,7 +812,7 @@ export function createStudio(
         selectedItem = '';
         changed();
         await bindHotkeys();
-        notify(`已切换到场景「${scene.name}」。`);
+        notify(`已切换到场景「${scene.name}」。${vtsError || vtsSummary}`, !!vtsError);
       } finally {
         candidate?.destroy();
         sceneBusy = false;

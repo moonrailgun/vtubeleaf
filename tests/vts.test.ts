@@ -367,18 +367,21 @@ test('legacy VTS smile repair preserves user tuning and survives saving without 
     enabled: false,
     clamp: false,
   };
-  const settings = readSettings({ mappings: { Mouth: legacy } });
-  assert.equal(repairVtsSmileMappings(settings.mappings, result), true);
-  assert.deepEqual(settings.mappings.Mouth, { ...legacy, inputMin: -1 });
-  const restored = readSettings(JSON.parse(JSON.stringify(settings)));
-  assert.equal(repairVtsSmileMappings(restored.mappings, result), false);
-  restored.mappings.Mouth.enabled = true;
-  assert.equal(new FaceMapper().map(NEUTRAL, parameters, restored, 0.1).Mouth, 0);
+  for (const clamp of [undefined, false, true]) {
+    const settings = readSettings({ mappings: { Mouth: { ...legacy, clamp } } });
+    const before = structuredClone(settings.mappings.Mouth);
+    assert.equal(repairVtsSmileMappings(settings.mappings, result), true);
+    assert.deepEqual(settings.mappings.Mouth, { ...before, inputMin: -1 });
+    const restored = readSettings(JSON.parse(JSON.stringify(settings)));
+    assert.equal(repairVtsSmileMappings(restored.mappings, result), false);
+    restored.mappings.Mouth.enabled = true;
+    assert.equal(new FaceMapper().map(NEUTRAL, parameters, restored, 0.1).Mouth, 0);
+  }
   for (const edit of [
     { inputMin: 0.2 },
     { inputMax: 0.8 },
     { outputMin: -0.5 },
-    { clamp: true },
+    { outputMax: 0.5 },
     { source: 'mouthOpen' },
   ]) {
     const tuned = readSettings({ mappings: { Mouth: { ...legacy, ...edit } } });
