@@ -421,6 +421,10 @@ pub fn run() {
                 &MenuItem::with_id(app, "about", "关于 VTubeLeaf", true, None::<&str>)?,
                 0,
             )?;
+            submenu.insert(
+                &MenuItem::with_id(app, "check-updates", "检查更新", true, None::<&str>)?,
+                1,
+            )?;
             #[cfg(target_os = "macos")]
             app.set_menu(menu)?;
             #[cfg(not(target_os = "macos"))]
@@ -430,13 +434,14 @@ pub fn run() {
             Ok(())
         })
         .on_menu_event(|app, event| {
-            if event.id() == "about" {
+            let check_updates = event.id() == "check-updates";
+            if event.id() == "about" || check_updates {
                 let app = app.clone();
                 // WebView2 window creation must run outside the synchronous menu handler.
                 tauri::async_runtime::spawn(async move {
-                    if let Err(error) = show_about(&app) {
+                    if let Err(error) = show_about(&app, check_updates) {
                         app.dialog()
-                            .message(format!("无法打开关于窗口：{error}"))
+                            .message(format!("无法打开关于窗口或检查更新：{error}"))
                             .title("VTubeLeaf")
                             .show(|_| {});
                     }
@@ -490,7 +495,7 @@ pub fn run() {
 #[tauri::command]
 async fn open_about(window: WebviewWindow, app: tauri::AppHandle) -> Result<(), String> {
     require_main(&window)?;
-    show_about(&app).map_err(|error| error.to_string())
+    show_about(&app, false).map_err(|error| error.to_string())
 }
 
 #[tauri::command]
@@ -499,7 +504,7 @@ async fn restart_app(window: WebviewWindow, app: tauri::AppHandle) -> Result<(),
     app.restart();
 }
 
-fn show_about(app: &tauri::AppHandle) -> tauri::Result<()> {
+fn show_about(app: &tauri::AppHandle, check_updates: bool) -> tauri::Result<()> {
     let window = match app.get_webview_window("about") {
         Some(window) => window,
         None => {
@@ -513,5 +518,9 @@ fn show_about(app: &tauri::AppHandle) -> tauri::Result<()> {
     };
     window.unminimize()?;
     window.show()?;
-    window.set_focus()
+    window.set_focus()?;
+    if check_updates {
+        app.emit_to("main", "update-action", "check")?;
+    }
+    Ok(())
 }
