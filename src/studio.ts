@@ -848,6 +848,13 @@ export function createStudio(
         const started = await tracker.start(structuredClone(settings));
         if (!started || disposed || operation !== trackingOperation) return;
         tracking = 'running';
+        if (
+          settings.autoStartVirtualCamera &&
+          cameraStatus.supported &&
+          cameraStatus.installed &&
+          !cameraStatus.active
+        )
+          void virtualCamera.start();
         publish();
         await devices();
         notify(

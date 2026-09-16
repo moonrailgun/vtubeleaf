@@ -139,6 +139,7 @@ export type ModelProfile = {
 export type Settings = ModelProfile & {
   autoCheckUpdates: boolean;
   skippedUpdateVersion: string;
+  autoStartVirtualCamera: boolean;
   engine: 'mediapipe' | 'openseeface' | 'nvidia';
   deviceId: string;
   previewMirror: boolean;
@@ -181,6 +182,7 @@ export const NEUTRAL: Face = {
 export const defaults: Settings = {
   autoCheckUpdates: true,
   skippedUpdateVersion: '',
+  autoStartVirtualCamera: false,
   engine: 'mediapipe',
   deviceId: '',
   previewMirror: true,
@@ -504,6 +506,8 @@ export function readSettings(value: unknown): Settings {
   ] as const)
     if (typeof v[key] === 'string' && v[key].length < 4096) s[key] = v[key];
   if (typeof v.autoCheckUpdates === 'boolean') s.autoCheckUpdates = v.autoCheckUpdates;
+  if (typeof v.autoStartVirtualCamera === 'boolean')
+    s.autoStartVirtualCamera = v.autoStartVirtualCamera;
   if (typeof v.skippedUpdateVersion === 'string' && v.skippedUpdateVersion.length <= 128)
     s.skippedUpdateVersion = v.skippedUpdateVersion;
   if (typeof v.previewMirror === 'boolean') s.previewMirror = v.previewMirror;

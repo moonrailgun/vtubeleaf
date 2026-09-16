@@ -263,12 +263,13 @@ export function App() {
       onChange={(value) => set(key, value)}
     />
   );
-  const toggle = (key: keyof Settings, label: string) => (
+  const toggle = (key: keyof Settings, label: string, disabled = false) => (
     <Toggle
       id={key}
       label={label}
       checked={s[key] as boolean}
       onChange={(value) => set(key, value)}
+      disabled={disabled}
     />
   );
   const trackingLabel = {
@@ -1318,6 +1319,7 @@ export function App() {
                     </AlertDialog.Portal>
                   </AlertDialog.Root>
                 </div>
+                {toggle('autoStartVirtualCamera', '开始跟踪时自动输出', !camera.installed)}
                 <p className="hint">
                   Windows 安装到当前用户；macOS
                   首次安装需按系统提示允许摄像头扩展。启动后，在直播或视频软件中选择 VTubeLeaf
