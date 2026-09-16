@@ -373,7 +373,11 @@ export function createStudio(
     micStarting = false;
     voiceCalibration = null;
     publish();
-    await Promise.all([tracker.stop(), stopAudio()]);
+    await Promise.all([
+      tracker.stop(),
+      stopAudio(),
+      settings.autoStopVirtualCamera ? virtualCamera.stop() : undefined,
+    ]);
     publish();
   }
   async function refreshLibrary() {

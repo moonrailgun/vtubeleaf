@@ -102,6 +102,96 @@ test('tracking auto-starts camera output only when enabled and tracking starts s
   expect(await actions()).toEqual(['start', 'stop', 'start']);
 });
 
+test('stopping tracking optionally stops output, including an output start still in flight', async ({
+  page,
+}, testInfo) => {
+  await page.route('**/src/main.tsx*', async (route) => {
+    const response = await route.fetch();
+    const bootstrap = `import { mockIPC, mockWindows } from '/node_modules/@tauri-apps/api/mocks.js';
+      window.isTauri = true; mockWindows('main');
+      const camera = window.cameraTest = {
+        status: { supported: true, installed: true, active: false, message: '已安装' },
+        actions: [], holdOutput: false
+      };
+      mockIPC(async (cmd, args) => {
+        if (cmd === 'load_settings') return JSON.parse(localStorage.getItem('camera-test-settings') || '{"engine":"openseeface","autoCheckUpdates":false,"globalHotkeys":{"pause-tracking":"P","stop-tracking":"S"}}');
+        if (cmd === 'save_settings') { localStorage.setItem('camera-test-settings', JSON.stringify(args.settings)); return; }
+        if (cmd === 'list_models') return { models: [], directory: '/test/models', errors: [] };
+        if (!cmd.startsWith('plugin:virtual-camera|')) return;
+        const action = cmd.split('|')[1];
+        if (action !== 'status' && action !== 'submit') camera.actions.push(action);
+        if (action === 'start') {
+          if (camera.holdOutput) await new Promise(resolve => { camera.finishOutput = resolve; });
+          camera.status.active = true;
+        }
+        if (action === 'stop') camera.status.active = false;
+        return { ...camera.status };
+      }, { shouldMockEvents: true });\n`;
+    await route.fulfill({ response, body: bootstrap + (await response.text()) });
+  });
+  await page.goto('/');
+  await page.getByRole('button', { name: '接入', exact: true }).click();
+  const autoStop = page.getByRole('switch', { name: '停止跟踪时自动停止输出', exact: true });
+  const autoStart = page.getByRole('switch', { name: '开始跟踪时自动输出', exact: true });
+  const tracking = page.locator('#start');
+  const status = page.locator('#tracking-status');
+  const startOutput = page.getByRole('button', { name: '启动虚拟摄像头', exact: true });
+  const stopOutput = page.getByRole('button', { name: '停止虚拟摄像头', exact: true });
+  const actions = () => page.evaluate(() => (window as any).cameraTest.actions);
+
+  await expect(autoStop).not.toBeChecked();
+  expect(await actions()).not.toContain('start');
+  await page.evaluate(() => ((window as any).cameraTest.actions = []));
+  await startOutput.click();
+  await tracking.click();
+  await expect(status).toHaveText('正在跟踪');
+  await tracking.click();
+  await expect(status).toHaveText('尚未开始');
+  await expect(stopOutput).toBeVisible();
+  expect(await actions()).toEqual(['start']);
+
+  await autoStop.check();
+  await expect
+    .poll(() =>
+      page.evaluate(
+        () =>
+          JSON.parse(localStorage.getItem('camera-test-settings') || '{}').autoStopVirtualCamera,
+      ),
+    )
+    .toBe(true);
+  await page.reload();
+  await page.getByRole('button', { name: '接入', exact: true }).click();
+  await expect(autoStop).toBeChecked();
+  await expect(autoStart).not.toBeChecked();
+  expect(await actions()).not.toContain('start');
+  await page.evaluate(() => ((window as any).cameraTest.actions = []));
+  await page.locator('#controls').screenshot({ path: testInfo.outputPath('camera-auto-stop.png') });
+
+  await startOutput.click();
+  await tracking.click();
+  await expect(status).toHaveText('正在跟踪');
+  await page.keyboard.press('p');
+  await expect(status).toHaveText('已暂停');
+  await expect(stopOutput).toBeVisible();
+  expect(await actions()).toEqual(['start']);
+  await page.keyboard.press('s');
+  await expect(status).toHaveText('尚未开始');
+  await expect(startOutput).toBeVisible();
+  expect(await actions()).toEqual(['start', 'stop']);
+
+  await autoStart.check();
+  await page.evaluate(() => ((window as any).cameraTest.holdOutput = true));
+  await tracking.click();
+  await expect
+    .poll(() => page.evaluate(() => !!(window as any).cameraTest.finishOutput))
+    .toBe(true);
+  await tracking.click();
+  await expect(status).toHaveText('尚未开始');
+  await page.evaluate(() => (window as any).cameraTest.finishOutput());
+  await expect.poll(actions).toEqual(['start', 'stop', 'start', 'stop']);
+  await expect(startOutput).toBeVisible();
+});
+
 test('camera controls follow installation and output state, and confirm uninstall from the menu', async ({
   page,
 }, testInfo) => {
@@ -138,12 +228,14 @@ test('camera controls follow installation and output state, and confirm uninstal
   const start = page.getByRole('button', { name: '启动虚拟摄像头', exact: true });
   const stop = page.getByRole('button', { name: '停止虚拟摄像头', exact: true });
   const autoStart = page.getByRole('switch', { name: '开始跟踪时自动输出', exact: true });
+  const autoStop = page.getByRole('switch', { name: '停止跟踪时自动停止输出', exact: true });
   const actions = () => page.evaluate(() => (window as any).cameraTest.actions);
 
   await expect(panel.getByRole('button')).toHaveCount(2);
   await expect(install).toBeEnabled();
   await expect(more).toBeDisabled();
   await expect(autoStart).toBeDisabled();
+  await expect(autoStop).toBeDisabled();
   await page.evaluate(() => ((window as any).cameraTest.actions = []));
   await install.click();
   await expect(panel.getByRole('button', { name: '安装中…', exact: true })).toBeDisabled();
@@ -151,6 +243,7 @@ test('camera controls follow installation and output state, and confirm uninstal
   await page.evaluate(() => (window as any).cameraTest.finishInstall());
   await expect(start).toBeEnabled();
   await expect(autoStart).toBeEnabled();
+  await expect(autoStop).toBeEnabled();
   expect(await actions()).toEqual(['install']);
   await start.click();
   await expect(stop).toBeEnabled();
@@ -173,6 +266,7 @@ test('camera controls follow installation and output state, and confirm uninstal
   await expect(more).toBeDisabled();
   expect(await actions()).toEqual(['install', 'start', 'stop', 'uninstall']);
   await expect(autoStart).toBeDisabled();
+  await expect(autoStop).toBeDisabled();
   await page
     .locator('#controls')
     .screenshot({ path: testInfo.outputPath('camera-uninstalled.png') });

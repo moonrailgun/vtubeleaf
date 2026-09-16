@@ -3,12 +3,14 @@ import assert from 'node:assert/strict';
 import { defaults, readSettings, FaceMapper, NEUTRAL, fromMediaPipe } from '../src/state.ts';
 import * as state from '../src/state.ts';
 
-test('virtual camera auto-start is opt-in and stays global across model changes and reloads', () => {
-  for (const value of [undefined, false, 'true', 1])
-    assert.equal(readSettings({ autoStartVirtualCamera: value }).autoStartVirtualCamera, false);
-  const settings = readSettings({ autoStartVirtualCamera: true, modelPath: '/a' });
-  const restored = readSettings(JSON.parse(JSON.stringify(state.switchProfile(settings, '/b'))));
-  assert.equal(restored.autoStartVirtualCamera, true);
+test('virtual camera automation is opt-in and stays global across model changes and reloads', () => {
+  for (const key of ['autoStartVirtualCamera', 'autoStopVirtualCamera'] as const) {
+    for (const value of [undefined, false, 'true', 1])
+      assert.equal(readSettings({ [key]: value })[key], false);
+    const settings = readSettings({ [key]: true, modelPath: '/a' });
+    const restored = readSettings(JSON.parse(JSON.stringify(state.switchProfile(settings, '/b'))));
+    assert.equal(restored[key], true);
+  }
 });
 
 test('update preferences default safely and remain global across model changes and reloads', () => {
