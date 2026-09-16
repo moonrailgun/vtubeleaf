@@ -6,8 +6,8 @@
 <key>CFBundleName</key><string>VTubeLeaf Camera</string>
 <key>CFBundlePackageType</key><string>SYSX</string>
 <!-- Version the extension independently; retain the last shipped version until its payload changes. -->
-<key>CFBundleShortVersionString</key><string>0.1.12</string>
-<key>CFBundleVersion</key><string>0.1.12</string>
+<key>CFBundleShortVersionString</key><string>0.1.13</string>
+<key>CFBundleVersion</key><string>0.1.13</string>
 <key>LSMinimumSystemVersion</key><string>14.0</string>
 <key>NSSystemExtensionUsageDescription</key><string>将 VTubeLeaf 角色画布作为虚拟摄像头提供给会议软件。</string>
 <key>CMIOExtension</key><dict><key>CMIOExtensionMachServiceName</key><string>UNSIGNED.com.vtubeleaf.camera</string></dict>

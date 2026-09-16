@@ -2,7 +2,7 @@
 
 This is a macOS 14+ Core Media IO Camera Extension and a Swift host bridge linked into the Tauri app. The source exposes **VTubeLeaf Camera**, fixed at 1280×720 BGRA / 30 FPS. It receives the rendered scene through a CMIO sink stream; it never captures a screen or physical camera.
 
-The frontend composites the stage canvas over the selected background, letterboxes it, and submits raw RGBA bytes with one IPC frame in flight. The host converts RGBA to an IOSurface-backed BGRA pixel buffer, enqueues at most one sample, and caps the producer at 30 FPS. The extension keeps the latest valid sample and outputs opaque black when input is stale for 500 ms or the producer disconnects. The sink accepts one client with the host bundle ID and the packaged Apple Team ID, checked using Security.framework.
+The frontend composites the stage canvas over the selected background, letterboxes it, and submits raw RGBA bytes with one IPC frame in flight. The host converts RGBA to an IOSurface-backed BGRA pixel buffer, enqueues at most one sample, and caps the producer at 30 FPS. The extension keeps the latest valid sample and outputs opaque black when input is stale for 2 seconds or the producer disconnects. The sink accepts one client with the host bundle ID and the packaged Apple Team ID, checked using Security.framework.
 
 ## Compile and check without installing
 

@@ -21,7 +21,7 @@ func validCameraFrame(_ buffer: CVPixelBuffer) -> Bool {
 }
 
 func frameIsFresh(received: UInt64, now: UInt64) -> Bool {
-    received > 0 && now >= received && now - received < 500_000_000
+    received > 0 && now >= received && now - received < 2_000_000_000
 }
 
 final class CameraFrames {

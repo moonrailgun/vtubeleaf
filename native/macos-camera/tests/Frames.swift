@@ -27,8 +27,9 @@ import CoreVideo
         assert(CVPixelBufferGetBaseAddress(blank)!.assumingMemoryBound(to: UInt32.self)[0] == 0xff000000)
         CVPixelBufferUnlockBaseAddress(blank, .readOnly)
         assert(!frameIsFresh(received: 0, now: 1))
-        assert(frameIsFresh(received: 1, now: 500_000_000))
-        assert(!frameIsFresh(received: 1, now: 500_000_001))
+        assert(frameIsFresh(received: 1, now: 500_000_001))
+        assert(frameIsFresh(received: 1, now: 2_000_000_000))
+        assert(!frameIsFresh(received: 1, now: 2_000_000_001))
         assert(!frameIsFresh(received: 20, now: 10))
         var wrong: CVPixelBuffer?
         assert(CVPixelBufferCreate(kCFAllocatorDefault, 16, 16, kCVPixelFormatType_32BGRA, nil, &wrong) == kCVReturnSuccess)
