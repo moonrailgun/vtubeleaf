@@ -149,7 +149,7 @@ function Updates() {
           <div>
             <progress
               aria-label="更新下载进度"
-              className="w-full accent-primary"
+              className="update-progress"
               value={state.total ? state.received : undefined}
               max={state.total || undefined}
             />
