@@ -36,15 +36,19 @@ jobs:
   checks:
     needs: version
     uses: ./.github/workflows/check.yml
-    secrets: inherit
 
   macos:
     needs: version
     uses: ./.github/workflows/release-macos.yml
     secrets: inherit
 
+  windows:
+    needs: version
+    uses: ./.github/workflows/release-windows.yml
+    secrets: inherit
+
   publish:
-    needs: [version, checks, macos]
+    needs: [version, checks, macos, windows]
     runs-on: ubuntu-latest
     permissions:
       contents: write
