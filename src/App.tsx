@@ -34,7 +34,6 @@ import { createStudio, type Studio, type StudioView } from './studio';
 import {
   defaults,
   defaultMapping,
-  clampMouthMapping,
   parameterNames,
   faceSources,
   type Settings,
@@ -2101,19 +2100,16 @@ function MappingEditor({
   view: StudioView;
   actions: Studio['actions'];
 }) {
-  const initial = clampMouthMapping(
-    view.settings.mappings[parameter.id] ??
-      defaultMapping(parameter, view.settings) ?? {
-        source: 'yaw',
-        inputMin: -1,
-        inputMax: 1,
-        outputMin: parameter.min,
-        outputMax: parameter.max,
-        smoothing: 0.12,
-        enabled: false,
-      },
-    parameter,
-  );
+  const initial: Mapping = view.settings.mappings[parameter.id] ??
+    defaultMapping(parameter, view.settings) ?? {
+      source: 'yaw',
+      inputMin: -1,
+      inputMax: 1,
+      outputMin: parameter.min,
+      outputMax: parameter.max,
+      smoothing: 0.12,
+      enabled: false,
+    };
   const [source, setSource] = useState<FaceKey>(initial.source);
   const [enabled, setEnabled] = useState(initial.enabled);
   const [clamp, setClamp] = useState(initial.clamp ?? true);
@@ -2210,7 +2206,7 @@ function MappingEditor({
         <p className="hint">
           输入为校准后的归一化数值，实时显示在上方。交换输出上下限可反向。位移在两个引擎中的尺度不同，切换后请重新校准。
           {source === 'mouthOpen' &&
-            '嘴部开合输出端点会限制到模型范围；放大幅度请调整输入范围或嘴部灵敏度。'}
+            '输出范围可超出模型范围以放大开合幅度，最终参数值仍限制在模型范围内。'}
         </p>
       </div>
     </>

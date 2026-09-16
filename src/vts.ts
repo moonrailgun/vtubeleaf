@@ -1,16 +1,10 @@
-import {
-  clampMouthMapping,
-  type FaceKey,
-  type HotkeyOptions,
-  type Mapping,
-  type ModelProfile,
-} from './state.ts';
+import { type FaceKey, type HotkeyOptions, type Mapping, type ModelProfile } from './state.ts';
 
 export type VtsImportResult = {
   profile: Partial<ModelProfile>;
   warnings: string[];
   summary: string;
-  legacySmileMappings: Record<string, Mapping>;
+  legacyMappings: Record<string, Mapping>;
 };
 type Model = {
   parameters: { id: string; min: number; max: number; default?: number }[];
@@ -132,7 +126,7 @@ export function importVtsConfig(raw: unknown, model: Model): VtsImportResult {
     if (!warnings.includes(s)) warnings.push(s);
   };
   const mappings: Record<string, Mapping> = {};
-  const legacySmileMappings: Record<string, Mapping> = {};
+  const legacyMappings: Record<string, Mapping> = {};
   const hotkeys: Record<string, string> = {};
   const hotkeyOptions: Record<string, HotkeyOptions> = {};
   const profile: Partial<ModelProfile> = { mappings, hotkeys, hotkeyOptions };
@@ -225,23 +219,22 @@ export function importVtsConfig(raw: unknown, model: Model): VtsImportResult {
     }
     // ponytail: slider proportion only; exact VTS smoothing needs its unpublished algorithm.
     if (item.Smoothing !== 0) warn(`${id}：平滑滑杆按 0–100 → 0–0.5 秒近似，非 VTS 原算法`);
-    mappings[id] = clampMouthMapping(
-      {
-        source,
-        inputMin: lo,
-        inputMax: hi,
-        outputMin: outLo,
-        outputMax: outHi,
-        smoothing: (item.Smoothing as number) / 200,
-        enabled: true,
-        ...(item.ClampInput === false && item.ClampOutput === false ? { clamp: false } : {}),
-      },
-      p,
-    );
-    if (mappings[id].outputMin !== outLo || mappings[id].outputMax !== outHi)
-      warn(
-        `${id}：嘴部开合输出端点已限制到模型范围，避免提前达到张嘴上限；可调整输入范围或嘴部灵敏度改变幅度`,
-      );
+    mappings[id] = {
+      source,
+      inputMin: lo,
+      inputMax: hi,
+      outputMin: outLo,
+      outputMax: outHi,
+      smoothing: (item.Smoothing as number) / 200,
+      enabled: true,
+      ...(item.ClampInput === false && item.ClampOutput === false ? { clamp: false } : {}),
+    };
+    if (source === 'mouthOpen') {
+      const outputMin = Math.max(p.min, Math.min(p.max, outLo));
+      const outputMax = Math.max(p.min, Math.min(p.max, outHi));
+      if (outputMin !== outLo || outputMax !== outHi)
+        legacyMappings[id] = { ...mappings[id], outputMin, outputMax };
+    }
     // ponytail: adapt full-range smile inputs only; custom VTS calibration stays manual.
     if (
       source === 'mouthSmile' &&
@@ -254,7 +247,7 @@ export function importVtsConfig(raw: unknown, model: Model): VtsImportResult {
       // Our smile signal rests at zero. Keep the smile endpoint and align zero to model neutral.
       const inputMin = (outLo - p.default) / (outHi - p.default);
       if (inputMin >= -1000) {
-        legacySmileMappings[id] = mappings[id];
+        legacyMappings[id] = mappings[id];
         mappings[id] = { ...mappings[id], inputMin };
         warn(
           `${id}：微笑输入的中立位置已对齐模型默认值，避免静止时嘴形落到变形端点；非 VTS 原算法`,
@@ -264,7 +257,7 @@ export function importVtsConfig(raw: unknown, model: Model): VtsImportResult {
   }
   if (Object.keys(mappings).length)
     warn(
-      '追踪范围按当前输入源归一化，嘴部开合输出端点限制到模型范围，其余保留作者输出范围及外推设置；最终值受模型本身范围限制，灵敏度、镜像、校准仍生效，需在预览中校准方向和幅度',
+      '追踪范围按当前输入源归一化，保留作者输出范围及外推设置；最终值受模型本身范围限制，灵敏度、镜像、校准仍生效，需在预览中校准方向和幅度',
     );
   const refs = record(raw.FileReferences) ? raw.FileReferences : {};
   for (const [field, target, label] of [
@@ -473,25 +466,51 @@ export function importVtsConfig(raw: unknown, model: Model): VtsImportResult {
   return {
     profile,
     warnings,
-    legacySmileMappings,
+    legacyMappings,
     summary: `导入 ${Object.keys(mappings).length} 个映射、${Object.keys(hotkeys).length} 个快捷键${profile.idleMotion ? '、待机动画' : ''}；${warnings.length} 条兼容性提示`,
   };
 }
 
 /** Repair only ranges still matching the bundled VTS import, preserving subsequent tuning. */
-export function repairVtsSmileMappings(mappings: Record<string, Mapping>, result: VtsImportResult) {
+export function repairVtsMappings(
+  mappings: Record<string, Mapping>,
+  result: VtsImportResult,
+  report: string[] = [],
+) {
   let changed = false;
-  for (const [id, legacy] of Object.entries(result.legacySmileMappings)) {
+  for (const [id, repaired] of Object.entries(result.profile.mappings ?? {})) {
+    const legacy = result.legacyMappings[id];
     const current = Object.hasOwn(mappings, id) ? mappings[id] : undefined;
+    const skipped = `${id}：范围超出当前模型或映射限制，已跳过`;
+    if (!current && repaired.source === 'mouthOpen' && report.includes(skipped)) {
+      mappings[id] = { ...repaired };
+      changed = true;
+    }
     if (
       current &&
+      legacy &&
       (['source', 'inputMin', 'inputMax', 'outputMin', 'outputMax'] as const).every(
         (key) => current[key] === legacy[key],
       )
     ) {
-      mappings[id] = { ...current, inputMin: result.profile.mappings![id].inputMin };
+      mappings[id] = {
+        ...current,
+        inputMin: repaired.inputMin,
+        outputMin: repaired.outputMin,
+        outputMax: repaired.outputMax,
+      };
       changed = true;
     }
+    // Consume old failure reports once, including when a user has since supplied a custom map.
+    if (repaired.source === 'mouthOpen')
+      for (let i = report.length - 1; i >= 0; i--)
+        if (report[i] === skipped || report[i].startsWith(`${id}：嘴部开合输出端点已限制`)) {
+          report.splice(i, 1);
+          changed = true;
+        }
   }
+  if (changed)
+    for (let i = 0; i < report.length; i++)
+      report[i] = report[i].replace('嘴部开合输出端点限制到模型范围，其余保留', '保留');
   return changed;
 }

@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import test from 'node:test';
-import { importVtsConfig, repairVtsSmileMappings } from '../src/vts.ts';
+import { importVtsConfig, repairVtsMappings } from '../src/vts.ts';
 import { FaceMapper, NEUTRAL, readSettings } from '../src/state.ts';
 
 const fixture = () =>
@@ -281,7 +281,7 @@ test('author output overshoot is preserved and either range clamp limits extrapo
   }
 });
 
-test('mouth opening imports fit output endpoints to the model while preserving direction', () => {
+test('mouth opening imports preserve authored gain and direction beyond model endpoints', () => {
   const raw = fixture();
   Object.assign(raw.ParameterSettings[0], {
     Input: 'MouthOpen',
@@ -294,15 +294,15 @@ test('mouth opening imports fit output endpoints to the model while preserving d
   const metadata = { ...model, parameters: [{ id: 'Mouth', min: 0, max: 1 }] };
   const before = structuredClone(raw);
   const result = importVtsConfig(raw, metadata);
-  assert.equal(result.profile.mappings.Mouth.outputMin, 0);
-  assert.equal(result.profile.mappings.Mouth.outputMax, 1);
-  assert.ok(result.warnings.some((w) => w.includes('Mouth') && w.includes('输出')));
+  assert.equal(result.profile.mappings.Mouth.outputMin, -0.1);
+  assert.equal(result.profile.mappings.Mouth.outputMax, 2.1);
+  assert.ok(!result.warnings.some((w) => w.includes('输出端点已限制')));
   assert.deepEqual(raw, before);
   raw.ParameterSettings[0].InputRangeLower = 1;
   raw.ParameterSettings[0].InputRangeUpper = 0;
   const reversed = importVtsConfig(raw, metadata).profile.mappings.Mouth;
-  assert.equal(reversed.outputMin, 1);
-  assert.equal(reversed.outputMax, 0);
+  assert.equal(reversed.outputMin, 2.1);
+  assert.equal(reversed.outputMax, -0.1);
 });
 
 test('VTS smile imports keep neutral and calibrated faces at the model default without activating smile eyes', () => {
@@ -344,6 +344,60 @@ test('VTS smile imports keep neutral and calibrated faces at the model default w
   assert.ok(result.warnings.some((w) => w.includes('微笑') && w.includes('中立')));
 });
 
+test('legacy VTS mouth repair restores skipped and clipped imports without overwriting tuning', () => {
+  const raw = fixture();
+  Object.assign(raw.ParameterSettings[0], {
+    Input: 'MouthOpen',
+    OutputLive2D: 'Mouth',
+    InputRangeLower: 0,
+    InputRangeUpper: 0.85,
+    OutputRangeLower: 0,
+    OutputRangeUpper: 2.1,
+    Smoothing: 0,
+  });
+  const result = importVtsConfig(raw, { ...model, parameters: [{ id: 'Mouth', min: 0, max: 1 }] });
+  const skipped = 'Mouth：范围超出当前模型或映射限制，已跳过';
+  const settings = readSettings({
+    vtsImportReport: [
+      skipped,
+      '追踪范围按当前输入源归一化，嘴部开合输出端点限制到模型范围，其余保留作者输出范围及外推设置',
+    ],
+  });
+  assert.equal(repairVtsMappings(settings.mappings, result, settings.vtsImportReport), true);
+  assert.equal(settings.mappings.Mouth.outputMax, 2.1);
+  assert.deepEqual(settings.vtsImportReport, [
+    '追踪范围按当前输入源归一化，保留作者输出范围及外推设置',
+  ]);
+  delete settings.mappings.Mouth;
+  assert.equal(repairVtsMappings(settings.mappings, result, settings.vtsImportReport), false);
+  assert.equal(
+    settings.mappings.Mouth,
+    undefined,
+    'do not resurrect a mapping deleted after migration',
+  );
+  const clipped = {
+    ...result.profile.mappings.Mouth,
+    outputMax: 1,
+    smoothing: 0.2,
+    enabled: false,
+    clamp: false,
+  };
+  const saved = readSettings({ mappings: { Mouth: clipped } });
+  assert.equal(repairVtsMappings(saved.mappings, result), true);
+  assert.deepEqual(saved.mappings.Mouth, { ...clipped, outputMax: 2.1 });
+  assert.equal(repairVtsMappings(saved.mappings, result), false);
+  for (const edit of [{ inputMax: 0.7 }, { outputMax: 0.8 }, { source: 'mouthSmile' }]) {
+    const tuned = readSettings({
+      mappings: { Mouth: { ...clipped, ...edit } },
+      vtsImportReport: [skipped],
+    });
+    const before = structuredClone(tuned.mappings);
+    repairVtsMappings(tuned.mappings, result, tuned.vtsImportReport);
+    assert.deepEqual(tuned.mappings, before);
+    assert.ok(!tuned.vtsImportReport.includes(skipped));
+  }
+});
+
 test('legacy VTS smile repair preserves user tuning and survives saving without repeated conversion', () => {
   const raw = fixture();
   Object.assign(raw.ParameterSettings[0], {
@@ -370,10 +424,10 @@ test('legacy VTS smile repair preserves user tuning and survives saving without 
   for (const clamp of [undefined, false, true]) {
     const settings = readSettings({ mappings: { Mouth: { ...legacy, clamp } } });
     const before = structuredClone(settings.mappings.Mouth);
-    assert.equal(repairVtsSmileMappings(settings.mappings, result), true);
+    assert.equal(repairVtsMappings(settings.mappings, result), true);
     assert.deepEqual(settings.mappings.Mouth, { ...before, inputMin: -1 });
     const restored = readSettings(JSON.parse(JSON.stringify(settings)));
-    assert.equal(repairVtsSmileMappings(restored.mappings, result), false);
+    assert.equal(repairVtsMappings(restored.mappings, result), false);
     restored.mappings.Mouth.enabled = true;
     assert.equal(new FaceMapper().map(NEUTRAL, parameters, restored, 0.1).Mouth, 0);
   }
@@ -386,7 +440,7 @@ test('legacy VTS smile repair preserves user tuning and survives saving without 
   ]) {
     const tuned = readSettings({ mappings: { Mouth: { ...legacy, ...edit } } });
     const before = structuredClone(tuned);
-    assert.equal(repairVtsSmileMappings(tuned.mappings, result), false);
+    assert.equal(repairVtsMappings(tuned.mappings, result), false);
     assert.deepEqual(tuned, before);
   }
   for (const [lo, hi] of [
@@ -397,7 +451,7 @@ test('legacy VTS smile repair preserves user tuning and survives saving without 
     raw.ParameterSettings[0].InputRangeUpper = hi;
     const custom = importVtsConfig(raw, { ...model, parameters });
     assert.equal(custom.profile.mappings!.Mouth.inputMin, lo);
-    assert.deepEqual(custom.legacySmileMappings, {});
+    assert.deepEqual(custom.legacyMappings, {});
   }
 });
 

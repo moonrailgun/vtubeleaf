@@ -14,8 +14,8 @@ test('depth moves closer/larger and farther/smaller independently of tracker uni
       const mapper = new FaceMapper();
       for (const [distance, expected] of [
         [-4, 1],
-        [-3.2, 1.25],
-        [-5, 0.8],
+        [-3.2, 1.075],
+        [-5, 0.94],
       ]) {
         mapper.map({ positionZ: distance * unit }, [], s, 0.1);
         assert.ok(Math.abs(mapper.depthScale - expected) < 1e-8);
@@ -31,7 +31,7 @@ test('uncalibrated depth uses the first valid frame and resets for a new session
   mapper.map({ positionZ: -4 }, [], s, 0.1);
   assert.equal(mapper.depthScale, 1);
   mapper.map({ positionZ: -3.2 }, [], s, 0.1);
-  assert.equal(mapper.depthScale, 1.25);
+  assert.equal(mapper.depthScale, 1.075);
   mapper.reset();
   mapper.map({ positionZ: -6 }, [], s, 0.1);
   assert.equal(mapper.depthScale, 1);
@@ -42,7 +42,7 @@ test('depth is bounded, ignores invalid distances, and can be disabled', () => {
   const mapper = new FaceMapper();
   for (const [distance, expected] of [
     [-0.01, 1.5],
-    [-1000, 0.5],
+    [-1000, 0.7012],
   ]) {
     mapper.map({ positionZ: distance }, [], s, 0.1);
     assert.equal(mapper.depthScale, expected);
@@ -89,5 +89,20 @@ test('depth strength is validated and remembered separately for each model', () 
   assert.equal(switchProfile(b, '/a').depthSensitivity, 0.4);
   assert.equal(readSettings({ depthSensitivity: -1 }).depthSensitivity, 0);
   assert.equal(readSettings({ depthSensitivity: 100 }).depthSensitivity, 2);
-  assert.equal(readSettings({ depthSensitivity: NaN }).depthSensitivity, 1);
+  assert.equal(readSettings({ depthSensitivity: NaN }).depthSensitivity, 0.3);
+});
+
+test('old depth defaults migrate once across profiles while custom strengths survive', () => {
+  const settings = readSettings({
+    modelPath: '/a',
+    depthSensitivity: 1,
+    profiles: { '/b': { depthSensitivity: 1 }, '/c': { depthSensitivity: 0.7 } },
+  });
+  assert.equal(settings.depthSensitivity, 0.3);
+  assert.equal(switchProfile(settings, '/b').depthSensitivity, 0.3);
+  assert.equal(switchProfile(settings, '/c').depthSensitivity, 0.7);
+  settings.depthSensitivity = 1;
+  const saved = readSettings(JSON.parse(JSON.stringify(settings)));
+  assert.equal(saved.depthSensitivity, 1);
+  assert.equal(switchProfile(switchProfile(saved, '/b'), '/a').depthSensitivity, 1);
 });

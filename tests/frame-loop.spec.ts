@@ -60,8 +60,8 @@ test('render workers follow tracking start and stop in both windows', async ({ p
     });
     await expect.poll(() => page.evaluate(() => (window as any).mainDepth)).toBe(1);
     await page.evaluate(() => (window as any).sendFace({ positionZ: -3.2 }));
-    await expect.poll(() => page.evaluate(() => (window as any).mainDepth)).toBe(1.25);
-    await expect.poll(() => page.evaluate(() => (window as any).outputDepth)).toBe(1.25);
+    await expect.poll(() => page.evaluate(() => (window as any).mainDepth)).toBe(1.075);
+    await expect.poll(() => page.evaluate(() => (window as any).outputDepth)).toBe(1.075);
     await page.evaluate(() => (window as any).frameTest.studio.actions.stop());
     await expect.poll(() => page.workers().length).toBe(0);
     await expect.poll(() => page.evaluate(() => (window as any).outputDepth)).toBeLessThan(1.01);

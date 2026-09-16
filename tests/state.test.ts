@@ -475,7 +475,7 @@ test('custom position ranges retain calibrated movement beyond the default unit 
   assert.equal(result.Custom, 15);
 });
 
-test('stored mouth opening mappings use reachable endpoints without early saturation', () => {
+test('stored mouth opening mappings preserve authored gain and clamp only final values', () => {
   const mapping = {
     source: 'mouthOpen',
     inputMin: 0,
@@ -490,8 +490,8 @@ test('stored mouth opening mappings use reachable endpoints without early satura
   const parameters = [{ id: 'Mouth', min: 0, max: 1, default: 0 }];
   for (const [mouthOpen, expected] of [
     [0, 0],
-    [0.3, 0.42],
-    [0.5, 0.7],
+    [0.3, 0.882],
+    [0.5, 1],
     [1, 1],
   ]) {
     const result = new FaceMapper().map({ mouthOpen }, parameters, settings, 0.1);
@@ -503,13 +503,13 @@ test('stored mouth opening mappings use reachable endpoints without early satura
     { ...settings, lipSyncMode: 'volume' },
     0.1,
   );
-  assert.equal(voice.Mouth, 0.5);
+  assert.equal(voice.Mouth, 1);
   // Reversed endpoints and models with genuinely wider ranges remain supported.
   settings.mappings.Mouth.outputMin = 2.1;
   settings.mappings.Mouth.outputMax = 0;
   assert.equal(new FaceMapper().map({ mouthOpen: 0 }, parameters, settings, 0.1).Mouth, 1);
   assert.ok(
-    Math.abs(new FaceMapper().map({ mouthOpen: 0.5 }, parameters, settings, 0.1).Mouth - 0.3) <
+    Math.abs(new FaceMapper().map({ mouthOpen: 0.5 }, parameters, settings, 0.1).Mouth - 0.63) <
       1e-8,
   );
   settings.mappings.Mouth.outputMin = 0;

@@ -97,6 +97,7 @@ export type ModelProfile = {
   motionMirror: boolean;
   sensitivity: number;
   depthSensitivity: number;
+  depthDefaultsVersion: number;
   eyeSensitivity: number;
   eyeClosedThreshold: number;
   eyeClosedLeft: number | null;
@@ -202,7 +203,8 @@ export const defaults: Settings = {
   micNoiseGate: 0.02,
   motionMirror: true,
   sensitivity: 1,
-  depthSensitivity: 1,
+  depthSensitivity: 0.3,
+  depthDefaultsVersion: 1,
   eyeSensitivity: 1,
   eyeClosedThreshold: 0.25,
   eyeClosedLeft: null,
@@ -337,6 +339,7 @@ function readProfile(v: unknown): ModelProfile {
     motionMirror: defaults.motionMirror,
     sensitivity: defaults.sensitivity,
     depthSensitivity: defaults.depthSensitivity,
+    depthDefaultsVersion: defaults.depthDefaultsVersion,
     eyeSensitivity: defaults.eyeSensitivity,
     eyeClosedThreshold: defaults.eyeClosedThreshold,
     eyeClosedLeft: null,
@@ -417,6 +420,9 @@ function readProfile(v: unknown): ModelProfile {
   for (const key of Object.keys(profileRanges) as (keyof typeof profileRanges)[])
     if (typeof v[key] === 'number' && Number.isFinite(v[key]))
       p[key] = clamp(v[key], profileRanges[key][0], profileRanges[key][1]);
+  // Legacy profiles cannot distinguish default 1 from a manual 1; migrate once, then retain edits.
+  if (v.depthDefaultsVersion !== 1 && v.depthSensitivity === 1)
+    p.depthSensitivity = defaults.depthSensitivity;
 
   if (isFace(v.neutral))
     p.neutral = Object.fromEntries(
@@ -669,16 +675,6 @@ const sourceSmoothing = (source: FaceKey, s: Settings) =>
 const validParameter = (p: Parameter) =>
   safeKey(p.id) && [p.min, p.max, p.default].every(Number.isFinite) && p.min <= p.max;
 
-export function clampMouthMapping(mapping: Mapping, p: Pick<Parameter, 'min' | 'max'>): Mapping {
-  if (mapping.source !== 'mouthOpen') return mapping;
-  // Clip endpoints before interpolation so unreachable values do not amplify mouth opening.
-  return {
-    ...mapping,
-    outputMin: clamp(mapping.outputMin, p.min, p.max),
-    outputMax: clamp(mapping.outputMax, p.min, p.max),
-  };
-}
-
 export function defaultMapping(p: Parameter, s: Settings): Mapping | undefined {
   if (!validParameter(p) || !Object.hasOwn(parameterSources, p.id)) return;
 
@@ -887,7 +883,7 @@ export class FaceMapper {
       if (!validParameter(p)) continue;
 
       const custom = Object.hasOwn(s.mappings, p.id) ? s.mappings[p.id] : undefined;
-      const mapping = custom ? clampMouthMapping(custom, p) : defaultMapping(p, s);
+      const mapping = custom ?? defaultMapping(p, s);
       if (!mapping?.enabled) continue;
 
       let value = mapping.source === 'breath' ? breath : values?.[mapping.source];

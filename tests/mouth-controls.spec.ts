@@ -3,7 +3,7 @@ import { readdirSync } from 'node:fs';
 import { resolve } from 'node:path';
 
 for (const load of ['startup', 'scene'] as const) {
-  test(`${load} loading repairs old VTS mouth neutral and saves it without reapplying other settings`, async ({
+  test(`${load} loading repairs old VTS mouth gain and neutral without reapplying other settings`, async ({
     page,
   }) => {
     // Haru's mouth default is 1; use its neutral-zero angle parameter to exercise custom smile targets.
@@ -42,6 +42,9 @@ for (const load of ['startup', 'scene'] as const) {
         if (cmd === 'read_model_vts_config') return { Version: 1, Hotkeys: [], ParameterSettings: [{
           Input: 'MouthSmile', OutputLive2D: 'ParamAngleX', InputRangeLower: 0, InputRangeUpper: 1,
           OutputRangeLower: -1, OutputRangeUpper: 1, Smoothing: 0, ClampInput: false, ClampOutput: false
+        }, {
+          Input: 'MouthOpen', OutputLive2D: 'ParamMouthOpenY', InputRangeLower: 0, InputRangeUpper: 0.85,
+          OutputRangeLower: 0, OutputRangeUpper: 2.1, Smoothing: 0, ClampInput: false, ClampOutput: false
         }], PhysicsSettings: { Use: false } };
       }, { shouldMockEvents: true });\n`;
       await route.fulfill({ response, body: bootstrap + (await response.text()) });
@@ -53,12 +56,32 @@ for (const load of ['startup', 'scene'] as const) {
           modelPath,
           autoCheckUpdates: false,
           physicsStrength: 0.7,
+          depthSensitivity: 1,
           hotkeys: { 'clear-expressions': 'KeyK' },
-          vtsImportReport: ['导入 1 个映射'],
+          vtsImportReport: [
+            '导入 1 个映射',
+            load === 'startup'
+              ? 'ParamMouthOpenY：范围超出当前模型或映射限制，已跳过'
+              : 'ParamMouthOpenY：嘴部开合输出端点已限制到模型范围，避免提前达到张嘴上限；可调整输入范围或嘴部灵敏度改变幅度',
+          ],
           mappings: {
+            ...(load === 'scene'
+              ? {
+                  ParamMouthOpenY: {
+                    source: 'mouthOpen',
+                    inputMin: 0,
+                    inputMax: 0.85,
+                    outputMin: 0,
+                    outputMax: 1,
+                    smoothing: 0.2,
+                    enabled: false,
+                    clamp: false,
+                  },
+                }
+              : {}),
             ParamAngleX: {
               source: 'mouthSmile',
-              inputMin: 0,
+              inputMin: load === 'scene' ? -1 : 0,
               inputMax: 1,
               outputMin: -1,
               outputMax: 1,
@@ -107,6 +130,10 @@ for (const load of ['startup', 'scene'] as const) {
     await expect.poll(async () => (await saved()).mappings.ParamAngleX.inputMin).toBe(-1);
     const repaired = await saved();
     expect(repaired.mappings.ParamAngleX.smoothing).toBe(0.2);
+    expect(repaired.depthSensitivity).toBe(0.3);
+    expect(repaired.mappings.ParamMouthOpenY.outputMax).toBe(2.1);
+    expect(repaired.mappings.ParamMouthOpenY.smoothing).toBe(load === 'startup' ? 0 : 0.2);
+    expect(repaired.mappings.ParamMouthOpenY.enabled).toBe(load === 'startup');
     expect(repaired.physicsStrength).toBe(0.7);
     expect(repaired.hotkeys).toEqual({ 'clear-expressions': 'KeyK' });
     expect(repaired.profiles[model.path].mappings).toEqual(repaired.mappings);
@@ -124,6 +151,19 @@ for (const load of ['startup', 'scene'] as const) {
       ).ParamAngleX;
     });
     expect(neutral).toBe(0);
+    if (load === 'startup') {
+      await page.getByRole('button', { name: '角色', exact: true }).click();
+      await page.locator('#model-advanced > summary').click();
+      await page.locator('#parameter-search').fill('ParamMouthOpenY');
+      await page.getByRole('button', { name: '跟踪映射', exact: true }).click();
+      await expect(page.locator('#mapping-outputMax')).toHaveValue('2.1');
+      await page.locator('#mapping-outputMax').fill('2.3');
+      await page.locator('#save-mapping').click();
+      await expect.poll(async () => (await saved()).mappings.ParamMouthOpenY.outputMax).toBe(2.3);
+      await page.reload();
+      await expect(page.locator('#model-name')).toHaveText('Mouth');
+      expect((await saved()).mappings.ParamMouthOpenY.outputMax).toBe(2.3);
+    }
   });
 }
 

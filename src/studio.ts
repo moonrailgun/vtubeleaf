@@ -10,7 +10,6 @@ import {
   defaults,
   readSettings,
   FaceMapper,
-  clampMouthMapping,
   faceSources,
   rememberProfile,
   switchProfile,
@@ -28,7 +27,7 @@ import { MotionRecording } from './recording';
 import { sampleCalibration } from './calibration';
 import { AudioLipSync, type Vowel } from './lipsync';
 import { VirtualCamera, type CameraStatus } from './virtual-camera';
-import { importVtsConfig, repairVtsSmileMappings } from './vts';
+import { importVtsConfig, repairVtsMappings } from './vts';
 import { readComposition, snapshotScene, type Composition, type SceneItem } from './scenes';
 import type { OutputFrame, OutputState } from './output';
 import { AppUpdater } from './updater';
@@ -495,8 +494,13 @@ export function createStudio(
           p.default < Math.max(m.outputMin, m.outputMax)
         );
       });
-    // Existing profiles retain their tuning; only unchanged legacy smile ranges are repaired.
-    if (native && (!existingProfile || needsSmileRepair)) {
+    const needsMouthRepair = existingProfile?.vtsImportReport.some(
+      (line) =>
+        line.includes('范围超出当前模型或映射限制，已跳过') ||
+        line.includes('嘴部开合输出端点已限制'),
+    );
+    // Read the original only for known legacy imports; repairs retain subsequent tuning.
+    if (native && (!existingProfile || needsSmileRepair || needsMouthRepair)) {
       try {
         const raw = await invoke<unknown>('read_model_vts_config', { id: next.id });
         if (!disposed && operation === modelOperation && raw != null)
@@ -537,8 +541,8 @@ export function createStudio(
     if (vts && !existingProfile) {
       applyVts(vts);
       vtsSummary = vts.summary;
-    } else if (vts && repairVtsSmileMappings(settings.mappings, vts)) {
-      vtsSummary = '已修正旧 VTS 微笑映射的中立位置。';
+    } else if (vts && repairVtsMappings(settings.mappings, vts, settings.vtsImportReport)) {
+      vtsSummary = '已修正旧 VTS 嘴部映射，保留作者开合幅度并对齐微笑中立位置。';
       settings.vtsImportReport.push(vtsSummary);
     } else if (vtsError && !existingProfile) settings.vtsImportReport = [vtsError];
     settings.parameterOverrides = { ...settings.defaultParameterOverrides };
@@ -791,8 +795,8 @@ export function createStudio(
         if (disposed || operation !== modelOperation) return;
         settings = sceneSettings();
         let vtsSummary = '';
-        if (vts && repairVtsSmileMappings(settings.mappings, vts)) {
-          vtsSummary = '已修正旧 VTS 微笑映射的中立位置。';
+        if (vts && repairVtsMappings(settings.mappings, vts, settings.vtsImportReport)) {
+          vtsSummary = '已修正旧 VTS 嘴部映射，保留作者开合幅度并对齐微笑中立位置。';
           settings.vtsImportReport.push(vtsSummary);
         }
         heldExpressions.clear();
@@ -1183,7 +1187,7 @@ export function createStudio(
         throw new Error(
           `请填写有效范围：输入下限小于上限，输出绝对值不超过 1000000，平滑时间为 0 至 0.5 秒。最终参数会限制在模型范围内。`,
         );
-      settings.mappings[id] = clampMouthMapping(mapping, parameter);
+      settings.mappings[id] = mapping;
       profileRevision++;
       mapper.reset();
       changed();
