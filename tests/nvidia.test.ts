@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { readSettings } from '../src/state.ts';
+import { FaceMapper, readSettings } from '../src/state.ts';
 import { fromNvidia } from '../src/nvidia.ts';
 
 test('NVIDIA settings survive reload while invalid paths are discarded', () => {
@@ -51,7 +51,7 @@ test('NVIDIA expressions, independent brows and quaternion use the existing face
   for (const [rotation, key, expected] of [
     [[sine, 0, 0, cosine], 'pitch', -30],
     [[0, sine, 0, cosine], 'yaw', 30],
-    [[0, 0, sine, cosine], 'roll', 30],
+    [[0, 0, sine, cosine], 'roll', -30],
   ] as const)
     assert.ok(Math.abs(fromNvidia({ ...packet, rotation })![key] - expected) < 0.001);
   for (const bad of [
@@ -64,4 +64,26 @@ test('NVIDIA expressions, independent brows and quaternion use the existing face
     { ...packet, rotation: [0, 0, 0, Infinity] },
   ])
     assert.equal(fromNvidia(bad), null);
+});
+
+test('NVIDIA camera-space tilts drive Live2D AngleZ in the preview direction', () => {
+  const parameters = [{ id: 'ParamAngleZ', min: -30, max: 30, default: 0 }];
+  for (const [angle, expected] of [
+    [30, -30],
+    [-30, 30],
+  ]) {
+    // In NVIDIA's +Y-up camera frame, positive Z rotation tilts the head screen-left.
+    const radians = (angle * Math.PI) / 180;
+    const face = fromNvidia({
+      detected: true,
+      rotation: [0, 0, Math.sin(radians / 2), Math.cos(radians / 2)],
+      expressions: Array(53).fill(0),
+    });
+    assert.ok(face);
+    for (const motionMirror of [false, true]) {
+      const settings = readSettings({ motionMirror, headSmooth: 0 });
+      const output = new FaceMapper().map(face, parameters, settings, 1 / 30);
+      assert.ok(Math.abs(output.ParamAngleZ - (motionMirror ? -expected : expected)) < 1e-8);
+    }
+  }
 });

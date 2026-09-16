@@ -68,6 +68,7 @@ test('calibrated blink reaches closed and open endpoints at every sensitivity wi
   ];
   for (const eyeSensitivity of [0.3, 1, 2]) {
     const s = readSettings({
+      motionMirror: false,
       eyeSensitivity,
       eyeSmooth: 0,
       mouthSmooth: 0,
@@ -281,14 +282,15 @@ test('smoothing is time based and eyes respond independently', () => {
     { id: 'ParamEyeLOpen', min: 0, max: 1, default: 1 },
   ];
   const face = { ...NEUTRAL, yaw: 30, eyeLeft: 0 };
+  const settings = { ...defaults, motionMirror: false };
   const a = new FaceMapper(),
     b = new FaceMapper();
   let av = {},
     bv = {};
-  for (let i = 0; i < 30; i++) av = a.map(face, p, defaults, 1 / 30);
-  for (let i = 0; i < 60; i++) bv = b.map(face, p, defaults, 1 / 60);
+  for (let i = 0; i < 30; i++) av = a.map(face, p, settings, 1 / 30);
+  for (let i = 0; i < 60; i++) bv = b.map(face, p, settings, 1 / 60);
   assert.ok(Math.abs(av.ParamAngleX - bv.ParamAngleX) < 1e-8);
-  const first = new FaceMapper().map(face, p, defaults, 1 / 30);
+  const first = new FaceMapper().map(face, p, settings, 1 / 30);
   assert.ok(1 - first.ParamEyeLOpen > Math.abs(first.ParamAngleX) / 30);
 });
 test('MediaPipe neutral matrix and blendshapes produce finite common frame', () => {
@@ -325,6 +327,89 @@ test('MediaPipe head-up and head-down drive Live2D AngleY in the same direction 
       );
     }
   }
+});
+
+test('MediaPipe screen-side tilts drive head and custom body mappings in the preview direction', () => {
+  const parameters = [
+    { id: 'ParamAngleZ', min: -30, max: 30, default: 0 },
+    { id: 'ParamBodyAngleZ', min: -10, max: 10, default: 0 },
+  ];
+  const c = Math.sqrt(3) / 2;
+  for (const [s, expected] of [
+    [0.5, 30],
+    [-0.5, -30],
+  ]) {
+    // Camera +Y points up: this column-major matrix tilts the head's top toward +X.
+    const face = fromMediaPipe([], [c, -s, 0, 0, s, c, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1]);
+    assert.ok(face);
+    for (const motionMirror of [false, true]) {
+      const settings = readSettings({
+        motionMirror,
+        headSmooth: 0,
+        mappings: {
+          ParamBodyAngleZ: {
+            source: 'roll',
+            inputMin: -1,
+            inputMax: 1,
+            outputMin: -10,
+            outputMax: 10,
+            smoothing: 0,
+            enabled: true,
+          },
+        },
+      });
+      const output = new FaceMapper().map(face, parameters, settings, 1 / 30);
+      const direction = motionMirror ? -1 : 1;
+      assert.ok(Math.abs(output.ParamAngleZ - expected * direction) < 1e-8);
+      assert.ok(Math.abs(output.ParamBodyAngleZ - (expected * direction) / 3) < 1e-8);
+    }
+  }
+});
+
+test('shoulder tilts drive body AngleZ in the same screen direction with either mirror setting', () => {
+  const parameters = [{ id: 'ParamBodyAngleZ', min: -10, max: 10, default: 0 }];
+  for (const [dy, expected] of [
+    [0.1, 10],
+    [-0.1, -10],
+  ]) {
+    const points = Array.from({ length: 33 }, () => ({ x: 0, y: 0, z: 0, visibility: 0 }));
+    // Pose +Y points down: a lower screen-right shoulder means the torso leans right.
+    points[11] = { x: 0.5 + Math.sqrt(3) / 10, y: 0.5 + dy, z: 0, visibility: 1 };
+    points[12] = { x: 0.5 - Math.sqrt(3) / 10, y: 0.5 - dy, z: 0, visibility: 1 };
+    const body = state.fromPose(points, points);
+    for (const motionMirror of [false, true]) {
+      const settings = readSettings({ motionMirror, headSmooth: 0 });
+      const output = new FaceMapper().map(body, parameters, settings, 1 / 30);
+      assert.ok(Math.abs(output.ParamBodyAngleZ - (motionMirror ? -expected : expected)) < 1e-8);
+    }
+  }
+});
+
+test('motion mirroring swaps winks and brows after per-eye calibration and side linking', () => {
+  const settings = readSettings({
+    motionMirror: true,
+    eyeLink: 'side',
+    eyeLinkAngle: 25,
+    eyeClosedLeft: 0.1,
+    eyeClosedRight: 0.2,
+    neutral: { ...NEUTRAL, eyeLeft: 0.8, eyeRight: 0.9, browLeft: 0.1, browRight: 0.3 },
+  });
+  const face = { ...NEUTRAL, eyeLeft: 0.1, eyeRight: 0.9, browLeft: 0.7, browRight: 0.1 };
+  for (const motionMirror of [false, true]) {
+    const values = state.normalizedFace(face, { ...settings, motionMirror });
+    assert.equal(values.eyeLeft, motionMirror ? 1 : 0);
+    assert.equal(values.eyeRight, motionMirror ? 0 : 1);
+    assert.ok(Math.abs(values.browLeft - (motionMirror ? -0.2 : 0.6)) < 1e-8);
+    assert.ok(Math.abs(values.browRight - (motionMirror ? 0.6 : -0.2)) < 1e-8);
+  }
+  const linked = state.normalizedFace({ ...face, yaw: 30 }, settings);
+  assert.equal(linked.eyeLeft, 1);
+  assert.equal(linked.eyeRight, 0.5);
+  const partial = state.normalizedFace({ eyeLeft: 0.1, browLeft: 0.7 }, settings);
+  assert.equal(partial.eyeLeft, undefined);
+  assert.equal(partial.eyeRight, 0);
+  assert.equal(partial.browLeft, undefined);
+  assert.ok(Math.abs(partial.browRight - 0.6) < 1e-8);
 });
 
 test('custom mappings use normalized source endpoints and clamp to the model range', () => {
@@ -463,7 +548,7 @@ test('optional face channels are validated and remain absent when unavailable', 
 
 test('auto blink owns lost eyes while live eye tracking still wins', () => {
   const p = [{ id: 'ParamEyeLOpen', min: 0, max: 1, default: 1 }];
-  const s = readSettings({ autoBlink: true, eyeSmooth: 0 });
+  const s = readSettings({ autoBlink: true, eyeSmooth: 0, motionMirror: false });
   const mapper = new FaceMapper();
   assert.deepEqual(mapper.map({ ...NEUTRAL, eyeLeft: 0 }, p, s, 1 / 30), { ParamEyeLOpen: 0 });
   assert.deepEqual(mapper.map(null, p, s, 1 / 30), {});

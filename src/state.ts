@@ -815,6 +815,12 @@ export function normalizedFace(face: Partial<Face>, s: Settings): Partial<Record
     values[key] = key.startsWith('position') ? value : clamp(value, -1, 1);
   }
 
+  if (s.motionMirror) {
+    // Calibrate and link anatomical sides first, then mirror the displayed expressions.
+    [values.eyeLeft, values.eyeRight] = [values.eyeRight, values.eyeLeft];
+    [values.browLeft, values.browRight] = [values.browRight, values.browLeft];
+  }
+
   if (
     values.brows === undefined &&
     (values.browLeft !== undefined || values.browRight !== undefined)
@@ -930,7 +936,8 @@ export function fromMediaPipe(
     yaw: Math.asin(clamp(-m[2], -1, 1)) * degrees,
     // Live2D AngleY is positive when looking up; MediaPipe's X rotation is the opposite.
     pitch: -Math.atan2(m[6], m[10]) * degrees,
-    roll: Math.atan2(m[1], m[0]) * degrees,
+    // Camera +Y points up; Live2D AngleZ is positive for a screen-right tilt.
+    roll: -Math.atan2(m[1], m[0]) * degrees,
     eyeLeft: 1 - score('eyeBlinkLeft'),
     eyeRight: 1 - score('eyeBlinkRight'),
     mouthOpen: score('jawOpen'),
@@ -994,7 +1001,8 @@ export function fromPose(image: PosePoint[], world: PosePoint[]): UpperBody {
   const degrees = 180 / Math.PI;
   const body: UpperBody = {
     bodyYaw: clamp(-Math.atan2(dz, dx) * degrees, -90, 90),
-    bodyRoll: clamp(-Math.atan2(dy, dx) * degrees, -90, 90),
+    // Pose +Y points down, so a lower screen-right shoulder is a positive tilt.
+    bodyRoll: clamp(Math.atan2(dy, dx) * degrees, -90, 90),
   };
   // Hips outside the image are model estimates, not evidence of a visible torso.
   if (valid(23, 24)) {

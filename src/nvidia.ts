@@ -23,7 +23,8 @@ export function fromNvidia(value: unknown): Face | null {
   return {
     yaw: Math.asin(clamp(2 * (w * y - z * x), -1, 1)) * degrees,
     pitch: -Math.atan2(2 * (w * x + y * z), 1 - 2 * (x * x + y * y)) * degrees,
-    roll: Math.atan2(2 * (w * z + x * y), 1 - 2 * (y * y + z * z)) * degrees,
+    // NVIDIA's +Y-up camera frame has the opposite roll sign to Live2D AngleZ.
+    roll: -Math.atan2(2 * (w * z + x * y), 1 - 2 * (y * y + z * z)) * degrees,
     eyeLeft: 1 - score(10),
     eyeRight: 1 - score(11),
     mouthOpen: score(26),
