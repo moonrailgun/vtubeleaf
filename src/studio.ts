@@ -842,6 +842,7 @@ export function createStudio(
       tracking = 'starting';
       lastFace = null;
       lastFaceAt = 0;
+      mapper.reset();
       lastDetectedFaceAt = performance.now();
       publish();
       try {
@@ -1095,8 +1096,9 @@ export function createStudio(
           const angle = (settings.rotation * Math.PI) / 180;
           const x = dx * width,
             y = dy * height;
-          dx = (x * Math.cos(angle) + y * Math.sin(angle)) / (width * settings.zoom);
-          dy = (-x * Math.sin(angle) + y * Math.cos(angle)) / (height * settings.zoom);
+          const zoom = settings.zoom * (stage?.depthScale ?? 1);
+          dx = (x * Math.cos(angle) + y * Math.sin(angle)) / (width * zoom);
+          dy = (-x * Math.sin(angle) + y * Math.cos(angle)) / (height * zoom);
         }
         if (!item.locked) actions.updateItem(item.id, { x: item.x + dx, y: item.y + dy });
         return;
@@ -1136,6 +1138,7 @@ export function createStudio(
       cancelCalibration();
       for (const key of [
         'sensitivity',
+        'depthSensitivity',
         'eyeSensitivity',
         'eyeClosedThreshold',
         'eyeClosedLeft',
@@ -1496,6 +1499,8 @@ export function createStudio(
       (now - lastFaceAt < settings.lostDelay * 1000 || settings.lostMode === 'hold')
         ? lastFace
         : null;
+    // Microphone-only frames must not hold camera depth after tracking stops.
+    const trackingFace = face;
     if (audio.active && tracking !== 'paused')
       face = {
         ...face,
@@ -1505,7 +1510,13 @@ export function createStudio(
       try {
         stage.trackingLost =
           tracking === 'running' && now - lastDetectedFaceAt >= settings.lostDelay * 1000;
-        stage.draw(mapper.map(face, stage.parameters, settings, dt / 1000), dt);
+        stage.draw(
+          mapper.map(face, stage.parameters, settings, dt / 1000, trackingFace),
+          dt,
+          {},
+          undefined,
+          mapper.depthScale,
+        );
       } catch (error) {
         failedRevision = modelRevision;
         report(error instanceof Error ? `模型渲染失败：${error.message}` : error);
@@ -1521,6 +1532,7 @@ export function createStudio(
         parameters: stage?.frame ?? {},
         parts: stage?.parts ?? {},
         sceneFrames: stage?.sceneFrames ?? {},
+        depthScale: stage?.depthScale ?? 1,
       } satisfies OutputFrame)
         .catch(() => {
           outputOpen = false;

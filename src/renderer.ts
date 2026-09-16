@@ -110,6 +110,8 @@ export class AvatarStage {
   private compositionGeneration = 0;
   private values: Record<string, number> = {};
   private settings?: Settings;
+  private modelScale = 1;
+  depthScale = 1;
   private observer?: ResizeObserver;
   parameters: Parameter[] = [];
   motions: Motion[] = [];
@@ -614,13 +616,13 @@ export class AvatarStage {
     const model = this.model,
       s = this.settings;
     model.visible = s.modelVisible;
-    const fit =
+    this.modelScale =
       Math.min(width / model.internalModel.width, height / model.internalModel.height) *
       0.92 *
       s.zoom;
     model.anchor.set(0.5);
     model.rotation = (s.rotation * Math.PI) / 180;
-    model.scale.set(fit);
+    model.scale.set(this.modelScale * this.depthScale);
     model.position.set(width * (0.5 + s.x), height * (0.5 + s.y));
   }
 
@@ -773,7 +775,10 @@ export class AvatarStage {
     dt: number,
     parts: Record<string, number> = {},
     sceneFrames?: SceneFrames,
+    depthScale = 1,
   ) {
+    this.depthScale = Number.isFinite(depthScale) ? Math.min(1.5, Math.max(0.5, depthScale)) : 1;
+    if (!this.sharedApp) this.model?.scale.set(this.modelScale * this.depthScale);
     for (const [id, expiry] of this.expressionExpiry)
       if (performance.now() >= expiry) this.setExpression(id, false);
     this.values = values;
@@ -793,6 +798,7 @@ export class AvatarStage {
         this.app.screen.height,
         dt,
         sceneFrames,
+        this.depthScale,
       );
     if (!this.sharedApp) this.app.render();
   }
@@ -803,6 +809,7 @@ export class AvatarStage {
     this.expressionLayers.clear();
     this.expressionIds.clear();
     this.trackingLost = false;
+    this.depthScale = 1;
     this.model?.destroy({ children: true, texture: true, baseTexture: true });
     this.model = undefined;
     this.urls.forEach(URL.revokeObjectURL);

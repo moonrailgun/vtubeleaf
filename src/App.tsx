@@ -885,6 +885,12 @@ export function App() {
             </Select>
             {toggle('motionMirror', '镜像角色转头方向')}
             {range('sensitivity', '头部灵敏度', 0.2, 3, 0.1)}
+            {range('depthSensitivity', '前后移动幅度', 0, 2, 0.1)}
+            <p className="hint">
+              {s.engine === 'nvidia'
+                ? '当前 NVIDIA 追踪未提供距离数据，前后移动暂不可用。'
+                : '靠近变大，远离变小；设为 0 关闭。以校准位置或开始追踪时的位置为基准，共用头部平滑。'}
+            </p>
             {range('headSmooth', '头部平滑', 0, 0.5, 0.01)}
             <Fold title="眼睛、嘴部与丢脸恢复">
               <label htmlFor="eye-link">双眼联动</label>

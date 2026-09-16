@@ -211,7 +211,14 @@ export class SceneLayers {
     );
   }
 
-  draw(s: Settings, width: number, height: number, dt: number, frames?: SceneFrames) {
+  draw(
+    s: Settings,
+    width: number,
+    height: number,
+    dt: number,
+    frames?: SceneFrames,
+    depthScale = 1,
+  ) {
     for (const visual of this.visuals) {
       const item = visual.item && s.composition.items.find((i) => i.id === visual.item!.id);
       const node = visual.node;
@@ -229,7 +236,7 @@ export class SceneLayers {
         node.zIndex = (item.behind ? -500 : 1) + s.composition.items.indexOf(item);
         const attached = item.attach === 'model';
         const angle = attached ? (s.rotation * Math.PI) / 180 : 0;
-        const zoom = attached ? s.zoom : 1;
+        const zoom = attached ? s.zoom * depthScale : 1;
         const x = item.x * width * zoom,
           y = item.y * height * zoom;
         node.position.set(

@@ -5,10 +5,22 @@ test('render workers follow tracking start and stop in both windows', async ({ p
     const response = await route.fetch();
     const bootstrap = `import { mockIPC, mockWindows } from '/node_modules/@tauri-apps/api/mocks.js';
       import { Tracker } from '/src/tracker.ts';
+      import { AvatarStage } from '/src/renderer.ts';
+      import { NEUTRAL } from '/src/state.ts';
       // Exercise the render lifecycle without opening a camera or loading inference models.
-      Tracker.prototype.start = async () => true;
+      Tracker.prototype.start = async function () {
+        window.sendFace = face => this.receive(face);
+        return true;
+      };
+      const draw = AvatarStage.prototype.draw;
+      AvatarStage.prototype.draw = function (...args) {
+        draw.apply(this, args);
+        if (this.passive) window.outputDepth = this.depthScale;
+        else window.mainDepth = this.depthScale;
+      };
       window.isTauri = true; mockWindows('output');
       mockIPC(cmd => {
+        if (cmd === 'load_settings') return { neutral: { ...NEUTRAL, positionZ: -4 }, headSmooth: 0, lostMode: 'hold' };
         if (cmd === 'list_models') return { models: [], directory: '/test/models', errors: [] };
       }, { shouldMockEvents: true });
       const invoke = window.__TAURI_INTERNALS__.invoke;
@@ -42,8 +54,17 @@ test('render workers follow tracking start and stop in both windows', async ({ p
   for (let i = 0; i < 2; i++) {
     await page.evaluate(() => (window as any).frameTest.studio.actions.start());
     await expect.poll(() => page.workers().length).toBe(2);
+    await page.evaluate(() => {
+      (window as any).frameTest.studio.actions.setSetting('headSmooth', 0);
+      (window as any).sendFace({ positionZ: -4 });
+    });
+    await expect.poll(() => page.evaluate(() => (window as any).mainDepth)).toBe(1);
+    await page.evaluate(() => (window as any).sendFace({ positionZ: -3.2 }));
+    await expect.poll(() => page.evaluate(() => (window as any).mainDepth)).toBe(1.25);
+    await expect.poll(() => page.evaluate(() => (window as any).outputDepth)).toBe(1.25);
     await page.evaluate(() => (window as any).frameTest.studio.actions.stop());
     await expect.poll(() => page.workers().length).toBe(0);
+    await expect.poll(() => page.evaluate(() => (window as any).outputDepth)).toBeLessThan(1.01);
   }
   await page.evaluate(() => (window as any).frameTest.studio.destroy());
 });

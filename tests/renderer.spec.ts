@@ -1,5 +1,5 @@
 import { test, expect, type Page } from '@playwright/test';
-import { readFileSync } from 'node:fs';
+import { readFileSync, writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 
 // Keep the real Cubism model and replace only authorable metadata/action files.
@@ -121,7 +121,7 @@ async function loadControls(page: Page) {
       stage.display(settings);
       await stage.load(info);
       stage.draw({ ParamAngleX: 0 }, 16);
-      (window as any).rendererControls = { stage, settings, container };
+      (window as any).rendererControls = { stage, settings, container, info };
     },
     {
       id: 'renderer-controls',
@@ -139,6 +139,114 @@ test.afterEach(async ({ page }) => {
     controls?.stage.destroy();
     controls?.container.remove();
   });
+});
+
+test('depth scales the avatar and attached props and matches passive output', async ({
+  page,
+}, testInfo) => {
+  await loadControls(page);
+  const result = await page.evaluate(async () => {
+    const { stage, settings, container, info } = (window as any).rendererControls;
+    const module = '/src/renderer.ts';
+    const { AvatarStage } = await import(module);
+    const state = '/src/state.ts';
+    const { readSettings } = await import(state);
+    const s = readSettings({
+      ...settings,
+      zoom: 0.7,
+      composition: {
+        items: [
+          {
+            id: 'attached',
+            kind: 'live2d',
+            source: info.path,
+            x: 0.2,
+            scale: 0.15,
+            attach: 'model',
+          },
+          {
+            id: 'fixed',
+            kind: 'live2d',
+            source: info.path,
+            x: -0.3,
+            scale: 0.15,
+            attach: 'canvas',
+          },
+        ],
+      },
+    });
+    await stage.compose(s, [info]);
+    const outputContainer = container.cloneNode() as HTMLElement;
+    outputContainer.style.left = '520px';
+    document.body.append(outputContainer);
+    const output = new AvatarStage(outputContainer, () => {}, true);
+    try {
+      await output.load(info);
+      await output.compose(s, [info]);
+      const sample = (depth: number) => {
+        stage.draw({}, 16, {}, undefined, depth);
+        const [attached, fixed] = stage.layers.visuals;
+        return {
+          scale: stage.content.children[0].scale.x,
+          attachedScale: attached.node.scale.x,
+          attachedOffset: attached.node.x - 250,
+          fixedScale: fixed.node.scale.x,
+          fixedX: fixed.node.x,
+          image: stage.canvas.toDataURL(),
+        };
+      };
+      const neutral = sample(1),
+        near = sample(1.25),
+        far = sample(0.8);
+      sample(1.25);
+      output.draw(stage.frame, 16, stage.parts, stage.sceneFrames, stage.depthScale);
+      const pixels = (s: any) => Array.from(s.app.renderer.extract.pixels(s.app.stage));
+      const a = pixels(stage),
+        b = pixels(output);
+      const parity = {
+        different: a.filter((value, i) => value !== b[i]).length,
+        lengths: [a.length, b.length],
+        mainBounds: stage.content.getBounds().toString(),
+        outputBounds: output.content.getBounds().toString(),
+        mainParams: stage.frame,
+        outputParams: output.frame,
+        mainParts: stage.parts,
+        outputParts: output.parts,
+      };
+      stage.display(s);
+      const afterLayout = stage.content.children[0].scale.x;
+      const images = [stage.canvas.toDataURL(), output.canvas.toDataURL()];
+      stage.draw({}, 0, {}, undefined, NaN);
+      return { neutral, near, far, parity, afterLayout, invalid: stage.depthScale, images };
+    } finally {
+      output.destroy();
+      outputContainer.remove();
+    }
+  });
+  for (const [frame, ratio] of [
+    [result.near, 1.25],
+    [result.far, 0.8],
+  ] as const) {
+    expect(frame.scale / result.neutral.scale).toBeCloseTo(ratio);
+    expect(frame.attachedScale / result.neutral.attachedScale).toBeCloseTo(ratio);
+    expect(frame.attachedOffset / result.neutral.attachedOffset).toBeCloseTo(ratio);
+    expect(frame.fixedScale).toBe(result.neutral.fixedScale);
+    expect(frame.fixedX).toBe(result.neutral.fixedX);
+  }
+  expect(result.afterLayout).toBe(result.near.scale);
+  expect(result.invalid).toBe(1);
+  for (const [name, data] of [
+    ['neutral', result.neutral.image],
+    ['near', result.near.image],
+    ['far', result.far.image],
+    ['preview', result.images[0]],
+    ['output', result.images[1]],
+  ]) {
+    const path = testInfo.outputPath(`depth-${name}.png`);
+    writeFileSync(path, Buffer.from(data.split(',')[1], 'base64'));
+    await testInfo.attach(`depth-${name}`, { path, contentType: 'image/png' });
+  }
+  expect(result.parity.different, JSON.stringify(result.parity)).toBe(0);
 });
 
 test('CDI names and groups load while manual overrides take final priority and can be released', async ({

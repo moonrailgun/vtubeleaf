@@ -20,6 +20,7 @@ export type OutputFrame = {
   parameters: Record<string, number>;
   parts: Record<string, number>;
   sceneFrames: SceneFrames;
+  depthScale: number;
 };
 
 export function Output() {
@@ -35,6 +36,7 @@ export function Output() {
     let values: Record<string, number> = {};
     let parts: Record<string, number> = {};
     let sceneFrames: SceneFrames = {};
+    let depthScale = 1;
     let received = 0;
     let tracking = false;
     let disposed = false;
@@ -112,6 +114,7 @@ export function Output() {
                   values = {};
                   parts = {};
                   sceneFrames = {};
+                  depthScale = 1;
                 } else {
                   await stage?.compose(settings, payload.models ?? []);
                 }
@@ -135,6 +138,7 @@ export function Output() {
           values = payload.parameters;
           parts = payload.parts;
           sceneFrames = payload.sceneFrames ?? {};
+          depthScale = Number.isFinite(payload.depthScale) ? payload.depthScale : 1;
           received = performance.now();
         }),
       );
@@ -153,11 +157,13 @@ export function Output() {
     const stopRendering = startFrameLoop(
       () => {
         const now = performance.now();
-        if (now - received > 1000)
+        if (now - received > 1000) {
           for (const p of stage?.parameters ?? [])
             values[p.id] =
               (values[p.id] ?? p.default) + (p.default - (values[p.id] ?? p.default)) * 0.15;
-        stage?.draw(values, now - before, parts, sceneFrames);
+          depthScale += (1 - depthScale) * 0.15;
+        }
+        stage?.draw(values, now - before, parts, sceneFrames, depthScale);
         before = now;
       },
       () => 30,

@@ -96,6 +96,7 @@ export type HotkeyOptions = {
 export type ModelProfile = {
   motionMirror: boolean;
   sensitivity: number;
+  depthSensitivity: number;
   eyeSensitivity: number;
   eyeClosedThreshold: number;
   eyeClosedLeft: number | null;
@@ -199,6 +200,7 @@ export const defaults: Settings = {
   micNoiseGate: 0.02,
   motionMirror: true,
   sensitivity: 1,
+  depthSensitivity: 1,
   eyeSensitivity: 1,
   eyeClosedThreshold: 0.25,
   eyeClosedLeft: null,
@@ -263,6 +265,7 @@ const faceKeys = Object.keys(faceSources) as FaceKey[];
 
 const profileRanges = {
   sensitivity: [0.2, 3],
+  depthSensitivity: [0, 2],
   eyeSensitivity: [0.3, 2],
   eyeClosedThreshold: [0, 0.6],
   eyeLinkAngle: [10, 60],
@@ -331,6 +334,7 @@ function readProfile(v: unknown): ModelProfile {
   const p: ModelProfile = {
     motionMirror: defaults.motionMirror,
     sensitivity: defaults.sensitivity,
+    depthSensitivity: defaults.depthSensitivity,
     eyeSensitivity: defaults.eyeSensitivity,
     eyeClosedThreshold: defaults.eyeClosedThreshold,
     eyeClosedLeft: null,
@@ -837,10 +841,14 @@ export function normalizedFace(face: Partial<Face>, s: Settings): Partial<Record
 export class FaceMapper {
   private current: Record<string, number> = {};
   private elapsed = 0;
+  private depthNeutral?: number;
+  depthScale = 1;
 
   reset() {
     this.current = {};
     this.elapsed = 0;
+    this.depthNeutral = undefined;
+    this.depthScale = 1;
   }
 
   map(
@@ -848,8 +856,25 @@ export class FaceMapper {
     parameters: Parameter[],
     s: Settings,
     dt: number,
+    trackingFace: Partial<Face> | null = face,
   ): Record<string, number> {
     this.elapsed += clamp(Number.isFinite(dt) ? dt : 0, 0, 0.1);
+    const depth = trackingFace?.positionZ;
+    const validDepth = depth !== undefined && Number.isFinite(depth) && Math.abs(depth) > 0.0001;
+    const calibrated = s.neutral?.positionZ;
+    // Relative distance keeps MediaPipe and OpenSeeFace's different units equivalent.
+    const reference =
+      calibrated !== undefined && Number.isFinite(calibrated) && Math.abs(calibrated) > 0.0001
+        ? calibrated
+        : (this.depthNeutral ??= validDepth ? depth : undefined);
+    const ratio = validDepth && reference !== undefined ? reference / depth : 0;
+    const hasDepth = ratio > 0 && Number.isFinite(ratio);
+    if (hasDepth || !trackingFace || s.lostMode !== 'hold' || s.depthSensitivity === 0) {
+      const target = hasDepth ? clamp(1 + (ratio - 1) * s.depthSensitivity, 0.5, 1.5) : 1;
+      const tau = hasDepth ? s.headSmooth : Math.max(s.headSmooth, 0.12);
+      const alpha = tau <= 0 ? 1 : 1 - Math.exp(-clamp(Number.isFinite(dt) ? dt : 0, 0, 0.1) / tau);
+      this.depthScale += (target - this.depthScale) * alpha;
+    }
     const values = face ? normalizedFace(face, s) : null;
     const breath = (1 - Math.cos((this.elapsed * Math.PI * 2) / 3.2345)) / 2;
     const next: Record<string, number> = {};
