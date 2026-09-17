@@ -14,6 +14,8 @@ export default defineConfig({
         '--enable-unsafe-swiftshader',
         '--use-fake-device-for-media-stream',
         '--use-fake-ui-for-media-stream',
+        // Keep Web Audio running independently of the host's physical output device.
+        '--disable-audio-output',
       ],
     },
   },
