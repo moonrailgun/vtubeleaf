@@ -748,9 +748,8 @@ export function normalizedFace(face: Partial<Face>, s: Settings): Partial<Record
   ] as const)
     if (Number.isFinite(face[key])) values[key] = clamp(face[key]!, 0, 1);
   if (s.lipSyncMode !== 'off' && values.voiceVolume !== undefined) {
-    const calibrated = ['A', 'I', 'U', 'E', 'O'].every((v) => Object.hasOwn(s.voiceTemplates, v));
     const voice =
-      s.lipSyncMode === 'vowels' && calibrated
+      s.lipSyncMode === 'vowels'
         ? ((values.voiceA ?? 0) +
             (values.voiceI ?? 0) * 0.35 +
             (values.voiceU ?? 0) * 0.4 +

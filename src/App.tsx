@@ -987,33 +987,54 @@ export function App() {
                 <SelectContent>
                   <SelectItem value="off">仅摄像头</SelectItem>
                   <SelectItem value="volume">声音音量</SelectItem>
-                  <SelectItem value="vowels">校准元音</SelectItem>
+                  <SelectItem value="vowels">元音识别</SelectItem>
                 </SelectContent>
               </Select>
               {range('lipSyncBlend', '声音口型占比', 0, 1, 0.05)}
               {range('micGain', '麦克风增益', 0.1, 20, 0.1)}
               {range('micNoiseGate', '噪声门限', 0, 0.2, 0.005)}
-              <p className="hint">
-                点击字母后持续发该音一秒。五项均完成后才识别元音；未完成时按音量开合。独立元音需在角色参数映射中绑定。
-              </p>
-              <div className="resource-buttons">
-                {vowels.map((vowel) => (
-                  <Button
-                    key={vowel}
-                    id={`calibrate-voice-${vowel}`}
-                    variant="outline"
-                    size="sm"
-                    disabled={
-                      !view.micActive || !!view.voiceCalibration || view.tracking === 'paused'
-                    }
-                    onClick={() => run(() => a?.calibrateVoice(vowel))}
-                  >
-                    {view.voiceCalibration === vowel
-                      ? `${vowel} 采样中`
-                      : `${vowel}${s.voiceTemplates[vowel] ? ' ✓' : ''}`}
-                  </Button>
-                ))}
-              </div>
+              {s.lipSyncMode === 'vowels' && (
+                <>
+                  <p className="hint">
+                    已内置通用元音模板，无需校准即可使用。识别不准时，可展开个人校准来适配自己的声音。
+                  </p>
+                  <Fold title="个人元音校准（可选）">
+                    <p className="hint">
+                      点击字母后持续发该音一秒。✓
+                      表示已使用个人校准，可再次点击重新采样；其余使用内置模板。独立元音需在角色参数映射中绑定。
+                    </p>
+                    <div className="resource-buttons">
+                      {vowels.map((vowel) => (
+                        <Button
+                          key={vowel}
+                          id={`calibrate-voice-${vowel}`}
+                          variant="outline"
+                          size="sm"
+                          disabled={
+                            !view.micActive || !!view.voiceCalibration || view.tracking === 'paused'
+                          }
+                          onClick={() => run(() => a?.calibrateVoice(vowel))}
+                        >
+                          {view.voiceCalibration === vowel
+                            ? `${vowel} 采样中`
+                            : `${vowel}${s.voiceTemplates[vowel] ? ' ✓' : ''}`}
+                        </Button>
+                      ))}
+                    </div>
+                    <Button
+                      id="reset-voice-calibration"
+                      variant="outline"
+                      size="sm"
+                      disabled={
+                        !!view.voiceCalibration || !vowels.some((vowel) => s.voiceTemplates[vowel])
+                      }
+                      onClick={() => set('voiceTemplates', {})}
+                    >
+                      恢复内置模板
+                    </Button>
+                  </Fold>
+                </>
+              )}
             </Fold>
           </section>
           <section id="library" className="panel" hidden={tab !== 'library'}>

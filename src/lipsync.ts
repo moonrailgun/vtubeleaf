@@ -12,6 +12,37 @@ export type VoiceFrame = {
 
 const coefficientCount = 13;
 const filterCount = 26;
+// Frequency (Hz), bandwidth (Hz), level (dB); tenor values from:
+// https://csound.com/docs/manual/MiscFormants.html
+const vowelFormants: Record<Vowel, number[][]> = {
+  A: [
+    [650, 1080, 2650, 2900, 3250],
+    [80, 90, 120, 130, 140],
+    [0, -6, -7, -8, -22],
+  ],
+  I: [
+    [290, 1870, 2800, 3250, 3540],
+    [40, 90, 100, 120, 120],
+    [0, -15, -18, -20, -30],
+  ],
+  U: [
+    [350, 600, 2700, 2900, 3300],
+    [40, 60, 100, 120, 120],
+    [0, -20, -17, -14, -26],
+  ],
+  E: [
+    [400, 1700, 2600, 3200, 3580],
+    [70, 80, 100, 120, 120],
+    [0, -14, -12, -14, -20],
+  ],
+  O: [
+    [400, 800, 2600, 2800, 3000],
+    [70, 80, 100, 130, 135],
+    [0, -10, -12, -12, -26],
+  ],
+};
+let builtinCache:
+  { sampleRate: number; bins: number; templates: Record<Vowel, number[][]> } | undefined;
 const silentFrame = (): VoiceFrame => ({
   voiceVolume: 0,
   voiceA: 0,
@@ -78,22 +109,74 @@ export function mfcc(spectrum: ArrayLike<number>, sampleRate: number): number[] 
   return coefficients.map((value) => (value - mean) / scale);
 }
 
-function vowelWeights(coefficients: number[], templates: VoiceTemplates) {
+function builtinTemplates(sampleRate: number, bins: number): Record<Vowel, number[][]> {
+  if (builtinCache?.sampleRate === sampleRate && builtinCache.bins === bins)
+    return builtinCache.templates;
+  const sinc = (x: number) => (Math.abs(x) < 1e-8 ? 1 : Math.sin(Math.PI * x) / (Math.PI * x));
+  // Match the AnalyserNode Blackman window's frequency response around each harmonic.
+  // https://www.w3.org/TR/webaudio-1.0/#blackman-window
+  const windowPower = (x: number) =>
+    (0.42 * sinc(x) + 0.25 * (sinc(x - 1) + sinc(x + 1)) + 0.04 * (sinc(x - 2) + sinc(x + 2))) ** 2;
+  // ponytail: a small 80–320 Hz bank; unusual pitches/timbres still need personal calibration.
+  const templates = Object.fromEntries(
+    vowels.map((vowel) => {
+      const [frequencies, bandwidths, levels] = vowelFormants[vowel];
+      const bank: number[][] = [];
+      for (let pitch = 80; pitch <= 320; pitch += 10) {
+        const spectrum = new Float64Array(bins);
+        for (let hz = pitch; hz < sampleRate / 2; hz += pitch) {
+          const center = (hz * 2 * bins) / sampleRate;
+          const power = frequencies.reduce(
+            (sum, frequency, index) =>
+              sum +
+              10 ** (levels[index] / 10) / (1 + ((hz - frequency) / (bandwidths[index] / 2)) ** 2),
+            0,
+          );
+          // Eight bins retain the main lobe and nearby sidelobes without a full synthetic FFT.
+          for (
+            let bin = Math.max(0, Math.ceil(center - 8));
+            bin < Math.min(bins, center + 8);
+            bin++
+          ) {
+            spectrum[bin] += power * windowPower(bin - center);
+          }
+        }
+        bank.push(
+          mfcc(
+            spectrum.map((power) => 10 * Math.log10(Math.max(power, 1e-12))),
+            sampleRate,
+          ),
+        );
+      }
+      return [vowel, bank];
+    }),
+  ) as Record<Vowel, number[][]>;
+  builtinCache = { sampleRate, bins, templates };
+  return templates;
+}
+
+function vowelWeights(
+  coefficients: number[],
+  templates: VoiceTemplates,
+  sampleRate: number,
+  bins: number,
+) {
   const zero = Object.fromEntries(vowels.map((vowel) => [vowel, 0])) as Record<Vowel, number>;
-  if (
-    coefficients.length !== coefficientCount ||
-    !coefficients.every(Number.isFinite) ||
-    !vowels.every(
-      (vowel) =>
-        Array.isArray(templates[vowel]) &&
-        templates[vowel].length === coefficientCount &&
-        templates[vowel].every(Number.isFinite),
-    )
-  )
-    return zero;
+  if (coefficients.length !== coefficientCount || !coefficients.every(Number.isFinite)) return zero;
+  const defaults = builtinTemplates(sampleRate, bins);
   const scores = vowels.map((vowel) => {
-    const template = templates[vowel]!;
-    const distance = Math.hypot(...coefficients.map((value, index) => value - template[index]));
+    const personal = templates[vowel];
+    const candidates =
+      Array.isArray(personal) &&
+      personal.length === coefficientCount &&
+      personal.every(Number.isFinite)
+        ? [personal]
+        : defaults[vowel];
+    const distance = Math.min(
+      ...candidates.map((template) =>
+        Math.hypot(...coefficients.map((value, index) => value - template[index])),
+      ),
+    );
     return 1 / (distance + 1e-6);
   });
   const total = scores.reduce((sum, score) => sum + score, 0);
@@ -113,7 +196,7 @@ export function analyzeAudioFrame(
   const frame = silentFrame();
   frame.voiceVolume = clamp(rms(samples) * (Number.isFinite(gain) ? Math.max(0, gain) : 0));
   if (frame.voiceVolume <= clamp(noiseGate)) return silentFrame();
-  const weights = vowelWeights(mfcc(spectrum, sampleRate), templates);
+  const weights = vowelWeights(mfcc(spectrum, sampleRate), templates, sampleRate, spectrum.length);
   for (const vowel of vowels) frame[`voice${vowel}`] = weights[vowel];
   return frame;
 }

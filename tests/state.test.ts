@@ -743,10 +743,13 @@ test('audio mouth can drive without a face and blends without inventing head inp
   const vowelSettings = {
     ...s,
     lipSyncMode: 'vowels' as const,
-    voiceTemplates: Object.fromEntries(
-      ['A', 'I', 'U', 'E', 'O'].map((v) => [v, Array(13).fill(0)]),
-    ),
+    voiceTemplates: {},
   };
+  assert.equal(
+    state.normalizedFace({ ...voice, voiceA: 0, voiceI: 1, voiceVolume: 0.2 }, vowelSettings)
+      .mouthOpen,
+    0.35 * 0.2,
+  );
   assert.equal(
     state.normalizedFace({ ...voice, voiceA: 1, voiceVolume: 0.2 }, vowelSettings).mouthOpen,
     0.2,

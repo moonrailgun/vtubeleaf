@@ -60,7 +60,73 @@ test('audio analysis gates silence and keeps every output finite and clamped', (
   );
 });
 
-test('MFCC templates distinguish matching vowel spectra and reject malformed calibration', () => {
+test('built-in vowels work without calibration across common microphone sample rates', () => {
+  // Independent harmonic spectra with shifted formants, rather than the smooth default envelopes.
+  const peaks = {
+    A: [
+      [680, 0],
+      [1120, -6],
+      [2700, -7],
+      [2940, -8],
+      [3320, -22],
+    ],
+    I: [
+      [300, 0],
+      [1900, -15],
+      [2820, -18],
+      [3290, -20],
+      [3600, -30],
+    ],
+    U: [
+      [340, 0],
+      [620, -20],
+      [2710, -17],
+      [2950, -14],
+      [3350, -26],
+    ],
+    E: [
+      [420, 0],
+      [1730, -14],
+      [2630, -12],
+      [3240, -14],
+      [3600, -20],
+    ],
+    O: [
+      [410, 0],
+      [820, -10],
+      [2650, -12],
+      [2840, -12],
+      [3080, -26],
+    ],
+  };
+  for (const rate of [16_000, 44_100, 48_000]) {
+    for (const pitch of [100, 140, 180, 220, 260]) {
+      for (const vowel of vowels) {
+        const input = Float32Array.from({ length: 1024 }, (_, bin) => {
+          const hz = (bin * rate) / 2048;
+          const envelope = Math.max(
+            ...peaks[vowel].map(([center, db], index) => {
+              const width = index === 0 ? (vowel === 'I' || vowel === 'U' ? 20 : 40) : 50;
+              return -20 + db - 20 * Math.log10(1 + Math.abs(hz - center) / width);
+            }),
+          );
+          const harmonicDistance = hz - Math.round(hz / pitch) * pitch;
+          return Math.max(-110, envelope - 2 * (harmonicDistance / (rate / 2048)) ** 2);
+        });
+        const frame = analyzeAudioFrame(voiced(), input, rate, 1, 0.01, {});
+        const weights = vowels.map((candidate) => frame[`voice${candidate}`]);
+        assert.equal(
+          vowels[weights.indexOf(Math.max(...weights))],
+          vowel,
+          `${rate} Hz, ${pitch} Hz, ${vowel}`,
+        );
+        assert.ok(Math.abs(weights.reduce((sum, weight) => sum + weight, 0) - 1) < 1e-6);
+      }
+    }
+  }
+});
+
+test('personal vowel calibration overrides defaults one vowel at a time and can be replaced', () => {
   const spectra = {
     A: spectrum([24, 48, 78]),
     I: spectrum([12, 58, 92]),
@@ -83,12 +149,22 @@ test('MFCC templates distinguish matching vowel spectra and reject malformed cal
     assert.equal(vowels[weights.indexOf(Math.max(...weights))], vowel);
   }
 
-  const malformed = { ...templates, O: [...templates.O!, NaN] };
-  const rejected = analyzeAudioFrame(voiced(), spectra.A, sampleRate, 1, 0.01, malformed);
+  const personal = { A: templates.I!, O: [NaN] };
+  const saved = structuredClone(personal);
+  const customized = analyzeAudioFrame(voiced(), spectra.I, sampleRate, 1, 0.01, personal);
+  assert.ok(customized.voiceA > 0.99);
+  assert.deepEqual(personal, saved);
+
+  const recalibrated = analyzeAudioFrame(voiced(), spectra.U, sampleRate, 1, 0.01, {
+    A: templates.U!,
+  });
+  assert.ok(recalibrated.voiceA > 0.99);
+  const defaults = analyzeAudioFrame(voiced(), spectra.I, sampleRate, 1, 0.01, {});
   assert.deepEqual(
-    vowels.map((vowel) => rejected[`voice${vowel}`]),
-    [0, 0, 0, 0, 0],
+    analyzeAudioFrame(voiced(), spectra.I, sampleRate, 1, 0.01, { O: [NaN] }),
+    defaults,
   );
+  assert.notEqual(defaults.voiceA, customized.voiceA);
 });
 
 test('pausing cancels calibration and starting again resumes audio reads', async () => {

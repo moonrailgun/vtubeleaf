@@ -2751,7 +2751,9 @@ test('quality settings preserve privacy and calibration samples cancel on stop',
   await page.locator('#camera-resolution').scrollIntoViewIfNeeded();
   await page.screenshot({ path: testInfo.outputPath('capture-quality-controls.png') });
   await page.getByText('麦克风口型', { exact: true }).click();
-  await chooseOption(page, page.locator('#lip-sync-mode'), '校准元音');
+  await chooseOption(page, page.locator('#lip-sync-mode'), '元音识别');
+  await expect(page.locator('#calibrate-voice-A')).toHaveCount(0);
+  await page.getByRole('button', { name: '个人元音校准（可选）', exact: true }).click();
   await expect(page.locator('#calibrate-voice-A')).toBeDisabled();
   await expect(page.locator('#mic-toggle')).toHaveText('开启麦克风');
   await page.locator('#mic-toggle').scrollIntoViewIfNeeded();
