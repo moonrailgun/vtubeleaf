@@ -238,15 +238,21 @@ test('pausing cancels calibration and starting again resumes audio reads', async
   try {
     const lipSync = new AudioLipSync();
     await lipSync.start('test-device');
+    assert.equal(lipSync.read(1, 0.2, {}).voiceVolume, 0);
+    assert.ok(Math.abs(lipSync.inputVolume(1) - 0.1) < 1e-6);
+    assert.ok(Math.abs(lipSync.inputVolume(4) - 0.4) < 1e-6);
+    assert.equal(lipSync.inputVolume(20), 1);
     const calibration = lipSync.calibrate();
     lipSync.pause(true);
     await assert.rejects(calibration, /暂停.*取消/);
     assert.equal(lipSync.read(1, 0, {}).voiceVolume, 0);
+    assert.equal(lipSync.inputVolume(4), 0);
 
     await lipSync.stop();
     await lipSync.start('test-device');
     assert.ok(lipSync.read(1, 0, {}).voiceVolume > 0);
     await lipSync.stop();
+    assert.equal(lipSync.inputVolume(4), 0);
     assert.equal(
       contexts.every((context) => context.state === 'closed'),
       true,

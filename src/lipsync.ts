@@ -229,6 +229,10 @@ export class AudioLipSync {
     return !!this.analyser;
   }
 
+  inputVolume(gain: number): number {
+    return this.paused || !this.active ? 0 : clamp(rms(this.samples) * gain);
+  }
+
   async start(deviceId: string): Promise<void> {
     const stopped = this.stop();
     const generation = this.generation;

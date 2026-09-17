@@ -152,6 +152,7 @@ const initialView: StudioView = {
   cameraDevices: [],
   micDevices: [],
   micActive: false,
+  micVolume: 0,
   micStarting: false,
   micLabel: '',
   voiceCalibration: null,
@@ -947,34 +948,42 @@ export function App() {
                 独立开启，仅在本机分析声音；不录音、不上传。关闭应用后需要重新开启。
               </p>
               <label htmlFor="mic-device">麦克风</label>
-              <Select
-                disabled={view.micActive || view.micStarting}
-                value={s.micDeviceId || 'default-mic'}
-                onValueChange={(value) => set('micDeviceId', value === 'default-mic' ? '' : value)}
-              >
-                <SelectTrigger id="mic-device">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="default-mic">系统默认麦克风</SelectItem>
-                  {view.micDevices.map((d, i) => (
-                    <SelectItem key={d.deviceId} value={d.deviceId}>
-                      {d.label || `麦克风 ${i + 1}`}
-                    </SelectItem>
-                  ))}
-                  {s.micDeviceId && !view.micDevices.some((d) => d.deviceId === s.micDeviceId) && (
-                    <SelectItem value={s.micDeviceId}>上次选择的麦克风（当前不可用）</SelectItem>
-                  )}
-                </SelectContent>
-              </Select>
-              <Button
-                id="mic-toggle"
-                variant="outline"
-                disabled={!view.ready}
-                onClick={() => run(() => a?.toggleMic())}
-              >
-                {view.micStarting ? '取消开启' : view.micActive ? '关闭麦克风' : '开启麦克风'}
-              </Button>
+              <div className="flex items-center gap-2">
+                <Select
+                  disabled={view.micActive || view.micStarting}
+                  value={s.micDeviceId || 'default-mic'}
+                  onValueChange={(value) =>
+                    set('micDeviceId', value === 'default-mic' ? '' : value)
+                  }
+                >
+                  <SelectTrigger id="mic-device" className="flex-1">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="default-mic">系统默认麦克风</SelectItem>
+                    {view.micDevices.map((d, i) => (
+                      <SelectItem key={d.deviceId} value={d.deviceId}>
+                        {d.label || `麦克风 ${i + 1}`}
+                      </SelectItem>
+                    ))}
+                    {s.micDeviceId &&
+                      !view.micDevices.some((d) => d.deviceId === s.micDeviceId) && (
+                        <SelectItem value={s.micDeviceId}>
+                          上次选择的麦克风（当前不可用）
+                        </SelectItem>
+                      )}
+                  </SelectContent>
+                </Select>
+                <Button
+                  id="mic-toggle"
+                  className="h-10"
+                  variant="outline"
+                  disabled={!view.ready}
+                  onClick={() => run(() => a?.toggleMic())}
+                >
+                  {view.micStarting ? '取消开启' : view.micActive ? '关闭麦克风' : '开启麦克风'}
+                </Button>
+              </div>
               {view.micLabel && <p className="hint break-all">正在使用：{view.micLabel}</p>}
               <label htmlFor="lip-sync-mode">口型来源</label>
               <Select
@@ -990,9 +999,39 @@ export function App() {
                   <SelectItem value="vowels">元音识别</SelectItem>
                 </SelectContent>
               </Select>
-              {range('lipSyncBlend', '声音口型占比', 0, 1, 0.05)}
-              {range('micGain', '麦克风增益', 0.1, 20, 0.1)}
-              {range('micNoiseGate', '噪声门限', 0, 0.2, 0.005)}
+              {s.lipSyncMode !== 'off' && (
+                <>
+                  <div className="range-field">
+                    <div className="slider-label">
+                      <span id="mic-volume-label">输入音量</span>
+                      <span className="text-xs tabular-nums text-muted-foreground">
+                        {Math.round(view.micVolume * 100)}%
+                      </span>
+                    </div>
+                    <meter
+                      id="mic-volume"
+                      className="block h-3 w-full"
+                      aria-labelledby="mic-volume-label"
+                      min={0}
+                      max={1}
+                      value={view.micVolume}
+                    />
+                    <p className="hint">
+                      {!view.micActive
+                        ? '开启麦克风后显示输入音量。'
+                        : view.tracking === 'paused'
+                          ? '音量检测已暂停。'
+                          : '显示增益后的音量，低于噪声门限时也可查看。'}
+                    </p>
+                  </div>
+                  {range('lipSyncBlend', '声音口型占比', 0, 1, 0.05)}
+                  {range('micGain', '麦克风增益', 0.1, 20, 0.1)}
+                  {range('micNoiseGate', '噪声门限', 0, 0.2, 0.005)}
+                  {s.lipSyncMode === 'volume' && (
+                    <p className="hint">无需校准，直接根据声音音量控制嘴巴开合。</p>
+                  )}
+                </>
+              )}
               {s.lipSyncMode === 'vowels' && (
                 <>
                   <p className="hint">

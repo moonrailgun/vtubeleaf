@@ -136,6 +136,7 @@ export function createStudio(
     cameraDevices,
     micDevices,
     micActive: audio.active,
+    micVolume: audio.inputVolume(settings.micGain),
     micStarting,
     micLabel: audio.deviceLabel,
     voiceCalibration,
@@ -1495,7 +1496,8 @@ export function createStudio(
   });
   let before = performance.now(),
     frames = 0,
-    since = before;
+    since = before,
+    lastMicPublish = before;
   let failedRevision = -1;
   function tick() {
     if (disposed) return;
@@ -1566,6 +1568,15 @@ export function createStudio(
       frames = 0;
       inputFrames = 0;
       since = now;
+      lastMicPublish = now;
+      publish();
+    } else if (
+      audio.active &&
+      tracking !== 'paused' &&
+      settings.lipSyncMode !== 'off' &&
+      now - lastMicPublish >= 100
+    ) {
+      lastMicPublish = now;
       publish();
     }
   }
