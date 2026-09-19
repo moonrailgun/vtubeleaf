@@ -102,7 +102,13 @@ export default function App() {
               <a href="#faq">常见问题</a>
             </li>
           </ul>
-          <a className="nav-dl" href="#install" data-od-id="nav-download">
+          <a
+            className="nav-dl"
+            href="#install"
+            data-od-id="nav-download"
+            data-tianji-event="cta-download"
+            data-tianji-event-position="nav"
+          >
             <svg
               viewBox="0 0 24 24"
               fill="none"
@@ -130,7 +136,13 @@ export default function App() {
               一颗普通摄像头，就能让你的虚拟形象跟着你眨眼、说话、转头。直播、开会、录视频、上网课——想不露脸的时候，就让角色上场。
             </p>
             <div className="hero-actions">
-              <a className="btn btn-primary" href="#install" data-od-id="hero-cta">
+              <a
+                className="btn btn-primary"
+                href="#install"
+                data-od-id="hero-cta"
+                data-tianji-event="cta-download"
+                data-tianji-event-position="hero"
+              >
                 <svg
                   width="18"
                   height="18"
@@ -352,6 +364,9 @@ export default function App() {
                     key={system}
                     className={`btn ${system === platform ? 'btn-primary' : 'btn-ghost'}`}
                     href={system === 'mac' ? release.mac : release.windows}
+                    data-tianji-event="download"
+                    data-tianji-event-platform={system}
+                    data-tianji-event-version={release.version}
                   >
                     下载 {system === 'mac' ? 'macOS' : 'Windows'} 版
                   </a>
@@ -359,7 +374,9 @@ export default function App() {
               </div>
               <p className="download-note">Windows x64 · macOS 通用版（Apple Silicon / Intel）</p>
               <p className="download-note">
-                <a href={release.url}>更新说明与全部安装包</a>
+                <a href={release.url} data-tianji-event="release-notes">
+                  更新说明与全部安装包
+                </a>
               </p>
               <div
                 className="tabs"
@@ -680,7 +697,14 @@ export default function App() {
             <p className="cmp-note">
               以上信息于 2026 年 9 月核对自各应用官网与 Steam
               页面，价格以当时页面标示为准，可能随时间变化。「开放源代码」一项以各应用官方说明为准。如有错漏，欢迎
-              <a href="https://github.com/moonrailgun/vtubeleaf/issues">告诉我们</a>。
+              <a
+                href="https://github.com/moonrailgun/vtubeleaf/issues"
+                data-tianji-event="github-issues"
+                data-tianji-event-position="compare"
+              >
+                告诉我们
+              </a>
+              。
             </p>
           </div>
         </section>
@@ -751,7 +775,13 @@ export default function App() {
                   换你的角色上场。
                 </h2>
                 <p>下载只需几分钟，不注册、不付费、不留水印。</p>
-                <a className="btn btn-primary" href="#install" data-od-id="cta-download">
+                <a
+                  className="btn btn-primary"
+                  href="#install"
+                  data-od-id="cta-download"
+                  data-tianji-event="cta-download"
+                  data-tianji-event-position="bottom"
+                >
                   免费下载
                 </a>
               </div>
@@ -788,13 +818,21 @@ export default function App() {
           <span>© 2026 VTubeLeaf · 开源项目 · 版本 {release.version}</span>
           <ul>
             <li>
-              <a href="https://github.com/moonrailgun/vtubeleaf">GitHub</a>
+              <a href="https://github.com/moonrailgun/vtubeleaf" data-tianji-event="github-repo">
+                GitHub
+              </a>
             </li>
             <li>
               <a href="#faq">常见问题</a>
             </li>
             <li>
-              <a href="https://github.com/moonrailgun/vtubeleaf/issues">反馈问题</a>
+              <a
+                href="https://github.com/moonrailgun/vtubeleaf/issues"
+                data-tianji-event="github-issues"
+                data-tianji-event-position="footer"
+              >
+                反馈问题
+              </a>
             </li>
           </ul>
         </div>
