@@ -29,10 +29,6 @@ export default function App() {
       active = false;
     };
   }, []);
-  const [model, setModel] = useState(0);
-  const [switches, setSwitches] = useState([true, true, true, false]);
-  const [amplitude, setAmplitude] = useState(70);
-  const [speed, setSpeed] = useState(2);
   const [platform, setPlatform] = useState<Platform>('win');
   useEffect(() => setPlatform(initialPlatform()), []);
   const tabs = useRef<Array<HTMLButtonElement | null>>([]);
@@ -158,260 +154,23 @@ export default function App() {
               支持 Windows 10 及以上、macOS 14 及以上 · 当前版本 {release.version}
             </p>
 
-            <div
-              className="app"
-              role="region"
-              aria-label="VTubeLeaf 应用界面示意：左侧角色库，中间舞台显示你的 Live2D 角色，右上角为摄像头面部捕捉预览，右侧为设置面板"
-              data-od-id="hero-app-mock"
-            >
-              <div className="app-title">
-                <div className="lights" aria-hidden="true">
-                  <i></i>
-                  <i></i>
-                  <i></i>
-                </div>
-                <span className="name">VTubeLeaf</span>
-                <div className="tool" aria-hidden="true">
-                  <span className="chip on">摄像头已连接</span>
-                  <span className="chip">正在输出到会议</span>
-                </div>
-              </div>
-              <div className="app-body">
-                <aside className="pane">
-                  <h4>我的角色</h4>
-                  <button
-                    className={`model-card${model === 0 ? ' active' : ''}`}
-                    type="button"
-                    aria-pressed={model === 0}
-                    onClick={() => setModel(0)}
-                  >
-                    <span className="model-thumb">
-                      <img src="assets/brand/mark-rose.svg" alt="" />
-                    </span>
-                    <span>
-                      <b>小叶</b>
-                      <span>上次使用 · 今天</span>
-                    </span>
-                  </button>
-                  <button
-                    className={`model-card${model === 1 ? ' active' : ''}`}
-                    type="button"
-                    aria-pressed={model === 1}
-                    onClick={() => setModel(1)}
-                  >
-                    <span className="model-thumb">
-                      <svg
-                        viewBox="0 0 24 24"
-                        fill="none"
-                        stroke="currentColor"
-                        strokeWidth="1.8"
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                      >
-                        <circle cx="12" cy="8" r="4"></circle>
-                        <path d="M4 21c0-4 3.6-7 8-7s8 3 8 7"></path>
-                      </svg>
-                    </span>
-                    <span>
-                      <b>会议专用</b>
-                      <span>正装 · 白底</span>
-                    </span>
-                  </button>
-                  <button
-                    className={`model-card${model === 2 ? ' active' : ''}`}
-                    type="button"
-                    aria-pressed={model === 2}
-                    onClick={() => setModel(2)}
-                  >
-                    <span className="model-thumb">
-                      <svg
-                        viewBox="0 0 24 24"
-                        fill="none"
-                        stroke="currentColor"
-                        strokeWidth="1.8"
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                      >
-                        <path d="M12 3l2.5 5.5L20 9l-4 4 1 6-5-2.7L7 19l1-6-4-4 5.5-.5z"></path>
-                      </svg>
-                    </span>
-                    <span>
-                      <b>直播主形象</b>
-                      <span>带头饰</span>
-                    </span>
-                  </button>
-                  <p
-                    style={{
-                      marginTop: '18px',
-                      fontSize: '12px',
-                      color: 'var(--muted)',
-                      lineHeight: '1.5',
-                    }}
-                  >
-                    把角色文件夹拖进来，就会出现在这里。
-                  </p>
-                </aside>
-                <div className="stage">
-                  <div className="stage-grid" aria-hidden="true"></div>
-                  <div className="avatar">
-                    <img src="assets/brand/mark-rose.svg" alt="" id="avatarImg" />
-                    <span className="avatar-cap" id="avatarCap" aria-live="polite">
-                      此处显示你的 Live2D 角色 · {['小叶', '会议专用', '直播主形象'][model]}
-                    </span>
-                  </div>
-                  <div className="cam" aria-hidden="true">
-                    <svg viewBox="0 0 172 118" fill="none">
-                      <rect width="172" height="118" fill="oklch(0.27 0.025 305)"></rect>
-                      <ellipse
-                        cx="86"
-                        cy="60"
-                        rx="30"
-                        ry="38"
-                        stroke="oklch(0.80 0.10 355)"
-                        strokeWidth="1.2"
-                        strokeDasharray="3 3"
-                        opacity=".7"
-                      ></ellipse>
-                      <g fill="oklch(0.80 0.10 355)">
-                        <circle cx="74" cy="52" r="1.6"></circle>
-                        <circle cx="80" cy="50" r="1.6"></circle>
-                        <circle cx="86" cy="51" r="1.6"></circle>
-                        <circle cx="92" cy="50" r="1.6"></circle>
-                        <circle cx="98" cy="52" r="1.6"></circle>
-                        <circle cx="86" cy="62" r="1.6"></circle>
-                        <circle cx="86" cy="68" r="1.6"></circle>
-                        <circle cx="76" cy="78" r="1.6"></circle>
-                        <circle cx="82" cy="81" r="1.6"></circle>
-                        <circle cx="86" cy="82" r="1.6"></circle>
-                        <circle cx="90" cy="81" r="1.6"></circle>
-                        <circle cx="96" cy="78" r="1.6"></circle>
-                        <circle cx="58" cy="60" r="1.6"></circle>
-                        <circle cx="114" cy="60" r="1.6"></circle>
-                        <circle cx="62" cy="76" r="1.6"></circle>
-                        <circle cx="110" cy="76" r="1.6"></circle>
-                        <circle cx="86" cy="24" r="1.6"></circle>
-                        <circle cx="70" cy="28" r="1.6"></circle>
-                        <circle cx="102" cy="28" r="1.6"></circle>
-                      </g>
-                      <path
-                        d="M70 52 L98 52 M86 51 L86 68 M76 78 Q86 86 96 78"
-                        stroke="oklch(0.80 0.10 355)"
-                        strokeWidth="1"
-                        opacity=".6"
-                      ></path>
-                    </svg>
-                    <span className="tag">摄像头预览 · 只在本机</span>
-                  </div>
-                  <div className="statusbar" aria-hidden="true">
-                    <span>眨眼</span>
-                    <span>口型</span>
-                    <span>头部转动</span>
-                    <span>手势</span>
-                  </div>
-                </div>
-                <aside className="pane">
-                  <h4>设置</h4>
-                  <div className="row">
-                    <span>跟着我眨眼</span>
-                    <button
-                      className="switch"
-                      type="button"
-                      role="switch"
-                      aria-checked={switches[0]}
-                      aria-label="跟着我眨眼"
-                      onClick={() =>
-                        setSwitches((current) =>
-                          current.map((value, index) => (index === 0 ? !value : value)),
-                        )
-                      }
-                    ></button>
-                  </div>
-                  <div className="row">
-                    <span>说话时动嘴</span>
-                    <button
-                      className="switch"
-                      type="button"
-                      role="switch"
-                      aria-checked={switches[1]}
-                      aria-label="说话时动嘴"
-                      onClick={() =>
-                        setSwitches((current) =>
-                          current.map((value, index) => (index === 1 ? !value : value)),
-                        )
-                      }
-                    ></button>
-                  </div>
-                  <div className="row">
-                    <span>识别手势</span>
-                    <button
-                      className="switch"
-                      type="button"
-                      role="switch"
-                      aria-checked={switches[2]}
-                      aria-label="识别手势"
-                      onClick={() =>
-                        setSwitches((current) =>
-                          current.map((value, index) => (index === 2 ? !value : value)),
-                        )
-                      }
-                    ></button>
-                  </div>
-                  <div className="row">
-                    <span>安静时轻微呼吸</span>
-                    <button
-                      className="switch"
-                      type="button"
-                      role="switch"
-                      aria-checked={switches[3]}
-                      aria-label="安静时轻微呼吸"
-                      onClick={() =>
-                        setSwitches((current) =>
-                          current.map((value, index) => (index === 3 ? !value : value)),
-                        )
-                      }
-                    ></button>
-                  </div>
-                  <div className="slider">
-                    <label htmlFor="ampRange">
-                      动作幅度
-                      <span className="mono" id="ampVal">
-                        {amplitude}%
-                      </span>
-                    </label>
-                    <input
-                      type="range"
-                      min="0"
-                      max="100"
-                      value={amplitude}
-                      onChange={(event) => setAmplitude(Number(event.target.value))}
-                      id="ampRange"
-                      aria-label="动作幅度"
-                    />
-                  </div>
-                  <div className="slider">
-                    <label htmlFor="spdRange">
-                      反应速度
-                      <span className="mono" id="spdVal">
-                        {['慢', '中', '快'][speed]}
-                      </span>
-                    </label>
-                    <input
-                      type="range"
-                      min="0"
-                      max="2"
-                      value={speed}
-                      onChange={(event) => setSpeed(Number(event.target.value))}
-                      id="spdRange"
-                      aria-label="反应速度"
-                    />
-                  </div>
-                  <div className="row" style={{ marginTop: '8px' }}>
-                    <span style={{ color: 'var(--muted)' }}>背景</span>
-                    <span style={{ fontFamily: 'var(--mono)', fontSize: '12px' }}>纯色 · 可抠</span>
-                  </div>
-                </aside>
-              </div>
-            </div>
+            <figure className="app-screenshot" data-od-id="hero-app-screenshot">
+              <a
+                href="assets/screenshots/vtubeleaf-hutao-studio.png"
+                target="_blank"
+                rel="noreferrer"
+                aria-label="查看 VTubeLeaf 软件截图原图（在新标签页打开）"
+              >
+                <img
+                  src="assets/screenshots/vtubeleaf-hutao-studio.png"
+                  alt="VTubeLeaf 软件截图：胡桃 Live2D 角色搭配内置办公室背景，右侧为画面设置面板"
+                  width="1600"
+                  height="1000"
+                  fetchPriority="high"
+                />
+              </a>
+              <figcaption>软件实际界面 · 胡桃模型与内置办公室背景 · 点击查看大图</figcaption>
+            </figure>
           </div>
         </section>
 

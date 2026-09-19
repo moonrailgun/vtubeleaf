@@ -95,18 +95,6 @@ test('homepage keeps the design and its keyboard-accessible interactions', async
     /^https:\/\/github\.com\/moonrailgun\/vtubeleaf\/releases\/download\/v[\d.]+\/VTubeLeaf-[\d.]+-macos-universal\.dmg$/,
   );
 
-  await page.getByRole('button', { name: /会议专用/ }).click();
-  await expect(page.locator('#avatarCap')).toContainText('会议专用');
-  const blink = page.getByRole('switch', { name: '跟着我眨眼' });
-  await blink.focus();
-  await page.keyboard.press('Space');
-  await expect(blink).not.toBeChecked();
-  const amplitude = page.getByRole('slider', { name: '动作幅度' });
-  await amplitude.fill('35');
-  await expect(page.locator('#ampVal')).toHaveText('35%');
-  await page.getByRole('slider', { name: '反应速度' }).fill('0');
-  await expect(page.locator('#spdVal')).toHaveText('慢');
-
   const windows = page.getByRole('tab', { name: 'Windows' });
   const mac = page.getByRole('tab', { name: 'macOS' });
   await windows.click();

@@ -45,7 +45,7 @@ npx playwright install chromium
 npm test
 ```
 
-浏览器测试构建后启动独立的 `5198` 预览端口，覆盖原始 HTML 与爬取元信息、无 JavaScript 阅读和下载、hydration、角色选择、开关、滑块、系统标签的键盘操作和记忆、FAQ、手机布局、锚点、图片及禁用存储。用 `WEBSITE_URL=https://vtubeleaf.vercel.app npm test` 可复用这些检查验证线上部署。
+浏览器测试构建后启动独立的 `5198` 预览端口，覆盖原始 HTML 与爬取元信息、无 JavaScript 阅读和下载、hydration、系统标签的键盘操作和记忆、FAQ、手机布局、锚点、图片及禁用存储。用 `WEBSITE_URL=https://vtubeleaf.vercel.app npm test` 可复用这些检查验证线上部署。
 
 ## 修改页面
 
@@ -58,4 +58,4 @@ npm test
 - `public/release.json`：由 Release 工作流自动维护的版本和下载地址。
 - `public/robots.txt`、`public/sitemap.xml`：爬虫规则与站点地图。
 
-首屏应用界面是交互示意，不会请求摄像头或加载 Live2D。下载区直接指向 GitHub Release 安装包，并按两端内置虚拟摄像头的安装和激活流程提供说明。
+首屏展示真实软件截图（胡桃模型与内置办公室背景），点击可在新标签页查看原图。图片位于 `public/assets/screenshots/`，页面不会请求摄像头或加载 Live2D。下载区直接指向 GitHub Release 安装包，并按两端内置虚拟摄像头的安装和激活流程提供说明。
