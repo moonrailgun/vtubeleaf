@@ -23,7 +23,7 @@
   },
   "release-it": {
     "git": {
-      "commitMessage": "chore(release): ${version}",
+      "commitMessage": "chore(release): bump version to ${version}",
       "tagName": "v${version}"
     },
     "npm": {
