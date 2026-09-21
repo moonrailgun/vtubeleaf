@@ -98,7 +98,7 @@ export class VirtualCamera {
     return this.command('stop', requireSuccess);
   }
 
-  submit(canvas: HTMLCanvasElement, background: string): void {
+  submit(canvas: HTMLCanvasElement, background: string, mirror = false): void {
     const now = performance.now();
     if (
       this.destroyed ||
@@ -120,6 +120,7 @@ export class VirtualCamera {
       }
       const context = this.context;
       if (!context) throw new Error('无法创建摄像头画布');
+      context.setTransform(mirror ? -1 : 1, 0, 0, 1, mirror ? WIDTH : 0, 0);
       // Reset to opaque black before applying a possibly transparent scene background.
       context.fillStyle = '#000000';
       context.fillRect(0, 0, WIDTH, HEIGHT);

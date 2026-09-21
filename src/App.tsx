@@ -1386,6 +1386,7 @@ export function App() {
                 </div>
                 {toggle('autoStartVirtualCamera', '开始跟踪时自动输出', !camera.installed)}
                 {toggle('autoStopVirtualCamera', '停止跟踪时自动停止输出', !camera.installed)}
+                {toggle('virtualCameraMirror', '镜像输出', !camera.installed)}
                 <p className="hint">
                   Windows 安装到当前用户；macOS
                   首次安装需按系统提示允许摄像头扩展。启动后，在直播或视频软件中选择 VTubeLeaf

@@ -1532,7 +1532,8 @@ export function createStudio(
         report(error instanceof Error ? `模型渲染失败：${error.message}` : error);
       }
     }
-    if (stage) virtualCamera.submit(stage.canvas, settings.background);
+    if (stage)
+      virtualCamera.submit(stage.canvas, settings.background, settings.virtualCameraMirror);
     recording.capture(stage?.frame ?? {}, now);
     if (native && outputOpen && !frameSending) {
       frameSending = true;

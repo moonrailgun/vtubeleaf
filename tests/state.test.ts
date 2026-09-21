@@ -3,8 +3,12 @@ import assert from 'node:assert/strict';
 import { defaults, readSettings, FaceMapper, NEUTRAL, fromMediaPipe } from '../src/state.ts';
 import * as state from '../src/state.ts';
 
-test('virtual camera automation is opt-in and stays global across model changes and reloads', () => {
-  for (const key of ['autoStartVirtualCamera', 'autoStopVirtualCamera'] as const) {
+test('virtual camera options are opt-in and stay global across model changes and reloads', () => {
+  for (const key of [
+    'autoStartVirtualCamera',
+    'autoStopVirtualCamera',
+    'virtualCameraMirror',
+  ] as const) {
     for (const value of [undefined, false, 'true', 1])
       assert.equal(readSettings({ [key]: value })[key], false);
     const settings = readSettings({ [key]: true, modelPath: '/a' });

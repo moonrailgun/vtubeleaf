@@ -1,5 +1,80 @@
 import { test, expect } from '@playwright/test';
 
+test('camera mirror flips output horizontally, switches live, and persists after reload', async ({
+  page,
+}, testInfo) => {
+  await page.route('**/src/main.tsx*', async (route) => {
+    const response = await route.fetch();
+    const bootstrap = `import { mockIPC, mockWindows } from '/node_modules/@tauri-apps/api/mocks.js';
+      import { VirtualCamera } from '/src/virtual-camera.ts';
+      window.isTauri = true; mockWindows('main');
+      const source = document.createElement('canvas');
+      source.width = source.height = 400;
+      const context = source.getContext('2d');
+      ['#ff0000', '#00ff00', '#0000ff', '#ffff00'].forEach((color, i) => {
+        context.fillStyle = color;
+        context.fillRect((i % 2) * 200, Math.floor(i / 2) * 200, 200, 200);
+      });
+      const original = source.toDataURL();
+      const submit = VirtualCamera.prototype.submit;
+      VirtualCamera.prototype.submit = function(canvas, background, mirror) {
+        submit.call(this, source, background, mirror);
+      };
+      const camera = window.cameraTest = {
+        status: { supported: true, installed: true, active: false, message: '已安装' },
+        pixels: [], sourceUnchanged: true
+      };
+      mockIPC((cmd, args) => {
+        if (cmd === 'load_settings') return JSON.parse(localStorage.getItem('camera-test-settings') || '{"autoCheckUpdates":false,"background":"#123456"}');
+        if (cmd === 'save_settings') { localStorage.setItem('camera-test-settings', JSON.stringify(args.settings)); return; }
+        if (cmd === 'list_models') return { models: [], directory: '/test/models', errors: [] };
+        if (!cmd.startsWith('plugin:virtual-camera|')) return;
+        const action = cmd.split('|')[1];
+        if (action === 'start') camera.status.active = true;
+        if (action === 'stop') camera.status.active = false;
+        if (action === 'submit') {
+          const bytes = new Uint8Array(args);
+          camera.pixels = [[400, 180], [880, 180], [400, 540], [880, 540], [0, 0]].map(([x, y]) =>
+            Array.from(bytes.slice((y * 1280 + x) * 4, (y * 1280 + x) * 4 + 4)));
+          camera.sourceUnchanged = source.toDataURL() === original;
+          return;
+        }
+        return { ...camera.status };
+      }, { shouldMockEvents: true });\n`;
+    await route.fulfill({ response, body: bootstrap + (await response.text()) });
+  });
+  const red = [255, 0, 0, 255];
+  const green = [0, 255, 0, 255];
+  const blue = [0, 0, 255, 255];
+  const yellow = [255, 255, 0, 255];
+  const border = [18, 52, 86, 255];
+  const pixels = () => page.evaluate(() => (window as any).cameraTest.pixels);
+  await page.goto('/');
+  await page.getByRole('button', { name: '接入', exact: true }).click();
+  const mirror = page.getByRole('switch', { name: '镜像输出', exact: true });
+  await expect(mirror).not.toBeChecked();
+  await page.getByRole('button', { name: '启动虚拟摄像头', exact: true }).click();
+  await expect.poll(pixels).toEqual([red, green, blue, yellow, border]);
+  await mirror.check();
+  await expect.poll(pixels).toEqual([green, red, yellow, blue, border]);
+  await expect
+    .poll(() =>
+      page.evaluate(
+        () => JSON.parse(localStorage.getItem('camera-test-settings') || '{}').virtualCameraMirror,
+      ),
+    )
+    .toBe(true);
+  await page.locator('#controls').screenshot({ path: testInfo.outputPath('camera-mirror.png') });
+  await page.reload();
+  await page.getByRole('button', { name: '接入', exact: true }).click();
+  await expect(mirror).toBeChecked();
+  await page.getByRole('button', { name: '启动虚拟摄像头', exact: true }).click();
+  await expect.poll(pixels).toEqual([green, red, yellow, blue, border]);
+  await mirror.uncheck();
+  await expect.poll(pixels).toEqual([red, green, blue, yellow, border]);
+  expect(await page.evaluate(() => (window as any).cameraTest.sourceUnchanged)).toBe(true);
+});
+
 test('tracking auto-starts camera output only when enabled and tracking starts successfully', async ({
   page,
 }, testInfo) => {

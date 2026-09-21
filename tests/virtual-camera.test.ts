@@ -24,6 +24,7 @@ test('serializes status and controls, letterboxes frames, and waits for transpor
   const context = {
     fillStyle: '',
     fillRect() {},
+    setTransform() {},
     drawImage(...args: unknown[]) {
       draws.push(args);
     },
