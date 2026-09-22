@@ -106,7 +106,7 @@ test('microphone modes show only relevant controls and meter live input before t
   await page.getByRole('option', { name: '声音音量', exact: true }).click();
   await expect(gain).toBeVisible();
   await expect(calibration).toHaveCount(0);
-  await expect(meter).toHaveAttribute('value', '0');
+  await expect(meter).toHaveAttribute('aria-valuenow', '0');
   const gate = page.getByRole('slider', { name: '噪声门限', exact: true });
   await gate.focus();
   await page.keyboard.press('End');
@@ -123,7 +123,7 @@ test('microphone modes show only relevant controls and meter live input before t
     navigator.mediaDevices.getUserMedia = async () => destination.stream;
   });
   await page.locator('#mic-toggle').click();
-  const level = () => meter.evaluate((element: HTMLMeterElement) => element.value);
+  const level = () => meter.getAttribute('aria-valuenow').then(Number);
   // A 0.04 sine wave at the default 4x gain is ~0.113, below the 0.2 noise gate.
   await expect.poll(level).toBeGreaterThan(0.1);
   await expect.poll(level).toBeLessThan(0.13);
@@ -173,7 +173,7 @@ test('microphone modes show only relevant controls and meter live input before t
   await page.evaluate(() => ((window as any).micTest.gain.gain.value = 0.04));
   await expect.poll(level).toBeGreaterThan(0.5);
   await page.locator('#mic-toggle').click();
-  await expect(meter).toHaveAttribute('value', '0');
+  await expect(meter).toHaveAttribute('aria-valuenow', '0');
   await page.evaluate(async () => {
     const { oscillator, context } = (window as any).micTest;
     oscillator.stop();
