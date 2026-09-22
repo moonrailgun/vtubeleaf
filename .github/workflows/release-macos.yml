@@ -29,7 +29,14 @@ jobs:
         with:
           persist-credentials: false
       - name: Select Xcode 26 for Icon Composer
-        run: sudo xcode-select --switch /Applications/Xcode_26.3.app/Contents/Developer
+        run: |
+          sudo xcode-select --switch /Applications/Xcode_26.3.app/Contents/Developer
+          # The Node Tauri CLI spawns actool with stdin closed, so ibtoold crashes and no Assets.car
+          # is written (tauri-apps/tauri#15315). Give actool a stdin until tauri-apps/tauri#15991 ships.
+          mkdir -p "$RUNNER_TEMP/actool-shim"
+          printf '#!/bin/sh\nexec xcrun actool "$@" </dev/null\n' > "$RUNNER_TEMP/actool-shim/actool"
+          chmod +x "$RUNNER_TEMP/actool-shim/actool"
+          echo "$RUNNER_TEMP/actool-shim" >> "$GITHUB_PATH"
       - uses: actions/setup-node@v6
         with:
           node-version: 24
