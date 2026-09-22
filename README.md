@@ -83,6 +83,8 @@ VTubeLeaf 是一款适用于 **Windows 和 macOS** 的免费虚拟形象软件�
 
 想参与开发、改进文档或协助测试，请看 [贡献指南](CONTRIBUTING.md)。
 
+社区: [**linux.do**](http://linux.do)
+
 ## 许可证
 
 VTubeLeaf 自有代码采用 [MIT 许可证](LICENSE)。角色素材和第三方组件各有自己的使用条款，详见 [模型说明](vendor/models/README.md)和[第三方许可](docs/THIRD_PARTY.md)。
