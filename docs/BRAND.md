@@ -47,9 +47,10 @@ node scripts/brand.mjs
 
 - 原生资源为 `src-tauri/icons/AppIcon.icon/`，`icon.json` 保存底色、图层位置和材质设置，可用 Apple Icon Composer 打开。
 - 前景 `Assets/sprout.png` 由品牌脚本同步原始 1024px 透明 PNG；不在图片中绘制圆角、外框或阴影，由系统根据图层生成效果。
-- Tauri 使用 Xcode 26+ 将 `.icon` 编译为 `Assets.car`，并设置 `CFBundleIconName`。macOS CI 和发布流程固定使用 Xcode 26.3，构建后检查原生图标及 ICNS 均已打包。
+- `src-tauri/icons/Assets.car` 是用 Xcode 26 actool 从 `.icon` 预编译好的产物，Tauri 直接打包它并从中读取 `CFBundleIconName`；构建期不再调用 actool（Node 版 Tauri CLI 调用 actool 会随机崩溃，见 tauri-apps/tauri#15315）。macOS CI 构建后检查原生图标及 ICNS 均已打包。
+- 修改 `.icon` 后需重新生成 `Assets.car`：在装有 Xcode 26+ 的机器上把 `AppIcon.icon` 复制为 `Icon.icon`，运行 `actool Icon.icon --compile out --app-icon Icon --include-all-app-icons --output-partial-info-plist out/Info.plist --platform macosx --target-device mac --minimum-deployment-target 26.0`，再把 `out/Assets.car` 提交。
 - 旧版 macOS 保留原有透明 `icon.icns` 回退；Windows 与网页继续使用原来的透明图形。
-- 本地 Xcode 低于 26 时，Tauri 会跳过原生图标编译，只打包 ICNS。验证新图标需要 Xcode 26+ 构建，并在 macOS 26+ 检查实际显示；概念效果图不能代替系统渲染验收。
+- 本地 Xcode 版本不影响打包，因为不再编译 `.icon`。验证新图标需在 macOS 26+ 检查实际显示；概念效果图不能代替系统渲染验收。
 
 ## 已确认效果归档
 
