@@ -143,6 +143,7 @@ export type Settings = ModelProfile & {
   skippedUpdateVersion: string;
   autoStartVirtualCamera: boolean;
   autoStopVirtualCamera: boolean;
+  autoStartMic: boolean;
   virtualCameraMirror: boolean;
   engine: 'mediapipe' | 'openseeface' | 'nvidia';
   deviceId: string;
@@ -188,6 +189,7 @@ export const defaults: Settings = {
   skippedUpdateVersion: '',
   autoStartVirtualCamera: false,
   autoStopVirtualCamera: false,
+  autoStartMic: false,
   virtualCameraMirror: false,
   engine: 'mediapipe',
   deviceId: '',
@@ -524,6 +526,7 @@ export function readSettings(value: unknown): Settings {
     s.autoStartVirtualCamera = v.autoStartVirtualCamera;
   if (typeof v.autoStopVirtualCamera === 'boolean')
     s.autoStopVirtualCamera = v.autoStopVirtualCamera;
+  if (typeof v.autoStartMic === 'boolean') s.autoStartMic = v.autoStartMic;
   if (typeof v.virtualCameraMirror === 'boolean') s.virtualCameraMirror = v.virtualCameraMirror;
   if (typeof v.skippedUpdateVersion === 'string' && v.skippedUpdateVersion.length <= 128)
     s.skippedUpdateVersion = v.skippedUpdateVersion;

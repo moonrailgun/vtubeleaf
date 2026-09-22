@@ -865,6 +865,7 @@ export function createStudio(
           !cameraStatus.active
         )
           void virtualCamera.start();
+        if (settings.autoStartMic && !audio.active && !micStarting) void actions.toggleMic();
         publish();
         await devices();
         notify(

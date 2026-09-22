@@ -985,6 +985,7 @@ export function App() {
                 </Button>
               </div>
               {view.micLabel && <p className="hint break-all">正在使用：{view.micLabel}</p>}
+              {toggle('autoStartMic', '开始跟踪时自动开启麦克风')}
               <label htmlFor="lip-sync-mode">口型来源</label>
               <Select
                 value={s.lipSyncMode}
@@ -1008,14 +1009,20 @@ export function App() {
                         {Math.round(view.micVolume * 100)}%
                       </span>
                     </div>
-                    <meter
+                    <div
                       id="mic-volume"
-                      className="block h-3 w-full"
+                      role="meter"
                       aria-labelledby="mic-volume-label"
-                      min={0}
-                      max={1}
-                      value={view.micVolume}
-                    />
+                      aria-valuemin={0}
+                      aria-valuemax={1}
+                      aria-valuenow={view.micVolume}
+                      className="mt-2 h-2 w-full overflow-hidden rounded-full bg-muted"
+                    >
+                      <div
+                        className="h-full rounded-full bg-primary"
+                        style={{ width: `${view.micVolume * 100}%` }}
+                      />
+                    </div>
                     <p className="hint">
                       {!view.micActive
                         ? '开启麦克风后显示输入音量。'
