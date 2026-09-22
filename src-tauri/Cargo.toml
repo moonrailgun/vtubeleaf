@@ -1,6 +1,6 @@
 [package]
 name = "vtubeleaf"
-version = "1.0.2"
+version = "1.0.3"
 license = "MIT"
 description = "Local Live2D face tracking studio"
 edition = "2021"
