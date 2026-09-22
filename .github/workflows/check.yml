@@ -21,10 +21,13 @@ jobs:
         include:
           - os: windows-latest
             bundle: nsis
-          - os: macos-latest
+          - os: macos-15
             bundle: app
     steps:
       - uses: actions/checkout@v7
+      - name: Select Xcode 26 for Icon Composer
+        if: runner.os == 'macOS'
+        run: sudo xcode-select --switch /Applications/Xcode_26.3.app/Contents/Developer
       - uses: actions/setup-node@v6
         with:
           node-version: 24
@@ -41,6 +44,13 @@ jobs:
       - run: npm run setup:assets
       - run: npm run setup:assets -- --check
       - run: npm run tauri -- build --bundles ${{ matrix.bundle }}
+      - name: Verify native macOS icon is bundled
+        if: runner.os == 'macOS'
+        run: |
+          app=src-tauri/target/release/bundle/macos/VTubeLeaf.app
+          test -s "$app/Contents/Resources/Assets.car"
+          test -n "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIconName' "$app/Contents/Info.plist")"
+          test -s "$app/Contents/Resources/icon.icns"
       - run: cargo test --locked --manifest-path src-tauri/Cargo.toml
       - name: Windows camera integration checks (x64 and x86)
         if: runner.os == 'Windows'

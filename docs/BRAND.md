@@ -41,6 +41,16 @@ node scripts/brand.mjs
 
 `public/brand/proposals/` 与 `proposals.svg` / `.png` 保留为早期方案存档，不参与当前品牌导出。
 
+## macOS 26 应用图标
+
+2026-09-22 选定第 1 张「暖白瓷底」方向：暖白底色 `#FFF9F7`、原有粉色叶芽、轻微浮起的阴影。主体约占图标高度的 74%，留出叶尖与边缘的空间。
+
+- 原生资源为 `src-tauri/icons/AppIcon.icon/`，`icon.json` 保存底色、图层位置和材质设置，可用 Apple Icon Composer 打开。
+- 前景 `Assets/sprout.png` 由品牌脚本同步原始 1024px 透明 PNG；不在图片中绘制圆角、外框或阴影，由系统根据图层生成效果。
+- Tauri 使用 Xcode 26+ 将 `.icon` 编译为 `Assets.car`，并设置 `CFBundleIconName`。macOS CI 和发布流程固定使用 Xcode 26.3，构建后检查原生图标及 ICNS 均已打包。
+- 旧版 macOS 保留原有透明 `icon.icns` 回退；Windows 与网页继续使用原来的透明图形。
+- 本地 Xcode 低于 26 时，Tauri 会跳过原生图标编译，只打包 ICNS。验证新图标需要 Xcode 26+ 构建，并在 macOS 26+ 检查实际显示；概念效果图不能代替系统渲染验收。
+
 ## 已确认效果归档
 
 2026-09-09 确认并归档「叶芽精灵」白色五官版效果图，保留 16 / 32 / 64 / 128px 图形与横向组合在深浅底色上的展示。图片原样保存，作为本次选定版本的视觉记录。

@@ -104,6 +104,9 @@ async function main() {
       join(brand, 'png'),
       sizes.flatMap((size) => ['--png', String(size)]),
     );
+    const composerAssets = join(icons, 'AppIcon.icon', 'Assets');
+    await mkdir(composerAssets, { recursive: true });
+    await copyFile(join(brand, 'png', '1024x1024.png'), join(composerAssets, 'sprout.png'));
     for (const size of sizes) {
       const bytes = await readFile(join(brand, 'png', `${size}x${size}.png`));
       assert.equal(bytes.readUInt32BE(16), size);
