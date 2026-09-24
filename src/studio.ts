@@ -870,7 +870,9 @@ export function createStudio(
         await devices();
         notify(
           settings.engine === 'openseeface'
-            ? '正在等待 OpenSeeFace 数据。外部模式请先启动跟踪程序。'
+            ? settings.openseefaceMode === 'external'
+              ? '正在等待外部 OpenSeeFace 数据，请启动外部跟踪程序。'
+              : 'OpenSeeFace 已启动，正在加载模型。识别到面部后请校准。'
             : settings.engine === 'nvidia'
               ? 'NVIDIA RTX（实验中）正在加载模型，首次启动可能需要两分钟。识别到面部后请校准。'
               : '已开始本地跟踪。建议先校准中立姿态。',
@@ -886,7 +888,7 @@ export function createStudio(
     async stop() {
       await stop();
       notify(
-        settings.engine === 'openseeface' && !settings.pythonPath
+        settings.engine === 'openseeface' && settings.openseefaceMode === 'external'
           ? '已停止接收。外部 OpenSeeFace 进程需要单独关闭。'
           : '跟踪已停止，摄像头已释放。',
       );

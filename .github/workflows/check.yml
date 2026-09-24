@@ -30,6 +30,9 @@ jobs:
           node-version: 24
           cache: npm
       - uses: dtolnay/rust-toolchain@stable
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.10'
       - uses: Swatinem/rust-cache@v2
         with:
           workspaces: src-tauri
@@ -40,7 +43,8 @@ jobs:
       - run: node scripts/setup-openseeface.mjs --self-test
       - run: npm run setup:assets
       - run: npm run setup:assets -- --check
-      - run: npm run tauri -- build --bundles ${{ matrix.bundle }}
+      - run: npm run bundle:openseeface -- --python python
+      - run: npm run tauri -- build --config src-tauri/tauri.openseeface.conf.json --bundles ${{ matrix.bundle }}
       - name: Verify native macOS icon is bundled
         if: runner.os == 'macOS'
         run: |

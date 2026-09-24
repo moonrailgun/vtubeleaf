@@ -12,7 +12,40 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  openseeface:
+    strategy:
+      matrix:
+        include:
+          - runner: macos-15
+            arch: aarch64
+          - runner: macos-15-intel
+            arch: x86_64
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.10'
+      - run: npm run bundle:openseeface -- --python python
+      - name: Validate frozen inference and preserve executable permissions
+        run: |
+          curl --fail --location https://developers.google.com/static/mediapipe/images/solutions/examples/face_landmark.png -o .local/face.png
+          python scripts/check-openseeface.py .local/face.png --executable .local/openseeface-bundle/${{ matrix.arch }}/facetracker
+          tar -czf openseeface-${{ matrix.arch }}.tar.gz -C .local/openseeface-bundle ${{ matrix.arch }}
+      - uses: actions/upload-artifact@v7
+        with:
+          name: openseeface-macos-${{ matrix.arch }}
+          path: openseeface-${{ matrix.arch }}.tar.gz
+          retention-days: 1
+          compression-level: 0
   package:
+    needs: openseeface
     runs-on: macos-15
     timeout-minutes: 120
     defaults:
@@ -71,6 +104,20 @@ jobs:
       - name: Build universal release app
         # Sign only after embedding the camera; do not let Tauri notarize an incomplete app.
         run: npm run tauri -- build --target universal-apple-darwin --bundles app -- --locked
+      - uses: actions/download-artifact@v8
+        with:
+          pattern: openseeface-macos-*
+          path: .local/openseeface-artifacts
+          merge-multiple: true
+      - name: Embed both OpenSeeFace architectures
+        # Copy after Tauri bundling to preserve PyInstaller's relative symlinks.
+        run: |
+          mkdir -p "$APP_PATH/Contents/Resources/openseeface"
+          for archive in .local/openseeface-artifacts/*.tar.gz; do
+            tar -xzf "$archive" -C "$APP_PATH/Contents/Resources/openseeface"
+          done
+          test -x "$APP_PATH/Contents/Resources/openseeface/aarch64/facetracker"
+          test -x "$APP_PATH/Contents/Resources/openseeface/x86_64/facetracker"
       - name: Verify native macOS icon is bundled
         run: |
           test -s "$APP_PATH/Contents/Resources/Assets.car"
@@ -104,6 +151,7 @@ jobs:
           APPLE_TEAM_ID: ${{ vars.APPLE_TEAM_ID }}
           APPLE_SIGNING_IDENTITY: ${{ vars.APPLE_SIGNING_IDENTITY }}
         run: |
+          python scripts/sign-openseeface.py "$APP_PATH/Contents/Resources/openseeface" --identity "$APPLE_SIGNING_IDENTITY"
           node scripts/build-camera.mjs --app "$APP_PATH" --arch universal --test \
             --team-id "$APPLE_TEAM_ID" --identity "$APPLE_SIGNING_IDENTITY" \
             --host-profile "$SIGNING_DIR/host.provisionprofile" \

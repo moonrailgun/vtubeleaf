@@ -3,6 +3,21 @@ import assert from 'node:assert/strict';
 import { defaults, readSettings, FaceMapper, NEUTRAL, fromMediaPipe } from '../src/state.ts';
 import * as state from '../src/state.ts';
 
+test('OpenSeeFace defaults to bundled and preserves explicit or legacy custom sources', () => {
+  assert.equal(readSettings({}).openseefaceMode, 'bundled');
+  assert.equal(readSettings({ pythonPath: '', scriptPath: '' }).openseefaceMode, 'bundled');
+  assert.equal(
+    readSettings({ pythonPath: '/python', scriptPath: '/tracker.py' }).openseefaceMode,
+    'custom',
+  );
+  assert.equal(readSettings({ pythonPath: '/python' }).openseefaceMode, 'custom');
+  for (const mode of ['bundled', 'external', 'custom']) {
+    const saved = readSettings({ openseefaceMode: mode, pythonPath: '/python' });
+    assert.equal(readSettings(JSON.parse(JSON.stringify(saved))).openseefaceMode, mode);
+  }
+  assert.equal(readSettings({ openseefaceMode: 'unknown' }).openseefaceMode, 'bundled');
+});
+
 test('virtual camera options are opt-in and stay global across model changes and reloads', () => {
   for (const key of [
     'autoStartVirtualCamera',

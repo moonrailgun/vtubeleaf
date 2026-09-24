@@ -168,6 +168,7 @@ export type Settings = ModelProfile & {
   port: number;
   camera: number;
   pythonPath: string;
+  openseefaceMode: 'bundled' | 'external' | 'custom';
   scriptPath: string;
   nvidiaPath: string;
   nvidiaModelDir: string;
@@ -242,6 +243,7 @@ export const defaults: Settings = {
   port: 11573,
   camera: 0,
   pythonPath: '',
+  openseefaceMode: 'bundled',
   scriptPath: '',
   nvidiaPath: '',
   nvidiaModelDir: '',
@@ -546,6 +548,13 @@ export function readSettings(value: unknown): Settings {
   if (typeof v.micNoiseGate === 'number' && Number.isFinite(v.micNoiseGate))
     s.micNoiseGate = clamp(v.micNoiseGate, 0, 0.2);
   if (v.engine === 'openseeface' || v.engine === 'nvidia') s.engine = v.engine;
+  if (
+    v.openseefaceMode === 'bundled' ||
+    v.openseefaceMode === 'external' ||
+    v.openseefaceMode === 'custom'
+  )
+    s.openseefaceMode = v.openseefaceMode;
+  else if (s.pythonPath.trim() || s.scriptPath.trim()) s.openseefaceMode = 'custom';
   if (typeof v.port === 'number' && Number.isFinite(v.port))
     s.port = Math.round(clamp(v.port, 1024, 65535));
   if (typeof v.camera === 'number' && Number.isFinite(v.camera))

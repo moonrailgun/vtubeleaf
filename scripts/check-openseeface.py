@@ -12,20 +12,22 @@ import time
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("input", type=Path, help="Existing local video/image containing a face")
+    parser.add_argument("--executable", type=Path, help="Validate a frozen bundle instead of local Python")
     args = parser.parse_args()
     source = args.input.resolve()
     if not source.is_file():
         parser.error("input must be an existing file; camera IDs are not accepted")
     root = Path(__file__).resolve().parent.parent
     script = root / "scripts/run-openseeface.py"
-    if not (root / ".local/openseeface/facetracker.py").is_file():
+    if not args.executable and not (root / ".local/openseeface/facetracker.py").is_file():
         parser.error("Run npm run setup:openseeface first")
+    command = [str(args.executable.resolve())] if args.executable else [sys.executable, str(script)]
 
     with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as receiver:
         receiver.bind(("127.0.0.1", 0))
         receiver.settimeout(1)
-        process = subprocess.Popen([
-            sys.executable, str(script), "--capture", str(source),
+        process = subprocess.Popen(command + [
+            "--capture", str(source),
             "--ip", "127.0.0.1", "--port", str(receiver.getsockname()[1]),
             "--faces", "1", "--gaze-tracking", "0", "--visualize", "0",
             "--silent", "1", "--repeat-video", "1",

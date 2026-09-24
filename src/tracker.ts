@@ -101,7 +101,9 @@ export class Tracker {
           this.fail(
             engine === 'nvidia'
               ? `NVIDIA RTX（实验中）：${typeof event.payload === 'string' ? event.payload : '跟踪进程异常，请检查 SDK 与摄像头。'}`
-              : 'OpenSeeFace 跟踪进程已退出。请检查 Python 依赖与摄像头后重试。',
+              : typeof event.payload === 'string'
+                ? event.payload
+                : 'OpenSeeFace 跟踪进程已退出，请检查摄像头后重试。',
           );
         });
         if (generation !== this.generation) {
@@ -125,6 +127,7 @@ export class Tracker {
                     }
                   : {
                       port: s.port,
+                      mode: s.openseefaceMode,
                       camera: s.camera,
                       pythonPath: s.pythonPath || null,
                       scriptPath: s.scriptPath || null,

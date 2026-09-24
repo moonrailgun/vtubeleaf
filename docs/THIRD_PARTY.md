@@ -31,11 +31,11 @@ Face Landmarker SHA-256：`64184e229b263107bc2b804c6625db1341ff2bb731874b0bcc2fe
 
 模型许可依据为[官方概览的模型组成表](https://developers.google.com/edge/mediapipe/solutions/vision/face_landmarker#models)及其直接链接的模型卡：[BlazeFace Short Range](https://storage.googleapis.com/mediapipe-assets/MediaPipe%20BlazeFace%20Model%20Card%20%28Short%20Range%29.pdf)、[Face Mesh V2](https://storage.googleapis.com/mediapipe-assets/Model%20Card%20MediaPipe%20Face%20Mesh%20V2.pdf)、[Blendshape V2](https://storage.googleapis.com/mediapipe-assets/Model%20Card%20Blendshape%20V2.pdf)。三份模型卡的首页均列出 Apache License, Version 2.0；这项记录针对跟踪模型，不延伸至 Cubism Core 或用户角色。
 
-## 可选 OpenSeeFace
+## 内置 OpenSeeFace
 
 来源为 [emilianavt/OpenSeeFace](https://github.com/emilianavt/OpenSeeFace)，安装脚本固定提交 `85aa70fc67582d046e771ea73625182a0d8f7475`，不从第三方镜像或浮动分支下载安装。上游说明其代码与模型采用 BSD-2-Clause；保留 [LICENSE](https://github.com/emilianavt/OpenSeeFace/blob/85aa70fc67582d046e771ea73625182a0d8f7475/LICENSE) 和相关 `Licenses/` 内容。
 
-Python 环境按上游 [pyproject.toml](https://github.com/emilianavt/OpenSeeFace/blob/85aa70fc67582d046e771ea73625182a0d8f7475/pyproject.toml) 的范围安装 NumPy、OpenCV、Pillow、ONNX Runtime。各依赖及其二进制组成部分有各自条款；本项目目前下载到开发者本机的 `.local/`，没有打包 Python 解释器或可分发 sidecar。若以后随安装包提供，需按实际冻结版本补齐依赖清单和声明。
+Python 环境按上游 [pyproject.toml](https://github.com/emilianavt/OpenSeeFace/blob/85aa70fc67582d046e771ea73625182a0d8f7475/pyproject.toml) 的范围安装 NumPy、OpenCV、Pillow、ONNX Runtime，通过 PyInstaller 冻结为独立后台程序。各依赖及其二进制组成部分保留各自条款。构建脚本随每个架构的程序附带 `licenses/`：包含上游 `Licenses/`、Python 许可及安装包中的 LICENSE/COPYING/NOTICE 文件（含 PyInstaller 引导程序的分发例外）。同目录 `BUILD.json` 记录实际 Python、依赖版本、平台和固定上游提交；不使用开发机器的解析版本代替其他平台的实际清单。
 
 OpenSeeFace 的 BSD 条款不决定 Live2D 渲染端的发布条件，也不证明跟踪效果优于 MediaPipe。
 

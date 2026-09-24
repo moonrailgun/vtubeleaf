@@ -19,7 +19,8 @@
     "release:patch": "npm run release -- patch",
     "release:minor": "npm run release -- minor",
     "setup:assets": "node scripts/setup-assets.mjs",
-    "setup:openseeface": "node scripts/setup-openseeface.mjs"
+    "setup:openseeface": "node scripts/setup-openseeface.mjs",
+    "bundle:openseeface": "node scripts/setup-openseeface.mjs --bundle"
   },
   "release-it": {
     "git": {

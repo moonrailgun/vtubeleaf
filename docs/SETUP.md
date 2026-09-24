@@ -31,7 +31,8 @@ npm run tauri dev
 
 ```powershell
 npm test
-npm run tauri -- build --bundles nsis
+npm run bundle:openseeface -- --python python
+npm run tauri -- build --config src-tauri/tauri.openseeface.conf.json --bundles nsis
 cargo test --locked --manifest-path src-tauri/Cargo.toml
 ```
 
@@ -188,9 +189,18 @@ npx playwright test -g 'upper body uses real'
 
 「角色 → 物理效果」提供整体强度、横向风力、计算帧率与各物理组强度；无物理资源的模型不显示调节项。校准、眼睛联动、口型模式/元音模板和物理调节按角色保存；采集设备、音频增益/门限与画面帧率为全局设置。独立输出窗口接收已经计算的最终模型参数。
 
-## 可选 OpenSeeFace
+## 内置 OpenSeeFace
 
-默认 MediaPipe 不需要 Python。OpenSeeFace 是额外的本地进程方案；上游代码、ONNX 模型与本项目适配的来源见 [THIRD_PARTY.md](THIRD_PARTY.md)。
+发布包附带 OpenSeeFace 的 Python 运行时、依赖和 ONNX 模型。选择 OpenSeeFace 后直接开始跟踪，应用自动启动并回收后台进程，无需用户安装 Python。运行方式默认「内置」；高级设置保留「接收外部程序」和「自定义 Python」。旧配置中填写过路径的会保留为自定义模式。来源见 [THIRD_PARTY.md](THIRD_PARTY.md)。
+
+从源码开发或打包时，先准备当前平台的独立运行时（仅构建阶段需要 Python）：
+
+```sh
+npm run bundle:openseeface -- --python /absolute/path/to/python3.10
+npm run tauri -- build --config src-tauri/tauri.openseeface.conf.json --bundles app
+```
+
+Windows 使用 `--python python` 和 `--bundles nsis`。产物位于 `.local/openseeface-bundle/<架构>/`，开发模式也会从这里启动。macOS 正式发布流程分别构建 arm64 和 Intel 程序，嵌入 universal 应用后逐项签名，再签名宿主并公证。下面的命令用于准备自定义 Python 环境及排查问题。
 
 准备 Git 和 Python **3.10**。安装脚本固定上游提交 `85aa70fc67582d046e771ea73625182a0d8f7475`；该提交的 `pyproject.toml` 声明 Python `<3.11`，此安装路径统一要求 3.10，以免误用系统更新版本。
 
@@ -207,9 +217,9 @@ npm run setup:openseeface -- --check
 .local/openseeface-venv/bin/python scripts/check-openseeface.py /absolute/path/to/face.png
 ```
 
-**由 VTubeLeaf 启停进程：** 选择 OpenSeeFace，引擎设置中同时填写脚本打印的 Python 和 `scripts/run-openseeface.py` 绝对路径，设置摄像头索引（默认 0）和端口（默认 11573）。macOS/Linux 的 Python 一般位于 `.local/openseeface-venv/bin/python`，Windows 为 `.local/openseeface-venv/Scripts/python.exe`。仅填写其中一个路径会被拒绝。
+**自定义 Python：** 选择 OpenSeeFace，在高级设置中选择「自定义 Python」，同时填写脚本打印的 Python 和 `scripts/run-openseeface.py` 绝对路径，设置摄像头索引（默认 0）和端口（默认 11573）。macOS 的 Python 一般位于 `.local/openseeface-venv/bin/python`，Windows 为 `.local/openseeface-venv/Scripts/python.exe`。仅填写其中一个路径会被拒绝。
 
-**自行启动进程：** 在 VTubeLeaf 中将这两个路径都留空，开始接收，再从项目目录运行：
+**自行启动进程：** 在高级设置中选择「接收外部程序」，开始接收，再从项目目录运行：
 
 ```sh
 .local/openseeface-venv/bin/python scripts/run-openseeface.py --ip 127.0.0.1 --port 11573 --capture 0 --faces 1 --visualize 0 --silent 1

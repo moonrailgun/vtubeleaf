@@ -305,6 +305,7 @@ async fn start_openseeface(
     app: tauri::AppHandle,
     port: Option<u16>,
     camera: Option<u32>,
+    mode: Option<tracker::Mode>,
     python_path: Option<String>,
     script_path: Option<String>,
 ) -> Result<(), String> {
@@ -315,17 +316,31 @@ async fn start_openseeface(
         active.take();
         let events = app.clone();
         let errors = app.clone();
+        let executable = tracker::bundled_executable(
+            &app.path().resource_dir().map_err(|_| "无法定位应用资源")?,
+        );
+        let source = match mode.unwrap_or_default() {
+            tracker::Mode::Bundled => tracker::Source::Bundled(&executable),
+            tracker::Mode::External => tracker::Source::External,
+            tracker::Mode::Custom => {
+                let python = python_path
+                    .as_deref()
+                    .filter(|path| !path.trim().is_empty());
+                let script = script_path
+                    .as_deref()
+                    .filter(|path| !path.trim().is_empty());
+                match (python, script) {
+                    (Some(python), Some(script)) => {
+                        tracker::Source::Python(Path::new(python), Path::new(script))
+                    }
+                    _ => return Err("请同时填写 Python 和 OpenSeeFace 启动脚本路径".into()),
+                }
+            }
+        };
         *active = Some(Box::new(tracker::Tracker::start(
             port.unwrap_or(11573),
             camera.unwrap_or(0),
-            python_path
-                .as_deref()
-                .filter(|path| !path.trim().is_empty())
-                .map(Path::new),
-            script_path
-                .as_deref()
-                .filter(|path| !path.trim().is_empty())
-                .map(Path::new),
+            source,
             move |frame| {
                 let _ = events.emit_to("main", "openseeface-frame", frame);
             },

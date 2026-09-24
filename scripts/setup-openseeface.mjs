@@ -53,13 +53,14 @@ async function main() {
     options: {
       python: { type: 'string', default: process.platform === 'win32' ? 'python' : 'python3.10' },
       check: { type: 'boolean' },
+      bundle: { type: 'boolean' },
       'self-test': { type: 'boolean' },
       help: { type: 'boolean' },
     },
   });
   if (values.help) {
     console.log(
-      'node scripts/setup-openseeface.mjs [--python /path/to/python3.10]\n  Downloads pinned official OpenSeeFace and installs its dependencies in .local/openseeface-venv.\n  --check      Verify the existing checkout and Python imports without installing\n  --self-test  Check installer validation without downloading or installing',
+      'node scripts/setup-openseeface.mjs [--python /path/to/python3.10]\n  Downloads pinned official OpenSeeFace and installs its dependencies in .local/openseeface-venv.\n  --check      Verify the existing checkout and Python imports without installing\n  --bundle     Freeze a standalone tracker for application packaging\n  --self-test  Check installer validation without downloading or installing',
     );
     return;
   }
@@ -135,8 +136,12 @@ async function main() {
     '-c',
     'import cv2, numpy, PIL, onnxruntime; print("OpenSeeFace imports passed")',
   ]);
+  if (values.bundle) {
+    run(pythonPath, ['-m', 'pip', 'install', '--disable-pip-version-check', 'pyinstaller==6.22.0']);
+    run(pythonPath, [join(root, 'scripts/bundle-openseeface.py')]);
+  }
   console.log(
-    `OpenSeeFace ${commit} is ready. This check does not open the camera.\nPython: ${pythonPath}\nScript: ${join(root, 'scripts/run-openseeface.py')}\nThe supplied launcher uses the CPU provider. Use localhost 127.0.0.1, port 11573, one face. Leave both paths blank in VTubeLeaf to receive an externally started tracker.`,
+    `OpenSeeFace ${commit} is ready. This check does not open the camera.\nPython: ${pythonPath}\nScript: ${join(root, 'scripts/run-openseeface.py')}\nThe supplied launcher uses the CPU provider. Use localhost 127.0.0.1, port 11573, one face. Advanced settings provide custom Python and external modes.`,
   );
 }
 

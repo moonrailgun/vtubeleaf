@@ -1,4 +1,4 @@
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use std::{
     io,
     net::{Ipv4Addr, UdpSocket},
@@ -13,6 +13,40 @@ use std::{
 };
 
 const PACKET_SIZE: usize = 1785;
+
+#[derive(Clone, Copy, Default, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum Mode {
+    #[default]
+    Bundled,
+    External,
+    Custom,
+}
+
+pub enum Source<'a> {
+    Bundled(&'a Path),
+    External,
+    Python(&'a Path, &'a Path),
+}
+
+pub fn bundled_executable(resources: &Path) -> std::path::PathBuf {
+    let relative = Path::new("openseeface")
+        .join(std::env::consts::ARCH)
+        .join(if cfg!(windows) {
+            "facetracker.exe"
+        } else {
+            "facetracker"
+        });
+    let bundled = resources.join(&relative);
+    #[cfg(debug_assertions)]
+    if !bundled.is_file() {
+        return Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../.local/openseeface-bundle")
+            .join(std::env::consts::ARCH)
+            .join(relative.file_name().unwrap());
+    }
+    bundled
+}
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -79,44 +113,56 @@ impl Tracker {
     pub fn start(
         port: u16,
         camera: u32,
-        python_path: Option<&Path>,
-        script_path: Option<&Path>,
+        source: Source<'_>,
         on_frame: impl Fn(Frame) + Send + 'static,
         on_error: impl Fn(&'static str) + Send + 'static,
     ) -> Result<Self, String> {
         if port == 0 || camera > 128 {
             return Err("OpenSeeFace 端口或摄像头编号无效".into());
         }
-        if python_path.is_some() != script_path.is_some() {
-            return Err("请同时填写 Python 和 OpenSeeFace 脚本路径，或全部留空使用外部进程".into());
-        }
         let socket = UdpSocket::bind((Ipv4Addr::LOCALHOST, port))
             .map_err(|_| "无法绑定 OpenSeeFace 本机端口，可能已被占用")?;
         socket
             .set_read_timeout(Some(Duration::from_millis(100)))
             .map_err(|_| "无法设置 OpenSeeFace 接收超时")?;
-        let child = if let (Some(python), Some(script)) = (python_path, script_path) {
-            // Keep the venv launcher path: resolving its symlink would lose pyvenv.cfg.
-            let python = if python.is_absolute() {
-                python.to_owned()
-            } else {
-                std::env::current_dir()
-                    .map_err(|_| "无法解析 Python 相对路径")?
-                    .join(python)
-            };
-            let script = script
-                .canonicalize()
-                .map_err(|_| "OpenSeeFace 脚本路径不存在")?;
-            if !python.is_file()
-                || !script.is_file()
-                || script.extension().is_none_or(|extension| extension != "py")
-            {
-                return Err("请选择 Python 可执行文件和 OpenSeeFace 启动脚本".into());
+        let command = match source {
+            Source::External => None,
+            Source::Bundled(executable) => {
+                if !executable.is_file() {
+                    return Err("内置 OpenSeeFace 不完整，请重新安装应用；开发环境请先运行 npm run bundle:openseeface".into());
+                }
+                let mut command = Command::new(executable);
+                command.current_dir(executable.parent().ok_or("OpenSeeFace 程序目录无效")?);
+                Some(command)
             }
-            let mut command = Command::new(python);
+            Source::Python(python, script) => {
+                // Keep the venv launcher path: resolving its symlink would lose pyvenv.cfg.
+                let python = if python.is_absolute() {
+                    python.to_owned()
+                } else {
+                    std::env::current_dir()
+                        .map_err(|_| "无法解析 Python 相对路径")?
+                        .join(python)
+                };
+                let script = script
+                    .canonicalize()
+                    .map_err(|_| "OpenSeeFace 脚本路径不存在")?;
+                if !python.is_file()
+                    || !script.is_file()
+                    || script.extension().is_none_or(|extension| extension != "py")
+                {
+                    return Err("请选择 Python 可执行文件和 OpenSeeFace 启动脚本".into());
+                }
+                let mut command = Command::new(python);
+                command
+                    .arg("-u")
+                    .arg(&script)
+                    .current_dir(script.parent().ok_or("OpenSeeFace 脚本目录无效")?);
+                Some(command)
+            }
+        };
+        let child = if let Some(mut command) = command {
             command
-                .arg("-u")
-                .arg(&script)
                 .args([
                     "--ip",
                     "127.0.0.1",
@@ -139,7 +185,6 @@ impl Tracker {
                     "--silent",
                     "1",
                 ])
-                .current_dir(script.parent().ok_or("OpenSeeFace 脚本目录无效")?)
                 .stdin(Stdio::null())
                 .stdout(Stdio::null())
                 .stderr(Stdio::null());
@@ -151,7 +196,7 @@ impl Tracker {
             Some(
                 command
                     .spawn()
-                    .map_err(|_| "无法启动 OpenSeeFace，请检查 Python 环境和脚本权限")?,
+                    .map_err(|_| "无法启动 OpenSeeFace，请检查程序是否完整及执行权限")?,
             )
         } else {
             None
@@ -184,7 +229,7 @@ impl Tracker {
                     if child_exited {
                         if !receiver_stop.load(Ordering::Acquire) {
                             on_error(
-                                "OpenSeeFace 进程已退出，请检查 Python 环境、模型文件和摄像头权限",
+                                "OpenSeeFace 进程已退出，请检查摄像头权限、占用情况和跟踪程序是否完整",
                             );
                         }
                         break;
@@ -261,6 +306,53 @@ mod tests {
     // Port probes and release checks must not race with another test's ephemeral bind.
     static UDP_TEST_LOCK: Mutex<()> = Mutex::new(());
 
+    #[cfg(unix)]
+    #[test]
+    fn bundled_process_receives_arguments_and_is_stopped_with_tracker() {
+        use std::os::unix::fs::PermissionsExt;
+        let _guard = UDP_TEST_LOCK.lock().unwrap();
+        let directory = tempfile::tempdir().unwrap();
+        let executable = directory.path().join("facetracker");
+        std::fs::write(
+            &executable,
+            "#!/bin/sh\nprintf '%s\\n' \"$@\" > arguments\nexec /bin/sleep 30\n",
+        )
+        .unwrap();
+        std::fs::set_permissions(&executable, std::fs::Permissions::from_mode(0o755)).unwrap();
+        let available = UdpSocket::bind((Ipv4Addr::LOCALHOST, 0)).unwrap();
+        let port = available.local_addr().unwrap().port();
+        drop(available);
+        let mut tracker =
+            Tracker::start(port, 2, Source::Bundled(&executable), |_| {}, |_| {}).unwrap();
+        let pid = tracker.child.lock().unwrap().as_ref().unwrap().id();
+        let arguments = directory.path().join("arguments");
+        for _ in 0..100 {
+            if arguments.is_file() {
+                break;
+            }
+            thread::sleep(Duration::from_millis(10));
+        }
+        tracker.stop();
+        let args = std::fs::read_to_string(arguments).unwrap();
+        assert!(args.contains(&format!("--ip\n127.0.0.1\n--port\n{port}\n--capture\n2\n")));
+        assert!(!args.contains(".py"));
+        assert!(!Command::new("/bin/kill")
+            .args(["-0", &pid.to_string()])
+            .stderr(Stdio::null())
+            .status()
+            .unwrap()
+            .success());
+        let _rebound = UdpSocket::bind((Ipv4Addr::LOCALHOST, port)).unwrap();
+        assert!(Tracker::start(
+            port,
+            0,
+            Source::Bundled(&directory.path().join("missing")),
+            |_| {},
+            |_| {}
+        )
+        .is_err());
+    }
+
     fn packet() -> Vec<u8> {
         let mut packet = vec![0; 1785];
         packet[..8].copy_from_slice(&1_f64.to_le_bytes());
@@ -332,8 +424,7 @@ mod tests {
         let mut tracker = Tracker::start(
             port,
             0,
-            None,
-            None,
+            Source::External,
             move |frame| {
                 let _ = sender.send(frame);
             },
@@ -368,8 +459,7 @@ mod tests {
         let mut tracker = Tracker::start(
             port,
             0,
-            Some(Path::new("/bin/sh")),
-            Some(&script),
+            Source::Python(Path::new("/bin/sh"), &script),
             |_| {},
             |_| {},
         )
@@ -404,8 +494,7 @@ mod tests {
         let mut tracker = Tracker::start(
             port,
             0,
-            Some(Path::new("/bin/sh")),
-            Some(&script),
+            Source::Python(Path::new("/bin/sh"), &script),
             |_| {},
             move |error| {
                 let _ = sender.send(error);
@@ -416,7 +505,7 @@ mod tests {
         tracker.stop();
         assert_eq!(
             error.unwrap(),
-            "OpenSeeFace 进程已退出，请检查 Python 环境、模型文件和摄像头权限"
+            "OpenSeeFace 进程已退出，请检查摄像头权限、占用情况和跟踪程序是否完整"
         );
         let _rebound = UdpSocket::bind((Ipv4Addr::LOCALHOST, port)).unwrap();
     }

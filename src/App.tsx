@@ -722,60 +722,83 @@ export function App() {
             </div>
             <div id="osf-options" hidden={s.engine !== 'openseeface'}>
               <p className="hint">
-                只接收 127.0.0.1 的单人跟踪数据。可连接已启动的
-                OpenSeeFace，或填写两个路径由应用启动。 上半身识别与关键点预览请使用 MediaPipe。
+                内置 OpenSeeFace 会随跟踪自动启动和停止，无需安装 Python。
+                上半身识别与关键点预览请使用 MediaPipe。
               </p>
-              <div className="two-fields">
-                <label>
-                  UDP 端口
-                  <Input
-                    id="port"
-                    disabled={active}
-                    type="number"
-                    min={1024}
-                    max={65535}
-                    value={s.port}
-                    onChange={(e) => set('port', Number(e.target.value))}
-                  />
-                </label>
-                <label>
-                  摄像头编号
-                  <Input
-                    id="camera"
-                    disabled={active}
-                    type="number"
-                    min={0}
-                    max={32}
-                    value={s.camera}
-                    onChange={(e) => set('camera', Number(e.target.value))}
-                  />
-                </label>
-              </div>
-              <label htmlFor="pythonPath">
-                Python 可执行文件 <small>可选</small>
+              <label>
+                摄像头编号
+                <Input
+                  id="camera"
+                  disabled={active || s.openseefaceMode === 'external'}
+                  type="number"
+                  min={0}
+                  max={32}
+                  value={s.camera}
+                  onChange={(e) => set('camera', Number(e.target.value))}
+                />
               </label>
-              <Input
-                id="pythonPath"
-                disabled={active}
-                value={s.pythonPath}
-                onChange={(e) => set('pythonPath', e.target.value)}
-                placeholder="/…/bin/python"
-                spellCheck={false}
-              />
-              <label htmlFor="scriptPath">
-                OpenSeeFace 启动脚本 <small>可选</small>
-              </label>
-              <Input
-                id="scriptPath"
-                disabled={active}
-                value={s.scriptPath}
-                onChange={(e) => set('scriptPath', e.target.value)}
-                placeholder="/…/scripts/run-openseeface.py"
-                spellCheck={false}
-              />
-              <p className="hint">
-                路径都留空时使用外部进程；停止接收不会关闭外部进程或释放它占用的摄像头。
-              </p>
+              <details>
+                <summary>高级设置</summary>
+                <label htmlFor="openseeface-mode">运行方式</label>
+                <Select
+                  value={s.openseefaceMode}
+                  disabled={active}
+                  onValueChange={(value) =>
+                    set('openseefaceMode', value as Settings['openseefaceMode'])
+                  }
+                >
+                  <SelectTrigger id="openseeface-mode">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="bundled">内置 · 推荐</SelectItem>
+                    <SelectItem value="external">接收外部程序</SelectItem>
+                    <SelectItem value="custom">自定义 Python</SelectItem>
+                  </SelectContent>
+                </Select>
+                <div className="two-fields">
+                  <label>
+                    UDP 端口
+                    <Input
+                      id="port"
+                      disabled={active}
+                      type="number"
+                      min={1024}
+                      max={65535}
+                      value={s.port}
+                      onChange={(e) => set('port', Number(e.target.value))}
+                    />
+                  </label>
+                </div>
+                {s.openseefaceMode === 'custom' && (
+                  <>
+                    <label htmlFor="pythonPath">Python 可执行文件</label>
+                    <Input
+                      id="pythonPath"
+                      disabled={active}
+                      value={s.pythonPath}
+                      onChange={(e) => set('pythonPath', e.target.value)}
+                      placeholder="/…/bin/python"
+                      spellCheck={false}
+                    />
+                    <label htmlFor="scriptPath">OpenSeeFace 启动脚本</label>
+                    <Input
+                      id="scriptPath"
+                      disabled={active}
+                      value={s.scriptPath}
+                      onChange={(e) => set('scriptPath', e.target.value)}
+                      placeholder="/…/scripts/run-openseeface.py"
+                      spellCheck={false}
+                    />
+                  </>
+                )}
+                {s.openseefaceMode === 'external' && (
+                  <p className="hint">
+                    只接收本机 127.0.0.1
+                    的单人跟踪数据；停止接收不会关闭外部进程或释放它占用的摄像头。
+                  </p>
+                )}
+              </details>
             </div>
             <div id="nvidia-options" hidden={s.engine !== 'nvidia'}>
               <p className="hint">

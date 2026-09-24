@@ -8,10 +8,6 @@ import onnxruntime
 
 
 def main():
-    script = Path(__file__).resolve().parent.parent / ".local/openseeface/facetracker.py"
-    if not script.is_file():
-        raise SystemExit("Run npm run setup:openseeface first")
-
     session = onnxruntime.InferenceSession
 
     def cpu_session(*args, **kwargs):
@@ -20,6 +16,13 @@ def main():
         return session(*args, **kwargs)
 
     onnxruntime.InferenceSession = cpu_session
+    if getattr(sys, "frozen", False):
+        import facetracker  # Bundled by PyInstaller; upstream runs at import time.
+        return
+
+    script = Path(__file__).resolve().parent.parent / ".local/openseeface/facetracker.py"
+    if not script.is_file():
+        raise SystemExit("Run npm run setup:openseeface first")
     sys.path.insert(0, str(script.parent))
     sys.argv[0] = str(script)
     os.chdir(script.parent)

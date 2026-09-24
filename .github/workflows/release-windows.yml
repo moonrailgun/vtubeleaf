@@ -27,14 +27,22 @@ jobs:
           node-version: 24
           cache: npm
       - uses: dtolnay/rust-toolchain@stable
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.10'
       - uses: Swatinem/rust-cache@v2
         with:
           workspaces: src-tauri
       - run: npm ci
       - run: npm run setup:assets
       - run: npm run setup:assets -- --check
+      - run: npm run bundle:openseeface -- --python python
+      - name: Validate frozen OpenSeeFace inference
+        run: |
+          Invoke-WebRequest https://developers.google.com/static/mediapipe/images/solutions/examples/face_landmark.png -OutFile .local/face.png
+          python scripts/check-openseeface.py .local/face.png --executable .local/openseeface-bundle/x86_64/facetracker.exe
       - name: Build Windows release installer
-        run: npm run tauri -- build --bundles nsis
+        run: npm run tauri -- build --config src-tauri/tauri.openseeface.conf.json --bundles nsis
       - name: Sign Windows updater installer
         env:
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}

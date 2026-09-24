@@ -2,6 +2,8 @@
 
 更新日期：2026-09-08。此表区分已检查的本地工件与尚未验证的产品行为。编译、单元测试、模拟 UDP 数据不能证明真实面捕或会议可用。
 
+2026-09-24 内置 OpenSeeFace 补充：macOS arm64 已生成独立运行时并构建应用包；通过 `scripts/check-openseeface.py --executable` 检查应用包内的程序，使用静态人脸图片收到 3 个有效 UDP 数据包，不调用开发虚拟环境。内部程序与宿主的 ad-hoc 签名及 `codesign --verify --deep --strict` 通过；不代表 Developer ID 签名或公证通过。新增浏览器回归验证默认内置模式、启停命令和显式外部模式；Rust 回归验证托管程序参数、退出回收和端口释放。Windows、Intel macOS、真实摄像头和正式发布 CI 尚未实测。
+
 ## 当前资源与品牌检查
 
 | 项目                       | 结果     | 证据与边界                                                                                                                                                                                                                                                        |
