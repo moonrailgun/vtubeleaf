@@ -14,13 +14,28 @@ export function parseRelease(value: unknown) {
   for (const [key, url] of Object.entries(expected)) {
     if (release[key] !== url) throw new Error(`Invalid release manifest field: ${key}`);
   }
-  return expected;
+  const downloads = {
+    'windows-x86_64': `${base}/download/v${version}/VTubeLeaf-OpenSeeFace-${version}-windows-x64.zip`,
+    'darwin-aarch64': `${base}/download/v${version}/VTubeLeaf-OpenSeeFace-${version}-macos-aarch64.dmg`,
+    'darwin-x86_64': `${base}/download/v${version}/VTubeLeaf-OpenSeeFace-${version}-macos-x86_64.dmg`,
+  };
+  const result: typeof expected & { openseeface?: typeof downloads } = expected;
+  // Older manifests still provide valid application downloads for the website.
+  if (release.openseeface !== undefined) {
+    const supplied = release.openseeface as Record<string, unknown> | null;
+    for (const [platform, url] of Object.entries(downloads)) {
+      if (supplied?.[platform] !== url)
+        throw new Error(`Invalid OpenSeeFace download: ${platform}`);
+    }
+    result.openseeface = downloads;
+  }
+  return result;
 }
 
 export async function loadLatestRelease(signal = AbortSignal.timeout(15_000)) {
   const response = await fetch(
     'https://raw.githubusercontent.com/moonrailgun/vtubeleaf/main/website/public/release.json',
-    { signal },
+    { signal, cache: 'no-store' },
   );
   if (!response.ok) throw new Error(`Cannot load release manifest: HTTP ${response.status}`);
   return parseRelease(await response.json());

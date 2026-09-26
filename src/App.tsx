@@ -45,6 +45,7 @@ import { SceneControls } from './SceneControls';
 import { vowels } from './lipsync';
 import { version } from '../package.json';
 import { initialUpdateState } from './updater';
+import { OpenSeeFaceDownload } from './OpenSeeFaceDownload';
 
 function Fold({ title, children }: { title: string; children: ReactNode }) {
   return (
@@ -724,6 +725,7 @@ export function App() {
               <p className="hint">
                 请单独下载并启动 OpenSeeFace 启动包，再在此开始接收。启动包无需安装 Python。
               </p>
+              <OpenSeeFaceDownload />
               <details>
                 <summary>高级设置</summary>
                 <label htmlFor="openseeface-mode">运行方式</label>

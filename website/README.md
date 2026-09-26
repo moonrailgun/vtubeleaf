@@ -31,7 +31,7 @@ npm run preview -- --port 4173
 
 构建包含 TypeScript 检查和 React 静态预渲染，完整正文、下载链接及应用结构化数据会写入 `website/dist/index.html`，关闭 JavaScript 也能阅读和下载；加载 JavaScript 后通过 hydration 恢复交互。预览地址为 <http://127.0.0.1:4173>，适合部署在站点根路径。
 
-版本来源是 `public/release.json`，包含最新稳定版版本号、Release 页面、Windows x64 EXE 和 macOS 通用 DMG 地址。Release 工作流在发布成功后运行 `scripts/update-website-release.mjs`：读取 GitHub 当前最新稳定版，按版本号推断文件地址并核对已上传的安装包，再仅更新 `main` 分支的这份文件。预发布和失败的发布不会更新官网版本；重跑旧版本时仍以 GitHub 当前 latest 为准。可在仓库根目录运行 `node scripts/update-website-release.mjs --dry-run` 预览生成结果，不写入 GitHub。
+版本来源是 `public/release.json`，包含最新稳定版版本号、Release 页面、Windows x64 EXE、macOS 通用 DMG，以及 `openseeface` 下 Windows x64、macOS Apple Silicon / Intel 三个独立启动包地址。桌面端的 OpenSeeFace 主下载按钮由原生端识别当前系统和架构，每次点击时读取这份清单并下载对应的最新版启动包；次按钮“去到下载页”始终可用。Release 工作流在发布成功后运行 `scripts/update-website-release.mjs`：读取 GitHub 当前最新稳定版，按版本号推断文件地址并核对全部应用安装包和独立启动包已上传，再仅更新 `main` 分支的这份文件。预发布和失败的发布不会更新清单；重跑旧版本时仍以 GitHub 当前 latest 为准。可在仓库根目录运行 `node scripts/update-website-release.mjs --dry-run` 预览生成结果，不写入 GitHub。
 
 构建从本地版本文件生成完整 HTML，无需联网查询 Release。浏览器加载后从 GitHub 原始文件地址读取最新清单，同步版本文字、下载地址和结构化数据，因此后续更新不依赖网站重新部署。读取失败或文件无效时保留构建快照；关闭 JavaScript 的访客和不执行 JavaScript 的爬虫仍使用构建时版本。下载按钮首次按访客系统排序和高亮，手动切换系统后跟随选择并记忆。
 
@@ -54,7 +54,7 @@ npm test
 - `public/assets/brand/`：当前叶芽精灵 Logo；在仓库根目录运行 `node scripts/brand.mjs` 同步 SVG，分享图 `logo.png` 取自 `public/brand/png/512x512.png`。
 - `index.html`：页面标题、简介、分享元信息和图标。
 - `vite.config.ts`：Release 构建快照与首页预渲染。
-- `src/release.ts`：版本文件校验和浏览器更新。
+- `src/release.ts`：官网与桌面端共用的版本文件校验和更新。
 - `public/release.json`：由 Release 工作流自动维护的版本和下载地址。
 - `public/robots.txt`、`public/sitemap.xml`：爬虫规则与站点地图。
 

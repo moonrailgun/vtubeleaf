@@ -17,9 +17,14 @@ export function createReleaseManifest(latest) {
     url: `${base}/tag/v${version}`,
     windows: `${base}/download/v${version}/VTubeLeaf_${version}_x64-setup.exe`,
     mac: `${base}/download/v${version}/VTubeLeaf-${version}-macos-universal.dmg`,
+    openseeface: {
+      'windows-x86_64': `${base}/download/v${version}/VTubeLeaf-OpenSeeFace-${version}-windows-x64.zip`,
+      'darwin-aarch64': `${base}/download/v${version}/VTubeLeaf-OpenSeeFace-${version}-macos-aarch64.dmg`,
+      'darwin-x86_64': `${base}/download/v${version}/VTubeLeaf-OpenSeeFace-${version}-macos-x86_64.dmg`,
+    },
   };
   assert.ok(Array.isArray(latest.assets), 'Expected uploaded release assets');
-  for (const url of [manifest.windows, manifest.mac]) {
+  for (const url of [manifest.windows, manifest.mac, ...Object.values(manifest.openseeface)]) {
     assert.ok(
       latest.assets.some(
         (asset) =>

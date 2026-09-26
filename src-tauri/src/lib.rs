@@ -1,5 +1,6 @@
 mod assets;
 mod camera;
+mod downloads;
 mod models;
 mod motion;
 mod nvidia;
@@ -473,6 +474,8 @@ pub fn run() {
             load_model,
             list_models,
             open_models_directory,
+            downloads::get_download_platform,
+            downloads::open_release_url,
             remove_model,
             read_model_preview,
             save_model_preview,
