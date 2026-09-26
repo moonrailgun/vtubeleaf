@@ -723,7 +723,6 @@ export function App() {
             <div id="osf-options" hidden={s.engine !== 'openseeface'}>
               <p className="hint">
                 请单独下载并启动 OpenSeeFace 启动包，再在此开始接收。启动包无需安装 Python。
-                上半身识别与关键点预览请使用 MediaPipe。
               </p>
               <details>
                 <summary>高级设置</summary>
