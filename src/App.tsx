@@ -722,21 +722,9 @@ export function App() {
             </div>
             <div id="osf-options" hidden={s.engine !== 'openseeface'}>
               <p className="hint">
-                内置 OpenSeeFace 会随跟踪自动启动和停止，无需安装 Python。
+                请单独下载并启动 OpenSeeFace 启动包，再在此开始接收。启动包无需安装 Python。
                 上半身识别与关键点预览请使用 MediaPipe。
               </p>
-              <label>
-                摄像头编号
-                <Input
-                  id="camera"
-                  disabled={active || s.openseefaceMode === 'external'}
-                  type="number"
-                  min={0}
-                  max={32}
-                  value={s.camera}
-                  onChange={(e) => set('camera', Number(e.target.value))}
-                />
-              </label>
               <details>
                 <summary>高级设置</summary>
                 <label htmlFor="openseeface-mode">运行方式</label>
@@ -751,8 +739,7 @@ export function App() {
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="bundled">内置 · 推荐</SelectItem>
-                    <SelectItem value="external">接收外部程序</SelectItem>
+                    <SelectItem value="external">独立启动包 / 外部程序</SelectItem>
                     <SelectItem value="custom">自定义 Python</SelectItem>
                   </SelectContent>
                 </Select>
@@ -772,6 +759,18 @@ export function App() {
                 </div>
                 {s.openseefaceMode === 'custom' && (
                   <>
+                    <label>
+                      摄像头编号
+                      <Input
+                        id="camera"
+                        disabled={active}
+                        type="number"
+                        min={0}
+                        max={32}
+                        value={s.camera}
+                        onChange={(e) => set('camera', Number(e.target.value))}
+                      />
+                    </label>
                     <label htmlFor="pythonPath">Python 可执行文件</label>
                     <Input
                       id="pythonPath"
@@ -794,8 +793,8 @@ export function App() {
                 )}
                 {s.openseefaceMode === 'external' && (
                   <p className="hint">
-                    只接收本机 127.0.0.1
-                    的单人跟踪数据；停止接收不会关闭外部进程或释放它占用的摄像头。
+                    在独立启动包中选择摄像头，UDP 端口需与此处一致。只接收本机 127.0.0.1
+                    的单人跟踪数据；停止接收不会关闭独立进程，请在其终端按 Ctrl+C 停止。
                   </p>
                 )}
               </details>

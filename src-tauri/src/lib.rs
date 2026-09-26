@@ -316,11 +316,7 @@ async fn start_openseeface(
         active.take();
         let events = app.clone();
         let errors = app.clone();
-        let executable = tracker::bundled_executable(
-            &app.path().resource_dir().map_err(|_| "无法定位应用资源")?,
-        );
         let source = match mode.unwrap_or_default() {
-            tracker::Mode::Bundled => tracker::Source::Bundled(&executable),
             tracker::Mode::External => tracker::Source::External,
             tracker::Mode::Custom => {
                 let python = python_path

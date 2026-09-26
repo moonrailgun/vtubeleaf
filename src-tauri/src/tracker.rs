@@ -18,34 +18,13 @@ const PACKET_SIZE: usize = 1785;
 #[serde(rename_all = "lowercase")]
 pub enum Mode {
     #[default]
-    Bundled,
     External,
     Custom,
 }
 
 pub enum Source<'a> {
-    Bundled(&'a Path),
     External,
     Python(&'a Path, &'a Path),
-}
-
-pub fn bundled_executable(resources: &Path) -> std::path::PathBuf {
-    let relative = Path::new("openseeface")
-        .join(std::env::consts::ARCH)
-        .join(if cfg!(windows) {
-            "facetracker.exe"
-        } else {
-            "facetracker"
-        });
-    let bundled = resources.join(&relative);
-    #[cfg(debug_assertions)]
-    if !bundled.is_file() {
-        return Path::new(env!("CARGO_MANIFEST_DIR"))
-            .join("../.local/openseeface-bundle")
-            .join(std::env::consts::ARCH)
-            .join(relative.file_name().unwrap());
-    }
-    bundled
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
@@ -127,14 +106,6 @@ impl Tracker {
             .map_err(|_| "无法设置 OpenSeeFace 接收超时")?;
         let command = match source {
             Source::External => None,
-            Source::Bundled(executable) => {
-                if !executable.is_file() {
-                    return Err("内置 OpenSeeFace 不完整，请重新安装应用；开发环境请先运行 npm run bundle:openseeface".into());
-                }
-                let mut command = Command::new(executable);
-                command.current_dir(executable.parent().ok_or("OpenSeeFace 程序目录无效")?);
-                Some(command)
-            }
             Source::Python(python, script) => {
                 // Keep the venv launcher path: resolving its symlink would lose pyvenv.cfg.
                 let python = if python.is_absolute() {
@@ -305,53 +276,6 @@ mod tests {
 
     // Port probes and release checks must not race with another test's ephemeral bind.
     static UDP_TEST_LOCK: Mutex<()> = Mutex::new(());
-
-    #[cfg(unix)]
-    #[test]
-    fn bundled_process_receives_arguments_and_is_stopped_with_tracker() {
-        use std::os::unix::fs::PermissionsExt;
-        let _guard = UDP_TEST_LOCK.lock().unwrap();
-        let directory = tempfile::tempdir().unwrap();
-        let executable = directory.path().join("facetracker");
-        std::fs::write(
-            &executable,
-            "#!/bin/sh\nprintf '%s\\n' \"$@\" > arguments\nexec /bin/sleep 30\n",
-        )
-        .unwrap();
-        std::fs::set_permissions(&executable, std::fs::Permissions::from_mode(0o755)).unwrap();
-        let available = UdpSocket::bind((Ipv4Addr::LOCALHOST, 0)).unwrap();
-        let port = available.local_addr().unwrap().port();
-        drop(available);
-        let mut tracker =
-            Tracker::start(port, 2, Source::Bundled(&executable), |_| {}, |_| {}).unwrap();
-        let pid = tracker.child.lock().unwrap().as_ref().unwrap().id();
-        let arguments = directory.path().join("arguments");
-        for _ in 0..100 {
-            if arguments.is_file() {
-                break;
-            }
-            thread::sleep(Duration::from_millis(10));
-        }
-        tracker.stop();
-        let args = std::fs::read_to_string(arguments).unwrap();
-        assert!(args.contains(&format!("--ip\n127.0.0.1\n--port\n{port}\n--capture\n2\n")));
-        assert!(!args.contains(".py"));
-        assert!(!Command::new("/bin/kill")
-            .args(["-0", &pid.to_string()])
-            .stderr(Stdio::null())
-            .status()
-            .unwrap()
-            .success());
-        let _rebound = UdpSocket::bind((Ipv4Addr::LOCALHOST, port)).unwrap();
-        assert!(Tracker::start(
-            port,
-            0,
-            Source::Bundled(&directory.path().join("missing")),
-            |_| {},
-            |_| {}
-        )
-        .is_err());
-    }
 
     fn packet() -> Vec<u8> {
         let mut packet = vec![0; 1785];

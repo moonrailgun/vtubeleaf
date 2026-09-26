@@ -320,7 +320,7 @@ export class Tracker {
         throw new Error(
           typeof error === 'string'
             ? error
-            : 'OpenSeeFace 启动失败。请检查本地端口与 Python 路径。',
+            : 'OpenSeeFace 接收失败。请检查本机端口；自定义模式需同时检查 Python 路径。',
         );
       if (error instanceof Error && error.message.startsWith('此运行环境')) throw error;
       throw new Error(

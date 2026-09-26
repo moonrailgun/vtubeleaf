@@ -1,6 +1,6 @@
 import { test, expect } from '@playwright/test';
 
-test('OpenSeeFace starts bundled by default and only waits for an external app when selected', async ({
+test('OpenSeeFace receives independently by default and keeps custom Python in advanced settings', async ({
   page,
 }) => {
   await page.route('**/src/main.tsx*', async (route) => {
@@ -22,7 +22,7 @@ test('OpenSeeFace starts bundled by default and only waits for an external app w
   await expect(page.locator('#tracking-status')).toHaveText('正在跟踪');
   expect(await page.evaluate(() => (window as any).trackerCalls.at(-1))).toMatchObject({
     cmd: 'start_openseeface',
-    args: { mode: 'bundled', camera: 0, port: 11573 },
+    args: { mode: 'external', camera: 0, port: 11573 },
   });
   await page.locator('#start').click();
   await expect(page.locator('#tracking-status')).toHaveText('尚未开始');
@@ -31,12 +31,14 @@ test('OpenSeeFace starts bundled by default and only waits for an external app w
   );
   await page.locator('#osf-options summary').click();
   await page.locator('#openseeface-mode').click();
-  await page.getByRole('option', { name: '接收外部程序', exact: true }).click();
-  await expect(page.locator('#camera')).toBeDisabled();
+  await page.getByRole('option', { name: '自定义 Python', exact: true }).click();
+  await page.locator('#pythonPath').fill('/python');
+  await page.locator('#scriptPath').fill('/tracker.py');
+  await expect(page.locator('#camera')).toBeEnabled();
   await page.locator('#start').click();
   await expect(page.locator('#tracking-status')).toHaveText('正在跟踪');
   expect(await page.evaluate(() => (window as any).trackerCalls.at(-1))).toMatchObject({
     cmd: 'start_openseeface',
-    args: { mode: 'external' },
+    args: { mode: 'custom', pythonPath: '/python', scriptPath: '/tracker.py' },
   });
 });
