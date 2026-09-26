@@ -2,6 +2,8 @@
 
 更新日期：2026-09-08。此表区分已检查的本地工件与尚未验证的产品行为。编译、单元测试、模拟 UDP 数据不能证明真实面捕或会议可用。
 
+2026-09-26 独立 OpenSeeFace 包补充：主应用已移除运行时嵌入和自动查找，本机 arm64 应用目录约 48 MiB，确认没有 OpenSeeFace 程序或 Python framework。独立 DMG 约 151 MiB；挂载到含空格的路径后，启动脚本能显示提示并安全取消，冻结程序在仅含系统工具的 PATH 下通过静态人脸图片推理，收到 3 个有效 UDP 包。DMG 校验与内部程序的 ad-hoc 签名检查通过。TypeScript 检查、102 项 Node 测试、35 项 Rust 检查（另 1 项模型测试忽略）、1 项浏览器回归及启动器输入校验通过。发布流程分别产出主应用与启动包；Windows、Intel macOS、真实摄像头及正式签名公证仍待对应环境验证。下方 9 月 24 日的内置方案记录仅作为历史证据。
+
 2026-09-24 内置 OpenSeeFace 补充：macOS arm64 已生成独立运行时并构建应用包；通过 `scripts/check-openseeface.py --executable` 检查应用包内的程序，使用静态人脸图片收到 3 个有效 UDP 数据包，不调用开发虚拟环境。内部程序与宿主的 ad-hoc 签名及 `codesign --verify --deep --strict` 通过；不代表 Developer ID 签名或公证通过。新增浏览器回归验证默认内置模式、启停命令和显式外部模式；Rust 回归验证托管程序参数、退出回收和端口释放。Windows、Intel macOS、真实摄像头和正式发布 CI 尚未实测。
 
 ## 当前资源与品牌检查

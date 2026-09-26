@@ -31,8 +31,7 @@ npm run tauri dev
 
 ```powershell
 npm test
-npm run bundle:openseeface -- --python python
-npm run tauri -- build --config src-tauri/tauri.openseeface.conf.json --bundles nsis
+npm run tauri -- build --bundles nsis
 cargo test --locked --manifest-path src-tauri/Cargo.toml
 ```
 
@@ -189,18 +188,28 @@ npx playwright test -g 'upper body uses real'
 
 「角色 → 物理效果」提供整体强度、横向风力、计算帧率与各物理组强度；无物理资源的模型不显示调节项。校准、眼睛联动、口型模式/元音模板和物理调节按角色保存；采集设备、音频增益/门限与画面帧率为全局设置。独立输出窗口接收已经计算的最终模型参数。
 
-## 内置 OpenSeeFace
+## 独立 OpenSeeFace 启动包
 
-发布包附带 OpenSeeFace 的 Python 运行时、依赖和 ONNX 模型。选择 OpenSeeFace 后直接开始跟踪，应用自动启动并回收后台进程，无需用户安装 Python。运行方式默认「内置」；高级设置保留「接收外部程序」和「自定义 Python」。旧配置中填写过路径的会保留为自定义模式。来源见 [THIRD_PARTY.md](THIRD_PARTY.md)。
+OpenSeeFace 与主应用分别下载、启动和关闭。主应用不包含 OpenSeeFace 的 Python 运行时、依赖或 ONNX 模型；不使用此引擎时无需下载启动包。启动包已包含运行环境，用户无需安装 Python。来源和许可见 [THIRD_PARTY.md](THIRD_PARTY.md)。
 
-从源码开发或打包时，先准备当前平台的独立运行时（仅构建阶段需要 Python）：
+1. 从同一个 Release 下载主应用，以及对应平台的 `VTubeLeaf-OpenSeeFace-<版本>-<平台>-<架构>` 启动包。macOS 提供 aarch64（Apple Silicon）和 x86_64（Intel）DMG，Windows 提供 x64 ZIP。
+2. macOS 打开 DMG，将整个 `OpenSeeFace` 文件夹复制到本机，再双击其中的 `Start OpenSeeFace.command`；Windows 完整解压 ZIP 后双击 `Start OpenSeeFace.cmd`。
+3. 在终端选择摄像头编号和端口，回车使用默认值 0、11573。允许摄像头访问；macOS 可能由终端请求权限。
+4. 主应用选择 OpenSeeFace，再点击「开始跟踪」。默认运行方式为「独立启动包 / 外部程序」，高级设置的 UDP 端口必须与启动包一致。
+5. 在启动包的终端按 Ctrl+C 结束。主应用停止接收不会关闭独立进程，切回 MediaPipe 前先结束它以释放摄像头。
+
+旧的「内置」设置自动迁移为外部接收；已有的自定义 Python 设置继续保留。
+
+从源码构建时，两个产物分别生成（只有构建启动包需要 Python 3.10）：
 
 ```sh
+npm run tauri -- build --bundles app
 npm run bundle:openseeface -- --python /absolute/path/to/python3.10
-npm run tauri -- build --config src-tauri/tauri.openseeface.conf.json --bundles app
 ```
 
-Windows 使用 `--python python` 和 `--bundles nsis`。产物位于 `.local/openseeface-bundle/<架构>/`，开发模式也会从这里启动。macOS 正式发布流程分别构建 arm64 和 Intel 程序，嵌入 universal 应用后逐项签名，再签名宿主并公证。下面的命令用于准备自定义 Python 环境及排查问题。
+Windows 主应用使用 `--bundles nsis`，启动包使用 `--python python`。独立启动目录位于 `.local/openseeface-bundle/<架构>/`，可以双击其中的启动脚本。主应用的开发和构建都不会自动加载此目录。正式发布流程将两类产物上传到同一个 Release；macOS 的启动包按架构分别签名、公证并生成 DMG，主应用仍为 universal。Windows 启动包生成独立 ZIP，不加入安装程序或自动更新安装包。
+
+下面的命令用于准备自定义 Python 环境及排查问题。
 
 准备 Git 和 Python **3.10**。安装脚本固定上游提交 `85aa70fc67582d046e771ea73625182a0d8f7475`；该提交的 `pyproject.toml` 声明 Python `<3.11`，此安装路径统一要求 3.10，以免误用系统更新版本。
 
@@ -219,7 +228,7 @@ npm run setup:openseeface -- --check
 
 **自定义 Python：** 选择 OpenSeeFace，在高级设置中选择「自定义 Python」，同时填写脚本打印的 Python 和 `scripts/run-openseeface.py` 绝对路径，设置摄像头索引（默认 0）和端口（默认 11573）。macOS 的 Python 一般位于 `.local/openseeface-venv/bin/python`，Windows 为 `.local/openseeface-venv/Scripts/python.exe`。仅填写其中一个路径会被拒绝。
 
-**自行启动进程：** 在高级设置中选择「接收外部程序」，开始接收，再从项目目录运行：
+**自行启动进程：** 在高级设置中选择「独立启动包 / 外部程序」，开始接收，再从项目目录运行：
 
 ```sh
 .local/openseeface-venv/bin/python scripts/run-openseeface.py --ip 127.0.0.1 --port 11573 --capture 0 --faces 1 --visualize 0 --silent 1
