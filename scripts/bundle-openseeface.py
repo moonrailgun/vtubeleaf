@@ -1,4 +1,4 @@
-"""Freeze the verified local checkout into a relocatable, CPU-only tracker."""
+"""Build the independent, relocatable OpenSeeFace launch package."""
 import importlib.metadata
 import json
 from pathlib import Path
@@ -31,7 +31,15 @@ if sys.platform == "win32":
 command.append(str(root / "scripts/run-openseeface.py"))
 subprocess.run(command, check=True, cwd=root)
 bundle = work / "dist/facetracker"
+if sys.platform == "darwin":
+    launcher = bundle / "Start OpenSeeFace.command"
+    launcher.write_text('#!/bin/sh\ncd "$(dirname "$0")" || exit 1\nexec ./facetracker --launcher\n', encoding="utf-8")
+    launcher.chmod(0o755)
+else:
+    (bundle / "Start OpenSeeFace.cmd").write_bytes(b'@echo off\r\ncd /d "%~dp0"\r\nfacetracker.exe --launcher\r\npause\r\n')
+shutil.copy2(root / "scripts/openseeface-README.txt", bundle / "README.txt")
 licenses = bundle / "licenses"
+shutil.copy2(root / "LICENSE", bundle / "VTubeLeaf-LICENSE.txt")
 shutil.copytree(source / "Licenses", licenses / "OpenSeeFace", dirs_exist_ok=True)
 shutil.copy2(source / "LICENSE", licenses / "OpenSeeFace/LICENSE")
 shutil.copy2(source / "README.md", licenses / "OpenSeeFace/README.md")
