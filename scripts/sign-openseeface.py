@@ -1,4 +1,4 @@
-"""Sign bundled macOS tracker code inside-out before signing the host app."""
+"""Sign the independent macOS tracker code inside-out before packaging it."""
 import argparse
 from pathlib import Path
 import subprocess

@@ -33,6 +33,7 @@ jobs:
         with:
           python-version: '3.10'
       - run: npm run bundle:openseeface -- --python python
+      - run: python tests/openseeface-launcher.test.py
       - name: Validate frozen inference and preserve executable permissions
         run: |
           curl --fail --location https://developers.google.com/static/mediapipe/images/solutions/examples/face_landmark.png -o .local/face.png
@@ -109,15 +110,15 @@ jobs:
           pattern: openseeface-macos-*
           path: .local/openseeface-artifacts
           merge-multiple: true
-      - name: Embed both OpenSeeFace architectures
-        # Copy after Tauri bundling to preserve PyInstaller's relative symlinks.
+      - name: Prepare independent OpenSeeFace packages
         run: |
-          mkdir -p "$APP_PATH/Contents/Resources/openseeface"
+          mkdir -p .local/openseeface-packages
           for archive in .local/openseeface-artifacts/*.tar.gz; do
-            tar -xzf "$archive" -C "$APP_PATH/Contents/Resources/openseeface"
+            tar -xzf "$archive" -C .local/openseeface-packages
           done
-          test -x "$APP_PATH/Contents/Resources/openseeface/aarch64/facetracker"
-          test -x "$APP_PATH/Contents/Resources/openseeface/x86_64/facetracker"
+          test -x .local/openseeface-packages/aarch64/facetracker
+          test -x .local/openseeface-packages/x86_64/facetracker
+          test ! -e "$APP_PATH/Contents/Resources/openseeface"
       - name: Verify native macOS icon is bundled
         run: |
           test -s "$APP_PATH/Contents/Resources/Assets.car"
@@ -151,7 +152,7 @@ jobs:
           APPLE_TEAM_ID: ${{ vars.APPLE_TEAM_ID }}
           APPLE_SIGNING_IDENTITY: ${{ vars.APPLE_SIGNING_IDENTITY }}
         run: |
-          python scripts/sign-openseeface.py "$APP_PATH/Contents/Resources/openseeface" --identity "$APPLE_SIGNING_IDENTITY"
+          python scripts/sign-openseeface.py .local/openseeface-packages --identity "$APPLE_SIGNING_IDENTITY"
           node scripts/build-camera.mjs --app "$APP_PATH" --arch universal --test \
             --team-id "$APPLE_TEAM_ID" --identity "$APPLE_SIGNING_IDENTITY" \
             --host-profile "$SIGNING_DIR/host.provisionprofile" \
@@ -203,8 +204,22 @@ jobs:
           xcrun stapler validate "$RELEASE_DIR/$name.dmg"
           codesign --verify --strict --verbose=2 "$RELEASE_DIR/$name.dmg"
           spctl --assess --type open --context context:primary-signature --verbose=2 "$RELEASE_DIR/$name.dmg"
+
+          for arch in aarch64 x86_64; do
+            folder=".local/openseeface-dmg-$arch"
+            mkdir -p "$folder"
+            mv ".local/openseeface-packages/$arch" "$folder/OpenSeeFace"
+            image="$RELEASE_DIR/VTubeLeaf-OpenSeeFace-${version}-macos-${arch}.dmg"
+            hdiutil create -volname "VTubeLeaf OpenSeeFace" -srcfolder "$folder" -format UDZO "$image"
+            codesign --force --timestamp --sign "$APPLE_SIGNING_IDENTITY" "$image"
+            notarize "$image"
+            xcrun stapler staple "$image"
+            xcrun stapler validate "$image"
+            codesign --verify --strict "$image"
+            spctl --assess --type open --context context:primary-signature "$image"
+          done
           cd "$RELEASE_DIR"
-          shasum -a 256 "$name.dmg" "$name.zip" > SHA256SUMS.txt
+          shasum -a 256 ./*.dmg ./*.zip > SHA256SUMS.txt
       - name: Package and sign updater from the final notarized app
         env:
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}

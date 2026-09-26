@@ -37,12 +37,19 @@ jobs:
       - run: npm run setup:assets
       - run: npm run setup:assets -- --check
       - run: npm run bundle:openseeface -- --python python
+      - run: python tests/openseeface-launcher.test.py
       - name: Validate frozen OpenSeeFace inference
         run: |
           Invoke-WebRequest https://developers.google.com/static/mediapipe/images/solutions/examples/face_landmark.png -OutFile .local/face.png
           python scripts/check-openseeface.py .local/face.png --executable .local/openseeface-bundle/x86_64/facetracker.exe
       - name: Build Windows release installer
-        run: npm run tauri -- build --config src-tauri/tauri.openseeface.conf.json --bundles nsis
+        run: npm run tauri -- build --bundles nsis
+      - name: Package independent OpenSeeFace launcher
+        run: |
+          $version = (Get-Content package.json | ConvertFrom-Json).version
+          $folder = ".local/VTubeLeaf-OpenSeeFace-$version-windows-x64"
+          Move-Item .local/openseeface-bundle/x86_64 $folder
+          Compress-Archive -Path $folder -DestinationPath "$folder.zip"
       - name: Sign Windows updater installer
         env:
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
@@ -60,6 +67,14 @@ jobs:
           path: |
             src-tauri/target/release/bundle/nsis/*-setup.exe
             src-tauri/target/release/bundle/nsis/*-setup.exe.sig
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 30
+      - name: Upload independent OpenSeeFace package
+        uses: actions/upload-artifact@v7
+        with:
+          name: VTubeLeaf-OpenSeeFace-windows-${{ github.run_number }}
+          path: .local/VTubeLeaf-OpenSeeFace-*-windows-x64.zip
           if-no-files-found: error
           compression-level: 0
           retention-days: 30

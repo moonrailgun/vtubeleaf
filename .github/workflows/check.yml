@@ -41,14 +41,16 @@ jobs:
       - run: node scripts/check-macos-release.mjs --self-test
       - run: node scripts/setup-assets.mjs --self-test
       - run: node scripts/setup-openseeface.mjs --self-test
+      - run: python tests/openseeface-launcher.test.py
       - run: npm run setup:assets
       - run: npm run setup:assets -- --check
       - run: npm run bundle:openseeface -- --python python
-      - run: npm run tauri -- build --config src-tauri/tauri.openseeface.conf.json --bundles ${{ matrix.bundle }}
+      - run: npm run tauri -- build --bundles ${{ matrix.bundle }}
       - name: Verify native macOS icon is bundled
         if: runner.os == 'macOS'
         run: |
           app=src-tauri/target/release/bundle/macos/VTubeLeaf.app
+          test ! -e "$app/Contents/Resources/openseeface"
           test -s "$app/Contents/Resources/Assets.car"
           test -n "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIconName' "$app/Contents/Info.plist")"
           test -s "$app/Contents/Resources/icon.icns"
