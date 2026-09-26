@@ -40,8 +40,8 @@ jobs:
       - run: python tests/openseeface-launcher.test.py
       - name: Validate frozen OpenSeeFace inference
         run: |
-          Invoke-WebRequest https://developers.google.com/static/mediapipe/images/solutions/examples/face_landmark.png -OutFile .local/face.png
-          python scripts/check-openseeface.py .local/face.png --executable .local/openseeface-bundle/x86_64/facetracker.exe
+          # The pinned RGB sample also works with OpenCV's Windows image backend.
+          python scripts/check-openseeface.py .local/openseeface/models/benchmark.bin --executable .local/openseeface-bundle/x86_64/facetracker.exe
       - name: Build Windows release installer
         run: npm run tauri -- build --bundles nsis
       - name: Package independent OpenSeeFace launcher

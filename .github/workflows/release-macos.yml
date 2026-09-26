@@ -36,8 +36,8 @@ jobs:
       - run: python tests/openseeface-launcher.test.py
       - name: Validate frozen inference and preserve executable permissions
         run: |
-          curl --fail --location https://developers.google.com/static/mediapipe/images/solutions/examples/face_landmark.png -o .local/face.png
-          python scripts/check-openseeface.py .local/face.png --executable .local/openseeface-bundle/${{ matrix.arch }}/facetracker
+          # Use the same pinned RGB sample as the Windows inference check.
+          python scripts/check-openseeface.py .local/openseeface/models/benchmark.bin --executable .local/openseeface-bundle/${{ matrix.arch }}/facetracker
           tar -czf openseeface-${{ matrix.arch }}.tar.gz -C .local/openseeface-bundle ${{ matrix.arch }}
       - uses: actions/upload-artifact@v7
         with:
