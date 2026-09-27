@@ -1,4 +1,18 @@
 import AppKit
+import AVFoundation
+
+struct CameraDevice {
+    let id: String
+    let name: String
+
+    static func available() -> [CameraDevice] {
+        // Match OpenCV's AVFoundation backend, including muxed devices.
+        // https://github.com/opencv/opencv/blob/4.11.0/modules/videoio/src/cap_avfoundation_mac.mm
+        (AVCaptureDevice.devices(for: .video) + AVCaptureDevice.devices(for: .muxed))
+            .map { CameraDevice(id: $0.uniqueID, name: $0.localizedName) }
+    }
+}
+
 
 final class TrackerProcess {
     let executable: URL
@@ -73,12 +87,19 @@ final class LauncherDelegate: NSObject, NSApplicationDelegate {
     private let tracker = TrackerProcess(executable: Bundle.main.bundleURL
         .appendingPathComponent("Contents/Resources/OpenSeeFace/facetracker"))
     private var window: NSWindow!
-    private let camera = NSTextField(string: "0")
+    private let camera = NSPopUpButton(frame: .zero, pullsDown: false)
+    private let refresh = NSButton(title: "刷新", target: nil, action: nil)
+    private let cameraDevices: () -> [CameraDevice]
     private let port = NSTextField(string: "11573")
     private let status = NSTextField(wrappingLabelWithString: "准备就绪")
     private let button = NSButton(title: "开始追踪", target: nil, action: nil)
     private var stopping = false
     private var quitting = false
+
+    init(cameraDevices: @escaping () -> [CameraDevice] = CameraDevice.available) {
+        self.cameraDevices = cameraDevices
+        super.init()
+    }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         let menu = NSMenu()
@@ -116,11 +137,21 @@ final class LauncherDelegate: NSObject, NSApplicationDelegate {
         hint.textColor = .secondaryLabelColor
         content.addArrangedSubview(hint)
         hint.widthAnchor.constraint(equalTo: content.widthAnchor).isActive = true
-        for (label, field) in [("摄像头编号", camera), ("UDP 端口", port)] {
-            field.setAccessibilityLabel(label)
-            field.widthAnchor.constraint(equalToConstant: 110).isActive = true
+        camera.setAccessibilityLabel("摄像头")
+        camera.lineBreakMode = .byTruncatingTail
+        camera.toolTip = "选择用于面部追踪的摄像头"
+        refresh.target = self
+        refresh.action = #selector(refreshCameras)
+        refresh.setAccessibilityLabel("刷新摄像头列表")
+        refresh.bezelStyle = .rounded
+        let cameraRow = NSStackView(views: [camera, refresh])
+        cameraRow.spacing = 8
+        camera.widthAnchor.constraint(equalToConstant: 230).isActive = true
+        port.setAccessibilityLabel("UDP 端口")
+        port.widthAnchor.constraint(equalToConstant: 110).isActive = true
+        for (label, field) in [("摄像头", cameraRow as NSView), ("UDP 端口", port as NSView)] {
             let text = NSTextField(labelWithString: label)
-            text.widthAnchor.constraint(equalToConstant: 90).isActive = true
+            text.widthAnchor.constraint(equalToConstant: 70).isActive = true
             let row = NSStackView(views: [text, field])
             row.spacing = 12
             content.addArrangedSubview(row)
@@ -133,24 +164,55 @@ final class LauncherDelegate: NSObject, NSApplicationDelegate {
         button.bezelStyle = .rounded
         button.keyEquivalent = "\r"
         content.addArrangedSubview(button)
+        refreshCameras()
         tracker.onExit = { [weak self] code, output in
             guard let self else { return }
             if self.quitting {
                 NSApp.terminate(nil)
                 return
             }
-            self.camera.isEnabled = true
+            self.refresh.isEnabled = true
             self.port.isEnabled = true
             self.button.title = "开始追踪"
             self.button.isEnabled = true
             self.status.stringValue = self.stopping ? "已停止，摄像头已释放" : "追踪已退出"
+            self.refreshCameras()
             if !self.stopping {
-                self.showError("追踪已退出（\(code)）。请检查摄像头权限、编号及设备是否被占用。\n\n\(output)")
+                self.showError("追踪已退出（\(code)）。请检查摄像头权限、所选设备及设备是否被占用。\n\n\(output)")
             }
             self.stopping = false
         }
         window.center()
         return window
+    }
+
+    @objc private func refreshCameras() {
+        guard !tracker.isRunning else { return }
+        let selected = camera.selectedItem?.representedObject as? String
+        camera.removeAllItems()
+        // OpenCV sorts by NSString.compare before assigning capture indices. Filter afterwards.
+        let devices = cameraDevices().sorted {
+            ($0.id as NSString).compare($1.id) == .orderedAscending
+        }
+        for (index, device) in devices.prefix(33).enumerated()
+            where !device.name.lowercased().contains("vtubeleaf camera") {
+            let item = NSMenuItem(title: device.name, action: nil, keyEquivalent: "")
+            item.tag = index
+            item.representedObject = device.id
+            camera.menu!.addItem(item)
+            if device.id == selected { camera.select(item) }
+        }
+        let available = camera.numberOfItems > 0
+        camera.isEnabled = available
+        button.isEnabled = available
+        if !available {
+            camera.addItem(withTitle: "未找到可用摄像头")
+            status.stringValue = "请连接摄像头后刷新；VTubeLeaf Camera 仅用于输出。"
+        } else {
+            if camera.indexOfSelectedItem < 0 { camera.selectItem(at: 0) }
+            if selected == nil { status.stringValue = "准备就绪" }
+        }
+        camera.toolTip = camera.titleOfSelectedItem
     }
 
     @objc private func toggleTracking() {
@@ -161,9 +223,16 @@ final class LauncherDelegate: NSObject, NSApplicationDelegate {
             tracker.stop()
             return
         }
+        let selected = camera.selectedItem?.representedObject as? String
+        refreshCameras()
+        guard let selected, selected == camera.selectedItem?.representedObject as? String else {
+            status.stringValue = "所选摄像头已断开，请重新选择。"
+            return
+        }
         do {
-            try tracker.start(camera: camera.stringValue, port: port.stringValue)
+            try tracker.start(camera: String(camera.selectedTag()), port: port.stringValue)
             camera.isEnabled = false
+            refresh.isEnabled = false
             port.isEnabled = false
             button.title = "停止追踪"
             status.stringValue = "追踪进程已启动 · 127.0.0.1:\(port.stringValue)"
