@@ -194,7 +194,7 @@ OpenSeeFace 与主应用分别下载、启动和关闭。主应用不包含 Open
 
 1. 从同一个 Release 下载主应用，以及对应平台的 `VTubeLeaf-OpenSeeFace-<版本>-<平台>-<架构>` 启动包。macOS 提供 aarch64（Apple Silicon）和 x86_64（Intel）DMG，Windows 提供 x64 ZIP。
 2. macOS 打开 DMG，将 `OpenSeeFace.app` 拖入「应用程序」后双击打开，无需终端；Windows 完整解压 ZIP 后双击 `Start OpenSeeFace.cmd`。
-3. macOS 在窗口中填写摄像头编号和 UDP 端口，点击「开始追踪」；Windows 在终端输入，回车使用默认值。默认值均为 0、11573，首次使用请允许摄像头访问。
+3. macOS 在下拉框中选择摄像头名称、填写 UDP 端口，点击「开始追踪」；接入新设备后点击刷新图标。Windows 在终端输入摄像头编号（默认 0）和 UDP 端口。默认 UDP 端口为 11573，首次使用请允许摄像头访问。
 4. 主应用选择 OpenSeeFace，再点击「开始跟踪」。默认运行方式为「独立启动包 / 外部程序」，高级设置的 UDP 端口必须与启动包一致。
 5. macOS 点击「停止追踪」或关闭窗口结束；Windows 在终端按 Ctrl+C。主应用停止接收不会关闭独立进程，切回 MediaPipe 前先结束它以释放摄像头。
 
