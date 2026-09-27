@@ -47,7 +47,9 @@ jobs:
       - run: npm run bundle:openseeface -- --python python
       - name: Verify native OpenSeeFace launcher
         if: runner.os == 'macOS'
-        run: python tests/openseeface-app.test.py ".local/openseeface-bundle/aarch64/VTubeLeaf OpenSeeFace.app"
+        run: |
+          python tests/openseeface-app.test.py ".local/openseeface-bundle/aarch64/VTubeLeaf OpenSeeFace.app"
+          python tests/openseeface-updater.test.py
       - run: npm run tauri -- build --bundles ${{ matrix.bundle }}
       - name: Verify native macOS icon is bundled
         if: runner.os == 'macOS'

@@ -1,5 +1,6 @@
 import AppKit
 import AVFoundation
+import Sparkle
 
 // Shared with the desktop form controls in src/style.css and src/components/ui.
 private enum LauncherStyle {
@@ -217,6 +218,7 @@ final class TrackerProcess {
 }
 
 final class LauncherDelegate: NSObject, NSApplicationDelegate {
+    private let updater = SPUStandardUpdaterController(startingUpdater: false, updaterDelegate: nil, userDriverDelegate: nil)
     private let tracker = TrackerProcess(executable: Bundle.main.bundleURL
         .appendingPathComponent("Contents/Resources/OpenSeeFace/facetracker"))
     private var window: NSWindow!
@@ -241,6 +243,12 @@ final class LauncherDelegate: NSObject, NSApplicationDelegate {
         item.submenu = appMenu
         menu.addItem(item)
         appMenu.addItem(withTitle: "关于 VTubeLeaf OpenSeeFace", action: #selector(NSApplication.orderFrontStandardAboutPanel(_:)), keyEquivalent: "")
+        let checkUpdates = appMenu.addItem(withTitle: "检查更新…", action: nil, keyEquivalent: "")
+        if Bundle.main.object(forInfoDictionaryKey: "SUPublicEDKey") != nil {
+            updater.startUpdater()
+            checkUpdates.target = updater
+            checkUpdates.action = #selector(SPUStandardUpdaterController.checkForUpdates(_:))
+        }
         appMenu.addItem(.separator())
         appMenu.addItem(withTitle: "退出 VTubeLeaf OpenSeeFace", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
         NSApp.mainMenu = menu

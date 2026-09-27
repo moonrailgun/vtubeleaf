@@ -9,6 +9,7 @@ test-results/
 playwright-report/
 .DS_Store
 *.log
+__pycache__/
 .env
 .env.*
 !.env.example

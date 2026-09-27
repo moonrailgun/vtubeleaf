@@ -22,6 +22,8 @@ jobs:
             arch: x86_64
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 30
+    env:
+      OPENSEEFACE_SPARKLE_PUBLIC_KEY: ${{ vars.OPENSEEFACE_SPARKLE_PUBLIC_KEY }}
     steps:
       - uses: actions/checkout@v7
         with:
@@ -32,6 +34,8 @@ jobs:
       - uses: actions/setup-python@v6
         with:
           python-version: '3.10'
+      - name: Require independent updater public key
+        run: test -n "$OPENSEEFACE_SPARKLE_PUBLIC_KEY" || { echo 'Missing OPENSEEFACE_SPARKLE_PUBLIC_KEY repository variable'; exit 1; }
       - run: npm run bundle:openseeface -- --python python
       - run: python tests/openseeface-launcher.test.py
       - run: python tests/openseeface-app.test.py ".local/openseeface-bundle/${{ matrix.arch }}/VTubeLeaf OpenSeeFace.app"
@@ -83,7 +87,10 @@ jobs:
           APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
           APPLE_TEAM_ID: ${{ vars.APPLE_TEAM_ID }}
           APPLE_SIGNING_IDENTITY: ${{ vars.APPLE_SIGNING_IDENTITY }}
-        run: node scripts/check-macos-release.mjs
+          OPENSEEFACE_SPARKLE_PRIVATE_KEY: ${{ secrets.OPENSEEFACE_SPARKLE_PRIVATE_KEY }}
+        run: |
+          node scripts/check-macos-release.mjs
+          test -n "$OPENSEEFACE_SPARKLE_PRIVATE_KEY" || { echo 'Missing OPENSEEFACE_SPARKLE_PRIVATE_KEY repository secret'; exit 1; }
       - uses: dtolnay/rust-toolchain@stable
         with:
           targets: aarch64-apple-darwin,x86_64-apple-darwin
@@ -227,6 +234,12 @@ jobs:
           done
           cd "$RELEASE_DIR"
           shasum -a 256 ./*.dmg ./*.zip > SHA256SUMS.txt
+      - name: Sign independent OpenSeeFace update feeds
+        env:
+          OPENSEEFACE_SPARKLE_PRIVATE_KEY: ${{ secrets.OPENSEEFACE_SPARKLE_PRIVATE_KEY }}
+        run: |
+          version=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$APP_PATH/Contents/Info.plist")
+          python scripts/create-openseeface-appcast.py "$RELEASE_DIR" "v$version"
       - name: Package and sign updater from the final notarized app
         env:
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
@@ -242,7 +255,7 @@ jobs:
           xcrun stapler validate "$RUNNER_TEMP/updater-check/VTubeLeaf.app"
           npm run tauri -- signer sign "$archive"
           cd "$RELEASE_DIR"
-          shasum -a 256 ./*.dmg ./*.zip ./*.app.tar.gz ./*.sig > SHA256SUMS.txt
+          shasum -a 256 ./*.dmg ./*.zip ./*.app.tar.gz ./*.sig ./openseeface-*.xml > SHA256SUMS.txt
       - name: Upload signed and notarized release packages
         uses: actions/upload-artifact@v7
         with:
@@ -252,6 +265,7 @@ jobs:
             ${{ runner.temp }}/vtubeleaf-release/*.zip
             ${{ runner.temp }}/vtubeleaf-release/*.app.tar.gz
             ${{ runner.temp }}/vtubeleaf-release/*.sig
+            ${{ runner.temp }}/vtubeleaf-release/openseeface-*.xml
             ${{ runner.temp }}/vtubeleaf-release/SHA256SUMS.txt
           if-no-files-found: error
           compression-level: 0

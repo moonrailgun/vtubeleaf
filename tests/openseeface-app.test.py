@@ -4,6 +4,7 @@ from pathlib import Path
 import os
 import shlex
 import signal
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -14,6 +15,13 @@ assert app.is_dir(), f"Missing double-clickable OpenSeeFace application: {app}"
 info = plistlib.loads((app / "Contents/Info.plist").read_bytes())
 assert info["CFBundlePackageType"] == "APPL"
 assert info["CFBundleName"] == info["CFBundleDisplayName"] == "VTubeLeaf OpenSeeFace"
+frameworks = app / "Contents/Frameworks"
+assert (frameworks / "Sparkle.framework/Sparkle").is_file()
+if "SUPublicEDKey" in info:
+    arch = subprocess.check_output(["lipo", "-archs", str(app / "Contents/MacOS" / info["CFBundleExecutable"])], text=True).strip()
+    assert info["SUFeedURL"].endswith(f"/openseeface-{'aarch64' if arch == 'arm64' else arch}.xml")
+    assert info["SUEnableAutomaticChecks"] and info["SURequireSignedFeed"] and info["SUVerifyUpdateBeforeExtraction"]
+    assert not info["SUAllowsAutomaticUpdates"]
 assert info["NSCameraUsageDescription"]
 assert (app / "Contents/MacOS" / info["CFBundleExecutable"]).is_file()
 tracker = app / "Contents/Resources/OpenSeeFace/facetracker"
@@ -24,12 +32,15 @@ with tempfile.TemporaryDirectory(prefix="openseeface checks ") as temporary:
     test_app = Path(temporary) / "QuitCheck.app"
     executable = test_app / "Contents/MacOS/launcher-check"
     executable.parent.mkdir(parents=True)
+    shutil.copytree(frameworks, test_app / "Contents/Frameworks", symlinks=True)
     (test_app / "Contents/Info.plist").write_bytes(plistlib.dumps({
         "CFBundleIdentifier": "com.moonrailgun.vtubeleaf.openseeface.test",
         "CFBundleExecutable": "launcher-check", "CFBundlePackageType": "APPL",
     }))
     subprocess.run([
         "xcrun", "swiftc", "-swift-version", "5", "-D", "TESTING", "-parse-as-library",
+        "-F", str(frameworks), "-framework", "Sparkle",
+        "-Xlinker", "-rpath", "-Xlinker", "@executable_path/../Frameworks",
         str(root / "native/openseeface/Launcher.swift"),
         str(root / "tests/openseeface-launcher.swift"), "-o", str(executable),
     ], check=True)

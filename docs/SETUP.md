@@ -209,6 +209,26 @@ npm run bundle:openseeface -- --python /absolute/path/to/python3.10
 
 Windows 主应用使用 `--bundles nsis`，启动包使用 `--python python`。独立启动目录位于 `.local/openseeface-bundle/<架构>/`，macOS 双击 `VTubeLeaf OpenSeeFace.app`，Windows 双击启动脚本。主应用的开发和构建都不会自动加载此目录。正式发布流程将两类产物上传到同一个 Release；macOS 的启动应用按架构分别签名、公证、附加公证票据，再生成签名公证的 DMG，主应用仍为 universal。Windows 启动包生成独立 ZIP，不加入安装程序或自动更新安装包。
 
+### macOS 独立应用更新
+
+`VTubeLeaf OpenSeeFace` 使用 Sparkle 定期检查更新，也可从应用菜单选择「检查更新…」。确认后下载、校验并安装新版，重启前先结束追踪进程、释放摄像头。它有自己的更新源与签名密钥，更新不会替换或重启主应用；当前版本号仍随仓库版本一起发布。Apple Silicon 与 Intel 分别使用 `openseeface-aarch64.xml` 和 `openseeface-x86_64.xml`，只检查最新正式 Release。Windows ZIP 仍需手动下载。
+
+首次从旧版 `OpenSeeFace.app` 升级，需要手动下载并安装一次新版 `VTubeLeaf OpenSeeFace.app`，随后退出并移除旧应用，避免误开两个实例。旧版不具备自行安装更新的能力。
+
+正式发布前，维护者需要配置一对独立的 Ed25519 密钥（不复用主应用的 Tauri 密钥）：
+
+```sh
+python3 scripts/sparkle.py
+.local/sparkle/2.10.0/bin/generate_keys --account vtubeleaf-openseeface
+.local/sparkle/2.10.0/bin/generate_keys --account vtubeleaf-openseeface -p
+```
+
+将最后一行输出设置为 GitHub 仓库变量 `OPENSEEFACE_SPARKLE_PUBLIC_KEY`。私钥保存在本机 Keychain；使用 `generate_keys --account vtubeleaf-openseeface -x /安全路径/sparkle-private-key` 导出后，以文件内容设置仓库 Secret `OPENSEEFACE_SPARKLE_PRIVATE_KEY`，妥善备份并删除临时导出文件，勿加入 Git。公钥会嵌入应用，私钥仅用于 CI 签名；发布后需保留这对密钥以维持更新信任。
+
+发布流程在两个架构的 DMG 完成签名、公证、staple 后，运行 `scripts/create-openseeface-appcast.py`，签名更新包和 XML 更新源，并随 Release 上传。缺少密钥会中止发布。开发构建未设置公钥时禁用更新检查；设置 `OPENSEEFACE_SPARKLE_PUBLIC_KEY` 后重新构建即可启用。运行 `python3 tests/openseeface-updater.test.py` 可用临时密钥验证打包、更新源和篡改拒绝，不访问摄像头、不安装更新。
+
+### 自定义 Python 环境
+
 下面的命令用于准备自定义 Python 环境及排查问题。
 
 准备 Git 和 Python **3.10**。安装脚本固定上游提交 `85aa70fc67582d046e771ea73625182a0d8f7475`；该提交的 `pyproject.toml` 声明 Python `<3.11`，此安装路径统一要求 3.10，以免误用系统更新版本。

@@ -15,6 +15,10 @@ VTubeLeaf OpenSeeFace 独立启动包
    只停止 VTubeLeaf 接收不会关闭此进程。
    切回 MediaPipe 前先停止此进程，释放摄像头。
 
+macOS 正式版会独立检查更新，也可从「VTubeLeaf OpenSeeFace」菜单选择「检查更新…」。
+确认后下载并安装，重启前自动停止追踪；此操作不会更新或重启 VTubeLeaf 主应用。
+旧版 OpenSeeFace.app 需要手动安装一次新版，Windows ZIP 仍需手动更新。
+
 没有数据：检查摄像头权限、所选设备、端口是否一致，以及其他软件是否占用摄像头。
 macOS 请移动整个 .app；Windows 请保留整个解压文件夹，包括 _internal、模型和许可。
 技术用户可运行 facetracker --help（Windows 为 facetracker.exe）查看命令行参数。

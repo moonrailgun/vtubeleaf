@@ -84,8 +84,9 @@ jobs:
           done
           gh api "repos/$GH_REPO/releases/generate-notes" -f "tag_name=$RELEASE_TAG" --jq .body > "$RUNNER_TEMP/release-notes.md"
           node ../scripts/create-updater-manifest.mjs . "$RELEASE_TAG" "$RUNNER_TEMP/release-notes.md"
-          sha256sum ./*.dmg ./*.zip ./*.exe ./*.app.tar.gz ./*.sig latest.json > SHA256SUMS.txt
-          gh release create "$RELEASE_TAG" ./*.dmg ./*.zip ./*.exe ./*.app.tar.gz ./*.sig latest.json SHA256SUMS.txt \
+          test -s openseeface-aarch64.xml && test -s openseeface-x86_64.xml
+          sha256sum ./*.dmg ./*.zip ./*.exe ./*.app.tar.gz ./*.sig ./openseeface-*.xml latest.json > SHA256SUMS.txt
+          gh release create "$RELEASE_TAG" ./*.dmg ./*.zip ./*.exe ./*.app.tar.gz ./*.sig ./openseeface-*.xml latest.json SHA256SUMS.txt \
             --draft --verify-tag --title "$RELEASE_TAG" --notes-file "$RUNNER_TEMP/release-notes.md" --prerelease="$PRERELEASE"
           gh release edit "$RELEASE_TAG" --draft=false
   website:

@@ -39,6 +39,8 @@ Python 环境按上游 [pyproject.toml](https://github.com/emilianavt/OpenSeeFac
 
 OpenSeeFace 的 BSD 条款不决定 Live2D 渲染端的发布条件，也不证明跟踪效果优于 MediaPipe。
 
+macOS 独立应用内嵌 [Sparkle 2.10.0](https://github.com/sparkle-project/Sparkle/releases/tag/2.10.0) 用于独立更新。构建脚本固定官方发行包及 SHA-256，随应用在 `Contents/Resources/Sparkle-LICENSE.txt` 保留上游完整许可（MIT 及所含第三方声明）；此框架不加入主应用或 Windows 包。
+
 ## 可选 NVIDIA RTX（实验中）
 
 原生扩展由开发者使用 NVIDIA AR SDK Core 与 FaceExpressions 等特性构建，依赖 OpenCV 4 及 [NVIDIA AR-SDK-Samples](https://github.com/NVIDIA-Maxine/AR-SDK-Samples) 中的构建模块和图像包装头文件。SDK、模型、OpenCV 和示例代码各自保留原始条款；示例仓库的 MIT 许可不代表专有 SDK 或模型同样采用 MIT。本仓库不下载、打包或分发这些运行库与模型，访问资格和发行条件应按 [NGC Core 页面](https://catalog.ngc.nvidia.com/orgs/nvidia/maxine/resources/ar_sdk_core)及实际下载包核实。安装与当前验证范围见 [NVIDIA-TRACKING.md](NVIDIA-TRACKING.md)。

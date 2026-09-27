@@ -15,7 +15,7 @@ paths = []
 for path in directory.rglob("*"):
     if path.is_symlink():
         continue
-    if path.is_dir() and path.suffix in (".framework", ".app"):
+    if path.is_dir() and path.suffix in (".framework", ".app", ".xpc"):
         paths.append(path)
     elif path.is_file():
         with path.open("rb") as handle:
@@ -26,7 +26,7 @@ if directory.suffix == ".app":
 # Signing an app also signs its main executable; defer that until all nested code.
 app_executables = {
     path / "Contents/MacOS" / plistlib.loads((path / "Contents/Info.plist").read_bytes())["CFBundleExecutable"]
-    for path in paths if path.suffix == ".app"
+    for path in paths if path.suffix in (".app", ".xpc")
 }
 paths = [path for path in paths if path not in app_executables]
 if not any(path.name == "facetracker" for path in paths):
@@ -35,7 +35,10 @@ for path in sorted(paths, key=lambda value: len(value.parts), reverse=True):
     command = ["codesign", "--force", "--sign", args.identity]
     if args.identity != "-":
         command += ["--options", "runtime", "--timestamp"]
-    if path.name == "facetracker" or path.suffix == ".app":
+    if "Sparkle.framework" in path.parts:
+        # Keep Sparkle's helper-specific sandbox entitlements when re-signing.
+        command += ["--preserve-metadata=entitlements"]
+    elif path.name == "facetracker" or path.suffix == ".app":
         command += ["--entitlements", str(Path(__file__).resolve().parent.parent / "src-tauri/Entitlements.plist")]
     subprocess.run(command + [str(path)], check=True)
     subprocess.run(["codesign", "--verify", "--deep", "--strict", str(path)], check=True)
