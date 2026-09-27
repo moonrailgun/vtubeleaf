@@ -6,7 +6,7 @@ VTubeLeaf OpenSeeFace 独立启动包
    Apple Silicon 选 aarch64，Intel 选 x86_64；无需使用终端。
    Windows：先完整解压 ZIP，再双击 Start OpenSeeFace.cmd。
 2. macOS：在下拉框中选择摄像头名称，填写 UDP 端口，点击「开始追踪」。
-   接入新摄像头后点击「刷新」；VTubeLeaf Camera 仅用于输出，不在列表中显示。
+   接入新摄像头后点击刷新图标；VTubeLeaf Camera 仅用于输出，不在列表中显示。
    Windows：在终端选择摄像头编号和 UDP 端口，直接回车使用默认值。
    默认 UDP 端口为 11573，Windows 默认摄像头编号为 0。首次运行请允许摄像头访问。
 3. 打开 VTubeLeaf，在「面捕」选择 OpenSeeFace，点击「开始跟踪」。

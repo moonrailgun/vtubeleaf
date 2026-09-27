@@ -70,10 +70,15 @@ private final class CameraCell: NSPopUpButtonCell {
 }
 
 private final class RefreshCell: NSButtonCell {
+    private let icon = NSImage(systemSymbolName: "arrow.clockwise", accessibilityDescription: "刷新摄像头列表")?
+        .withSymbolConfiguration(NSImage.SymbolConfiguration(paletteColors: [LauncherStyle.foreground]))
+
     override func draw(withFrame frame: NSRect, in view: NSView) {
         LauncherStyle.field(frame, focused: showsFirstResponder, enabled: isEnabled,
                             fill: isHighlighted ? LauncherStyle.color(0xfbeef4) : .white)
-        LauncherStyle.title(title, in: frame, enabled: isEnabled, centered: true)
+        icon?.draw(in: NSRect(x: frame.midX - 8, y: frame.midY - 8, width: 16, height: 16),
+                   from: .zero, operation: .sourceOver, fraction: isEnabled ? 1 : 0.5,
+                   respectFlipped: true, hints: nil)
     }
 }
 
@@ -216,7 +221,7 @@ final class LauncherDelegate: NSObject, NSApplicationDelegate {
         .appendingPathComponent("Contents/Resources/OpenSeeFace/facetracker"))
     private var window: NSWindow!
     private let camera = CameraButton(frame: .zero, pullsDown: false)
-    private let refresh = RefreshButton(title: "刷新", target: nil, action: nil)
+    private let refresh = RefreshButton(title: "", target: nil, action: nil)
     private let cameraDevices: () -> [CameraDevice]
     private let port = PortField(string: "11573")
     private let status = NSTextField(wrappingLabelWithString: "准备就绪")
@@ -297,7 +302,7 @@ final class LauncherDelegate: NSObject, NSApplicationDelegate {
         camera.setAccessibilityLabel("摄像头")
         camera.lineBreakMode = .byTruncatingTail
         camera.toolTip = "选择用于面部追踪的摄像头"
-        refresh.cell = RefreshCell(textCell: "刷新")
+        refresh.cell = RefreshCell(textCell: "")
         refresh.isBordered = false
         refresh.focusRingType = .none
         refresh.heightAnchor.constraint(equalToConstant: 46).isActive = true
@@ -309,8 +314,8 @@ final class LauncherDelegate: NSObject, NSApplicationDelegate {
         cameraRow.spacing = 8
         camera.setContentHuggingPriority(.defaultLow, for: .horizontal)
         camera.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
-        camera.widthAnchor.constraint(equalTo: cameraRow.widthAnchor, constant: -72).isActive = true
-        refresh.widthAnchor.constraint(equalToConstant: 64).isActive = true
+        camera.widthAnchor.constraint(equalTo: cameraRow.widthAnchor, constant: -54).isActive = true
+        refresh.widthAnchor.constraint(equalToConstant: 46).isActive = true
         port.setAccessibilityLabel("UDP 端口")
         let portInput = PortInput(port)
         let portHint = NSTextField(labelWithString: "与 VTubeLeaf 中的端口保持一致")
