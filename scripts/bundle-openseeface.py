@@ -31,11 +31,7 @@ if sys.platform == "win32":
 command.append(str(root / "scripts/run-openseeface.py"))
 subprocess.run(command, check=True, cwd=root)
 bundle = work / "dist/facetracker"
-if sys.platform == "darwin":
-    launcher = bundle / "Start OpenSeeFace.command"
-    launcher.write_text('#!/bin/sh\ncd "$(dirname "$0")" || exit 1\nexec ./facetracker --launcher\n', encoding="utf-8")
-    launcher.chmod(0o755)
-else:
+if sys.platform == "win32":
     (bundle / "Start OpenSeeFace.cmd").write_bytes(b'@echo off\r\ncd /d "%~dp0"\r\nfacetracker.exe --launcher\r\npause\r\n')
 shutil.copy2(root / "scripts/openseeface-README.txt", bundle / "README.txt")
 licenses = bundle / "licenses"
@@ -68,7 +64,14 @@ for distribution in importlib.metadata.distributions():
 target = root / ".local/openseeface-bundle" / arch
 if target.exists():
     shutil.rmtree(target)
-shutil.copytree(bundle, target, symlinks=True)
-executable = target / ("facetracker.exe" if sys.platform == "win32" else "facetracker")
+if sys.platform == "darwin":
+    target.mkdir(parents=True)
+    app = target / "OpenSeeFace.app"
+    subprocess.run([sys.executable, str(root / "scripts/build-openseeface-app.py"), str(bundle), str(app)], check=True)
+    subprocess.run([sys.executable, str(root / "scripts/sign-openseeface.py"), str(target)], check=True)
+    executable = app / "Contents/Resources/OpenSeeFace/facetracker"
+else:
+    shutil.copytree(bundle, target, symlinks=True)
+    executable = target / "facetracker.exe"
 subprocess.run([str(executable), "--help"], cwd=target, check=True, stdout=subprocess.DEVNULL)
 print(f"Bundled OpenSeeFace ({arch}): {executable}")
