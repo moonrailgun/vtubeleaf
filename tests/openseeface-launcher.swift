@@ -130,6 +130,12 @@ struct LauncherChecks {
         let buttons = descendants(content).compactMap { $0 as? NSButton }
         let refresh = buttons.first { $0.accessibilityLabel() == "刷新摄像头列表" }!
         let start = buttons.first { $0.keyEquivalent == "\r" }!
+        let port = descendants(content).compactMap { $0 as? NSTextField }
+            .first { $0.accessibilityLabel() == "UDP 端口" }!
+        check(!camera.isBordered && !refresh.isBordered && !port.isBezeled,
+                     "Launcher fields must not use macOS native bezels")
+        check(camera.focusRingType == .none && port.focusRingType == .none,
+                     "Launcher fields must use the app's pink focus treatment")
         check(camera.itemTitles == ["FaceTime HD Camera", "USB Camera"])
         check(camera.itemArray.map(\.tag) == [1, 2], "Filtering changed OpenCV indices")
         camera.selectItem(at: 1)
@@ -197,6 +203,17 @@ struct LauncherChecks {
         }
         if CommandLine.arguments.count == 2 {
             try render(to: URL(fileURLWithPath: CommandLine.arguments[1]))
+        }
+        check(window.makeFirstResponder(port), "Port must support keyboard input")
+        let editor = port.currentEditor() as! NSTextView
+        let selectionColor = editor.selectedTextAttributes[.backgroundColor] as! NSColor
+        check(selectionColor.usingColorSpace(.sRGB)!.redComponent > 0.8,
+                     "Port selection must use the app's pink, not the macOS accent color")
+        editor.selectAll(nil)
+        content.layoutSubtreeIfNeeded()
+        if CommandLine.arguments.count == 2 {
+            let url = URL(fileURLWithPath: CommandLine.arguments[1]).deletingPathExtension()
+            try render(to: url.deletingLastPathComponent().appendingPathComponent(url.lastPathComponent + "-focused.png"))
         }
         print("Native launcher checks passed: camera selection, arguments, process lifecycle and layout")
     }

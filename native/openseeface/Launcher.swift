@@ -1,6 +1,135 @@
 import AppKit
 import AVFoundation
 
+// Shared with the desktop form controls in src/style.css and src/components/ui.
+private enum LauncherStyle {
+    static func color(_ hex: Int) -> NSColor {
+        NSColor(srgbRed: CGFloat((hex >> 16) & 255) / 255,
+                green: CGFloat((hex >> 8) & 255) / 255,
+                blue: CGFloat(hex & 255) / 255, alpha: 1)
+    }
+
+    static let foreground = color(0x423e4a)
+    static let muted = color(0x77717e)
+    static let primary = color(0xd34477)
+
+    static func field(_ frame: NSRect, focused: Bool, enabled: Bool, fill: NSColor = color(0xfcfafd)) {
+        // Leave room for the same 3pt focus ring used by the main application's inputs.
+        let outline = NSBezierPath(roundedRect: frame.insetBy(dx: 3, dy: 3), xRadius: 10, yRadius: 10)
+        fill.withAlphaComponent(enabled ? 1 : 0.5).setFill()
+        outline.fill()
+        if focused && enabled {
+            primary.withAlphaComponent(0.5).setStroke()
+            outline.lineWidth = 6
+            outline.stroke()
+            fill.setFill()
+            outline.fill()
+        }
+        (focused && enabled ? primary : color(0xe5d8e1)).withAlphaComponent(enabled ? 1 : 0.5).setStroke()
+        outline.lineWidth = 1
+        outline.stroke()
+    }
+
+    static func title(_ title: String, in frame: NSRect, enabled: Bool, centered: Bool = false) {
+        let paragraph = NSMutableParagraphStyle()
+        paragraph.lineBreakMode = .byTruncatingTail
+        paragraph.alignment = centered ? .center : .left
+        let text = NSAttributedString(string: title, attributes: [
+            .font: NSFont.systemFont(ofSize: 12),
+            .foregroundColor: foreground.withAlphaComponent(enabled ? 1 : 0.5),
+            .paragraphStyle: paragraph,
+        ])
+        text.draw(in: NSRect(x: frame.minX, y: frame.midY - text.size().height / 2,
+                            width: frame.width, height: text.size().height))
+    }
+}
+
+private final class CameraButton: NSPopUpButton {
+    override var alignmentRectInsets: NSEdgeInsets { NSEdgeInsetsZero }
+}
+
+private final class RefreshButton: NSButton {
+    override var alignmentRectInsets: NSEdgeInsets { NSEdgeInsetsZero }
+}
+
+private final class CameraCell: NSPopUpButtonCell {
+    override func draw(withFrame frame: NSRect, in view: NSView) {
+        LauncherStyle.field(frame, focused: showsFirstResponder, enabled: isEnabled)
+        LauncherStyle.title(title, in: NSRect(x: frame.minX + 15, y: frame.minY,
+                                            width: frame.width - 48, height: frame.height), enabled: isEnabled)
+        let chevron = NSBezierPath()
+        chevron.move(to: NSPoint(x: frame.maxX - 25, y: frame.midY - 2))
+        chevron.line(to: NSPoint(x: frame.maxX - 21, y: frame.midY + 2))
+        chevron.line(to: NSPoint(x: frame.maxX - 17, y: frame.midY - 2))
+        chevron.lineWidth = 1.5
+        chevron.lineCapStyle = .round
+        chevron.lineJoinStyle = .round
+        LauncherStyle.muted.withAlphaComponent(isEnabled ? 0.6 : 0.3).setStroke()
+        chevron.stroke()
+    }
+}
+
+private final class RefreshCell: NSButtonCell {
+    override func draw(withFrame frame: NSRect, in view: NSView) {
+        LauncherStyle.field(frame, focused: showsFirstResponder, enabled: isEnabled,
+                            fill: isHighlighted ? LauncherStyle.color(0xfbeef4) : .white)
+        LauncherStyle.title(title, in: frame, enabled: isEnabled, centered: true)
+    }
+}
+
+private final class PortField: NSTextField {
+    override func becomeFirstResponder() -> Bool {
+        let accepted = super.becomeFirstResponder()
+        if let editor = currentEditor() as? NSTextView {
+            editor.selectedTextAttributes = [.backgroundColor: LauncherStyle.primary, .foregroundColor: NSColor.white]
+            editor.insertionPointColor = LauncherStyle.primary
+        }
+        superview?.needsDisplay = true
+        return accepted
+    }
+
+    override var isEnabled: Bool {
+        didSet { superview?.needsDisplay = true }
+    }
+}
+
+private final class PortInput: NSView, NSTextFieldDelegate {
+    let field: NSTextField
+
+    init(_ field: NSTextField) {
+        self.field = field
+        super.init(frame: .zero)
+        field.isBezeled = false
+        field.isBordered = false
+        field.drawsBackground = false
+        field.focusRingType = .none
+        field.font = .systemFont(ofSize: 12)
+        field.textColor = LauncherStyle.foreground
+        field.delegate = self
+        field.translatesAutoresizingMaskIntoConstraints = false
+        addSubview(field)
+        NSLayoutConstraint.activate([
+            field.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 15),
+            field.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -15),
+            field.centerYAnchor.constraint(equalTo: centerYAnchor),
+            heightAnchor.constraint(equalToConstant: 46),
+            widthAnchor.constraint(equalToConstant: 110),
+        ])
+    }
+
+    required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
+
+    override func draw(_ dirtyRect: NSRect) {
+        LauncherStyle.field(bounds, focused: field.currentEditor() != nil, enabled: field.isEnabled)
+    }
+
+    func controlTextDidEndEditing(_ notification: Notification) { needsDisplay = true }
+
+    override func mouseDown(with event: NSEvent) {
+        if field.isEnabled { window?.makeFirstResponder(field) }
+    }
+}
+
 struct CameraDevice {
     let id: String
     let name: String
@@ -12,7 +141,6 @@ struct CameraDevice {
             .map { CameraDevice(id: $0.uniqueID, name: $0.localizedName) }
     }
 }
-
 
 final class TrackerProcess {
     let executable: URL
@@ -87,10 +215,10 @@ final class LauncherDelegate: NSObject, NSApplicationDelegate {
     private let tracker = TrackerProcess(executable: Bundle.main.bundleURL
         .appendingPathComponent("Contents/Resources/OpenSeeFace/facetracker"))
     private var window: NSWindow!
-    private let camera = NSPopUpButton(frame: .zero, pullsDown: false)
-    private let refresh = NSButton(title: "刷新", target: nil, action: nil)
+    private let camera = CameraButton(frame: .zero, pullsDown: false)
+    private let refresh = RefreshButton(title: "刷新", target: nil, action: nil)
     private let cameraDevices: () -> [CameraDevice]
-    private let port = NSTextField(string: "11573")
+    private let port = PortField(string: "11573")
     private let status = NSTextField(wrappingLabelWithString: "准备就绪")
     private let button = NSButton(title: "开始追踪", target: nil, action: nil)
     private var stopping = false
@@ -115,55 +243,111 @@ final class LauncherDelegate: NSObject, NSApplicationDelegate {
     }
 
     func makeWindow() -> NSWindow {
-        window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 440, height: 280),
+        let color = LauncherStyle.color
+        let foreground = LauncherStyle.foreground
+        let muted = LauncherStyle.muted
+        let primary = LauncherStyle.primary
+        window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 520, height: 396),
                           styleMask: [.titled, .closable, .miniaturizable], backing: .buffered, defer: false)
         window.title = "VTubeLeaf OpenSeeFace"
         window.isReleasedWhenClosed = false
+        window.appearance = NSAppearance(named: .aqua)
+        window.backgroundColor = color(0xe5ebdd)
+        window.titlebarAppearsTransparent = true
+        let panel = NSBox()
+        panel.boxType = .custom
+        panel.titlePosition = .noTitle
+        panel.fillColor = .white
+        panel.borderColor = color(0xe9dfe6)
+        panel.borderWidth = 1
+        panel.cornerRadius = 16
+        panel.contentViewMargins = .zero
+        panel.translatesAutoresizingMaskIntoConstraints = false
+        window.contentView!.addSubview(panel)
+        NSLayoutConstraint.activate([
+            panel.leadingAnchor.constraint(equalTo: window.contentView!.leadingAnchor, constant: 16),
+            panel.trailingAnchor.constraint(equalTo: window.contentView!.trailingAnchor, constant: -16),
+            panel.topAnchor.constraint(equalTo: window.contentView!.topAnchor, constant: 16),
+            panel.bottomAnchor.constraint(equalTo: window.contentView!.bottomAnchor, constant: -16),
+        ])
         let content = NSStackView()
         content.orientation = .vertical
         content.alignment = .leading
         content.spacing = 16
         content.translatesAutoresizingMaskIntoConstraints = false
-        window.contentView!.addSubview(content)
+        panel.contentView!.addSubview(content)
         NSLayoutConstraint.activate([
-            content.leadingAnchor.constraint(equalTo: window.contentView!.leadingAnchor, constant: 24),
-            content.trailingAnchor.constraint(equalTo: window.contentView!.trailingAnchor, constant: -24),
-            content.topAnchor.constraint(equalTo: window.contentView!.topAnchor, constant: 24),
+            content.leadingAnchor.constraint(equalTo: panel.contentView!.leadingAnchor, constant: 24),
+            content.trailingAnchor.constraint(equalTo: panel.contentView!.trailingAnchor, constant: -24),
+            content.topAnchor.constraint(equalTo: panel.contentView!.topAnchor, constant: 24),
         ])
         let title = NSTextField(labelWithString: "OpenSeeFace 面部追踪")
-        title.font = .boldSystemFont(ofSize: 20)
+        title.font = .systemFont(ofSize: 22, weight: .semibold)
+        title.textColor = foreground
         content.addArrangedSubview(title)
         let hint = NSTextField(wrappingLabelWithString: "启动后，在 VTubeLeaf 中选择 OpenSeeFace，再点击「开始跟踪」。")
-        hint.textColor = .secondaryLabelColor
+        hint.font = .systemFont(ofSize: 12)
+        hint.textColor = muted
         content.addArrangedSubview(hint)
         hint.widthAnchor.constraint(equalTo: content.widthAnchor).isActive = true
+        camera.cell = CameraCell(textCell: "", pullsDown: false)
+        camera.isBordered = false
+        camera.focusRingType = .none
+        camera.heightAnchor.constraint(equalToConstant: 46).isActive = true
         camera.setAccessibilityLabel("摄像头")
         camera.lineBreakMode = .byTruncatingTail
         camera.toolTip = "选择用于面部追踪的摄像头"
+        refresh.cell = RefreshCell(textCell: "刷新")
+        refresh.isBordered = false
+        refresh.focusRingType = .none
+        refresh.heightAnchor.constraint(equalToConstant: 46).isActive = true
         refresh.target = self
         refresh.action = #selector(refreshCameras)
         refresh.setAccessibilityLabel("刷新摄像头列表")
-        refresh.bezelStyle = .rounded
+        refresh.toolTip = "刷新摄像头列表"
         let cameraRow = NSStackView(views: [camera, refresh])
         cameraRow.spacing = 8
-        camera.widthAnchor.constraint(equalToConstant: 230).isActive = true
+        camera.setContentHuggingPriority(.defaultLow, for: .horizontal)
+        camera.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+        camera.widthAnchor.constraint(equalTo: cameraRow.widthAnchor, constant: -72).isActive = true
+        refresh.widthAnchor.constraint(equalToConstant: 64).isActive = true
         port.setAccessibilityLabel("UDP 端口")
-        port.widthAnchor.constraint(equalToConstant: 110).isActive = true
-        for (label, field) in [("摄像头", cameraRow as NSView), ("UDP 端口", port as NSView)] {
+        let portInput = PortInput(port)
+        let portHint = NSTextField(labelWithString: "与 VTubeLeaf 中的端口保持一致")
+        portHint.font = .systemFont(ofSize: 11)
+        portHint.textColor = muted
+        let portRow = NSStackView(views: [portInput, portHint])
+        portRow.spacing = 12
+        for (label, row) in [("摄像头", cameraRow), ("UDP 端口", portRow)] {
             let text = NSTextField(labelWithString: label)
-            text.widthAnchor.constraint(equalToConstant: 70).isActive = true
-            let row = NSStackView(views: [text, field])
-            row.spacing = 12
-            content.addArrangedSubview(row)
+            text.font = .systemFont(ofSize: 12, weight: .semibold)
+            text.textColor = foreground
+            let field = NSStackView(views: [text, row])
+            field.orientation = .vertical
+            field.alignment = .leading
+            field.spacing = 8
+            content.addArrangedSubview(field)
+            field.widthAnchor.constraint(equalTo: content.widthAnchor).isActive = true
         }
-        status.textColor = .secondaryLabelColor
+        cameraRow.widthAnchor.constraint(equalTo: content.widthAnchor).isActive = true
+        status.font = .systemFont(ofSize: 12)
+        status.textColor = muted
         content.addArrangedSubview(status)
         status.widthAnchor.constraint(equalTo: content.widthAnchor).isActive = true
         button.target = self
         button.action = #selector(toggleTracking)
-        button.bezelStyle = .rounded
+        button.isBordered = false
+        (button.cell as! NSButtonCell).backgroundColor = primary
+        button.contentTintColor = .white
+        button.wantsLayer = true
+        button.layer?.cornerRadius = 8
+        button.layer?.masksToBounds = true
+        button.font = .systemFont(ofSize: 14, weight: .semibold)
+        button.controlSize = .large
         button.keyEquivalent = "\r"
         content.addArrangedSubview(button)
+        button.widthAnchor.constraint(equalTo: content.widthAnchor).isActive = true
+        button.heightAnchor.constraint(equalToConstant: 36).isActive = true
         refreshCameras()
         tracker.onExit = { [weak self] code, output in
             guard let self else { return }
