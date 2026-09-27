@@ -66,7 +66,7 @@ if target.exists():
     shutil.rmtree(target)
 if sys.platform == "darwin":
     target.mkdir(parents=True)
-    app = target / "OpenSeeFace.app"
+    app = target / "VTubeLeaf OpenSeeFace.app"
     subprocess.run([sys.executable, str(root / "scripts/build-openseeface-app.py"), str(bundle), str(app)], check=True)
     subprocess.run([sys.executable, str(root / "scripts/sign-openseeface.py"), str(target)], check=True)
     executable = app / "Contents/Resources/OpenSeeFace/facetracker"

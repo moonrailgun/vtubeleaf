@@ -13,6 +13,7 @@ app = Path(sys.argv[1]).resolve()
 assert app.is_dir(), f"Missing double-clickable OpenSeeFace application: {app}"
 info = plistlib.loads((app / "Contents/Info.plist").read_bytes())
 assert info["CFBundlePackageType"] == "APPL"
+assert info["CFBundleName"] == info["CFBundleDisplayName"] == "VTubeLeaf OpenSeeFace"
 assert info["NSCameraUsageDescription"]
 assert (app / "Contents/MacOS" / info["CFBundleExecutable"]).is_file()
 tracker = app / "Contents/Resources/OpenSeeFace/facetracker"

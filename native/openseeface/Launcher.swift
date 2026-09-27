@@ -240,7 +240,9 @@ final class LauncherDelegate: NSObject, NSApplicationDelegate {
         let item = NSMenuItem()
         item.submenu = appMenu
         menu.addItem(item)
-        appMenu.addItem(withTitle: "退出 OpenSeeFace", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
+        appMenu.addItem(withTitle: "关于 VTubeLeaf OpenSeeFace", action: #selector(NSApplication.orderFrontStandardAboutPanel(_:)), keyEquivalent: "")
+        appMenu.addItem(.separator())
+        appMenu.addItem(withTitle: "退出 VTubeLeaf OpenSeeFace", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
         NSApp.mainMenu = menu
 
         makeWindow().makeKeyAndOrderFront(nil)

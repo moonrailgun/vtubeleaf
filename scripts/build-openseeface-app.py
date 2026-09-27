@@ -29,11 +29,11 @@ shutil.copytree(tracker, contents / "Resources/OpenSeeFace", symlinks=True,
                 ignore=shutil.ignore_patterns("Start OpenSeeFace.command"))
 shutil.copy2(root / "src-tauri/icons/icon.icns", contents / "Resources/icon.icns")
 (contents / "Info.plist").write_bytes(plistlib.dumps({
-    "CFBundleName": "OpenSeeFace",
+    "CFBundleName": "VTubeLeaf OpenSeeFace",
     "CFBundleDisplayName": "VTubeLeaf OpenSeeFace",
     "CFBundleIdentifier": "com.moonrailgun.vtubeleaf.openseeface",
     "CFBundlePackageType": "APPL",
-    "CFBundleExecutable": "OpenSeeFaceLauncher",
+    "CFBundleExecutable": "VTubeLeafOpenSeeFace",
     "CFBundleShortVersionString": version,
     "CFBundleVersion": version,
     "CFBundleIconFile": "icon.icns",
@@ -45,6 +45,6 @@ subprocess.run([
     "xcrun", "swiftc", "-swift-version", "5", "-O", "-parse-as-library",
     "-target", f"{arch}-apple-macos{minimum}",
     str(root / "native/openseeface/Launcher.swift"),
-    "-o", str(contents / "MacOS/OpenSeeFaceLauncher"),
+    "-o", str(contents / "MacOS/VTubeLeafOpenSeeFace"),
 ], check=True)
 print(f"Built native OpenSeeFace app: {app}")

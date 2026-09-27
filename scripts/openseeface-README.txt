@@ -2,7 +2,7 @@ VTubeLeaf OpenSeeFace 独立启动包
 
 无需安装 Python。此包与 VTubeLeaf 主应用分别启动、分别关闭。
 
-1. macOS：打开 DMG，将 OpenSeeFace.app 拖入「应用程序」，再双击打开。
+1. macOS：打开 DMG，将 VTubeLeaf OpenSeeFace.app 拖入「应用程序」，再双击打开。
    Apple Silicon 选 aarch64，Intel 选 x86_64；无需使用终端。
    Windows：先完整解压 ZIP，再双击 Start OpenSeeFace.cmd。
 2. macOS：在下拉框中选择摄像头名称，填写 UDP 端口，点击「开始追踪」。

@@ -34,11 +34,11 @@ jobs:
           python-version: '3.10'
       - run: npm run bundle:openseeface -- --python python
       - run: python tests/openseeface-launcher.test.py
-      - run: python tests/openseeface-app.test.py .local/openseeface-bundle/${{ matrix.arch }}/OpenSeeFace.app
+      - run: python tests/openseeface-app.test.py ".local/openseeface-bundle/${{ matrix.arch }}/VTubeLeaf OpenSeeFace.app"
       - name: Validate frozen inference and preserve executable permissions
         run: |
           # Use the same pinned RGB sample as the Windows inference check.
-          python scripts/check-openseeface.py .local/openseeface/models/benchmark.bin --executable .local/openseeface-bundle/${{ matrix.arch }}/OpenSeeFace.app/Contents/Resources/OpenSeeFace/facetracker
+          python scripts/check-openseeface.py .local/openseeface/models/benchmark.bin --executable ".local/openseeface-bundle/${{ matrix.arch }}/VTubeLeaf OpenSeeFace.app/Contents/Resources/OpenSeeFace/facetracker"
           tar -czf openseeface-${{ matrix.arch }}.tar.gz -C .local/openseeface-bundle ${{ matrix.arch }}
       - uses: actions/upload-artifact@v7
         with:
@@ -117,8 +117,8 @@ jobs:
           for archive in .local/openseeface-artifacts/*.tar.gz; do
             tar -xzf "$archive" -C .local/openseeface-packages
           done
-          test -x .local/openseeface-packages/aarch64/OpenSeeFace.app/Contents/Resources/OpenSeeFace/facetracker
-          test -x .local/openseeface-packages/x86_64/OpenSeeFace.app/Contents/Resources/OpenSeeFace/facetracker
+          test -x ".local/openseeface-packages/aarch64/VTubeLeaf OpenSeeFace.app/Contents/Resources/OpenSeeFace/facetracker"
+          test -x ".local/openseeface-packages/x86_64/VTubeLeaf OpenSeeFace.app/Contents/Resources/OpenSeeFace/facetracker"
           test ! -e "$APP_PATH/Contents/Resources/openseeface"
       - name: Verify native macOS icon is bundled
         run: |
@@ -207,7 +207,7 @@ jobs:
           spctl --assess --type open --context context:primary-signature --verbose=2 "$RELEASE_DIR/$name.dmg"
 
           for arch in aarch64 x86_64; do
-            tracker_app=".local/openseeface-packages/$arch/OpenSeeFace.app"
+            tracker_app=".local/openseeface-packages/$arch/VTubeLeaf OpenSeeFace.app"
             archive="$RUNNER_TEMP/openseeface-$arch.zip"
             ditto -c -k --keepParent "$tracker_app" "$archive"
             notarize "$archive"
