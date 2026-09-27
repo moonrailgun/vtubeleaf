@@ -1,5 +1,15 @@
 import AppKit
 
+// Test failures should report to the terminal, not open macOS Crash Reporter.
+func check(_ condition: @autoclosure () -> Bool, _ message: String = "Check failed",
+           file: StaticString = #fileID, line: UInt = #line) {
+    guard condition() else {
+        FileHandle.standardError.write(Data("\(file):\(line): \(message)\n".utf8))
+        exit(EXIT_FAILURE)
+    }
+}
+
+
 // Exercise the production quit handler in AppKit's real event loop, without showing UI.
 final class QuitCheckDelegate: NSObject, NSApplicationDelegate {
     let launcher = LauncherDelegate()
@@ -23,10 +33,18 @@ struct LauncherChecks {
         while !condition() && Date() < deadline {
             RunLoop.current.run(until: Date().addingTimeInterval(0.01))
         }
-        precondition(condition(), "Tracker did not finish within 8 seconds")
+        check(condition(), "Tracker did not finish within 8 seconds")
     }
 
-    static func main() throws {
+    static func main() {
+        do { try run() }
+        catch { check(false, error.localizedDescription) }
+    }
+
+    static func run() throws {
+        if CommandLine.arguments.contains("--failure-check") {
+            check(false, "Expected test failure")
+        }
         if CommandLine.arguments.contains("--quit-check") {
             let app = NSApplication.shared
             let delegate = QuitCheckDelegate()
@@ -41,14 +59,14 @@ struct LauncherChecks {
                                ("0", "65536"), ("$(touch bad)", "11573")] {
             do {
                 _ = try TrackerProcess.arguments(camera: camera, port: port)
-                preconditionFailure("Accepted invalid camera or UDP port")
+                check(false, "Accepted invalid camera or UDP port")
             } catch {}
         }
         let expected = ["--ip", "127.0.0.1", "--port", "12000", "--capture", "2",
                         "--faces", "1", "-F", "24", "-W", "640", "-H", "360",
                         "--gaze-tracking", "0", "--visualize", "0", "--silent", "1"]
         let actual = try TrackerProcess.arguments(camera: " 2 ", port: "12000")
-        precondition(actual == expected)
+        check(actual == expected)
 
         let folder = FileManager.default.temporaryDirectory.appendingPathComponent("tracker checks \(UUID())")
         try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
@@ -66,8 +84,8 @@ struct LauncherChecks {
         try script("printf '%s\\n' \"$@\"\nprintf 'camera unavailable' >&2\nexit 7\n")
         try tracker.start(camera: "2", port: "12000")
         waitUntil { result != nil }
-        precondition(result!.0 == 7 && result!.1.contains(expected.joined(separator: "\n")))
-        precondition(result!.1.contains("camera unavailable") && !tracker.isRunning)
+        check(result!.0 == 7 && result!.1.contains(expected.joined(separator: "\n")))
+        check(result!.1.contains("camera unavailable") && !tracker.isRunning)
 
         // Closing/stopping must also reap a tracker that ignores graceful shutdown.
         result = nil
@@ -76,24 +94,24 @@ struct LauncherChecks {
         RunLoop.current.run(until: Date().addingTimeInterval(0.1))
         do {
             try tracker.start(camera: "0", port: "11573")
-            preconditionFailure("Started two trackers")
+            check(false, "Started two trackers")
         } catch {}
         tracker.stop()
         waitUntil { result != nil }
-        precondition(!tracker.isRunning)
+        check(!tracker.isRunning)
 
         // A subsequent start is usable; a spawn failure must leave no running state.
         result = nil
         try script("exit 0\n")
         try tracker.start(camera: "32", port: "65535")
         waitUntil { result != nil }
-        precondition(result!.0 == 0)
+        check(result!.0 == 0)
         try FileManager.default.removeItem(at: executable)
         do {
             try tracker.start(camera: "0", port: "11573")
-            preconditionFailure("Spawned a missing tracker")
+            check(false, "Spawned a missing tracker")
         } catch {}
-        precondition(!tracker.isRunning)
+        check(!tracker.isRunning)
         // Render without opening a window or accessing a camera. Catch clipped controls.
         _ = NSApplication.shared
         let delegate = LauncherDelegate()
@@ -102,7 +120,7 @@ struct LauncherChecks {
         content.layoutSubtreeIfNeeded()
         func checkBounds(_ view: NSView) {
             for child in view.subviews {
-                precondition(content.bounds.contains(child.convert(child.bounds, to: content)), "Clipped launcher control")
+                check(content.bounds.contains(child.convert(child.bounds, to: content)), "Clipped launcher control")
                 checkBounds(child)
             }
         }

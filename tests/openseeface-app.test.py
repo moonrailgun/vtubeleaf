@@ -32,11 +32,14 @@ with tempfile.TemporaryDirectory(prefix="openseeface checks ") as temporary:
         str(root / "native/openseeface/Launcher.swift"),
         str(root / "tests/openseeface-launcher.swift"), "-o", str(executable),
     ], check=True)
-    subprocess.run([str(executable)], check=True, timeout=30)
+    failure = subprocess.run([str(executable), "--failure-check"], capture_output=True, text=True, timeout=5)
+    assert failure.returncode == 1 and "Expected test failure" in failure.stderr, \
+        "A failed test must exit normally instead of triggering macOS Crash Reporter"
+    subprocess.run([str(executable), *sys.argv[2:]], check=True, timeout=30)
 
     # Quitting must reap even a stuck tracker before the app exits. Never open a camera.
     fake_tracker = test_app / "Contents/Resources/OpenSeeFace/facetracker"
-    fake_tracker.parent.mkdir(parents=True)
+    fake_tracker.parent.mkdir(parents=True, exist_ok=True)
     pid_file = Path(temporary) / "tracker.pid"
     fake_tracker.write_text("#!/bin/sh\ntrap '' INT TERM\n"
                             f"echo $$ > {shlex.quote(str(pid_file))}\nwhile :; do :; done\n")
