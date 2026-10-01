@@ -59,6 +59,39 @@ fn main() {
         println!("cargo:rustc-link-lib=static=VTubeLeafCameraHost");
         println!("cargo:rustc-link-lib=advapi32");
         println!("cargo:rustc-link-lib=libcpmt");
+
+        // Spout2 sender sources plus the bridge used by src/texture.rs.
+        let spout = std::path::absolute("../native/windows-spout").unwrap();
+        for file in ["CMakeLists.txt", "Output.cpp", "vendor"] {
+            println!("cargo:rerun-if-changed={}", spout.join(file).display());
+        }
+        let build = PathBuf::from(env::var_os("OUT_DIR").unwrap()).join("windows-spout");
+        let status = Command::new("cmake")
+            .arg("-S")
+            .arg(&spout)
+            .arg("-B")
+            .arg(&build)
+            .args(["-A", "x64", "-DBUILD_TESTING=OFF"])
+            .status()
+            .expect("Install Visual Studio C++ Build Tools and CMake");
+        assert!(status.success(), "Could not configure the Spout output");
+        let status = Command::new("cmake")
+            .arg("--build")
+            .arg(&build)
+            .args(["--config", "Release", "--parallel"])
+            .status()
+            .unwrap();
+        assert!(status.success(), "Could not compile the Spout output");
+        println!(
+            "cargo:rustc-link-search=native={}",
+            build.join("Release").display()
+        );
+        println!("cargo:rustc-link-lib=static=VTubeLeafTexture");
+        for library in [
+            "d3d11", "dxgi", "shell32", "version", "comctl32", "winmm", "psapi", "user32", "gdi32",
+        ] {
+            println!("cargo:rustc-link-lib={library}");
+        }
     }
     if env::var("CARGO_CFG_TARGET_OS").as_deref() == Ok("macos") {
         let native = PathBuf::from("../native/macos-camera");
@@ -123,11 +156,59 @@ fn main() {
             println!("cargo:rustc-link-lib=framework={framework}");
         }
         println!("cargo:rustc-link-arg=-Wl,-rpath,/usr/lib/swift");
+
+        // Syphon server sources plus the bridge used by src/texture.rs.
+        let syphon = std::path::absolute("../native/macos-syphon").unwrap();
+        let vendor = syphon.join("vendor/Syphon");
+        println!("cargo:rerun-if-changed={}", syphon.display());
+        let mut sources = vec![syphon.join("Output.m")];
+        for entry in std::fs::read_dir(&vendor).unwrap() {
+            let path = entry.unwrap().path();
+            if matches!(path.extension().and_then(|e| e.to_str()), Some("m" | "c")) {
+                sources.push(path);
+            }
+        }
+        let objects = output.join("syphon");
+        let _ = std::fs::remove_dir_all(&objects);
+        std::fs::create_dir_all(&objects).unwrap();
+        let result = Command::new("xcrun")
+            .current_dir(&objects)
+            .args(["clang", "-c", "-fobjc-arc", "-O2", "-target"])
+            .arg(format!("{arch}-apple-macos14.0"))
+            // Syphon shares frames through global IOSurfaces, which Apple deprecated without a replacement.
+            .arg("-Wno-deprecated-declarations")
+            .arg("-include")
+            .arg(vendor.join("Syphon_Prefix.pch"))
+            .arg("-I")
+            .arg(&vendor)
+            .args(&sources)
+            .status()
+            .expect("Xcode clang is required for the Syphon output");
+        assert!(result.success(), "Could not compile the Syphon output");
+        let result = Command::new("xcrun")
+            .args(["libtool", "-static", "-o"])
+            .arg(output.join("libVTubeLeafTexture.a"))
+            .args(
+                std::fs::read_dir(&objects)
+                    .unwrap()
+                    .map(|entry| entry.unwrap().path()),
+            )
+            .status()
+            .unwrap();
+        assert!(result.success(), "Could not archive the Syphon output");
+        println!("cargo:rustc-link-lib=static=VTubeLeafTexture");
+        println!("cargo:rustc-link-lib=framework=IOSurface");
     }
     tauri_build::try_build(tauri_build::Attributes::new().plugin(
         "virtual-camera",
-        tauri_build::InlinedPlugin::new()
-            .commands(&["status", "install", "uninstall", "start", "stop", "submit"]),
+        tauri_build::InlinedPlugin::new().commands(&[
+            "status",
+            "install",
+            "uninstall",
+            "start",
+            "stop",
+            "submit",
+        ]),
     ))
     .expect("Could not build Tauri permissions")
 }

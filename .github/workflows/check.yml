@@ -83,3 +83,13 @@ jobs:
             ctest --test-dir $output -C Release --output-on-failure
             if ($LASTEXITCODE) { exit $LASTEXITCODE }
           }
+      - name: Windows Spout2 output round trip
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          cmake -S native/windows-spout -B .local/spout-check -A x64 -DBUILD_TESTING=ON
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          cmake --build .local/spout-check --config Release --parallel
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          ctest --test-dir .local/spout-check -C Release --output-on-failure
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }

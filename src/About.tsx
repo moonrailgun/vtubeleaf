@@ -273,6 +273,8 @@ function LicenseNotices() {
           <SelectItem value="/runtime/licenses/Core/LICENSE.md">Cubism Core（已配置时）</SelectItem>
           <SelectItem value="/licenses/windows-microsoft.txt">Microsoft BaseClasses</SelectItem>
           <SelectItem value="/licenses/windows-softcam.txt">Softcam BaseClasses</SelectItem>
+          <SelectItem value="/licenses/macos-syphon.txt">Syphon</SelectItem>
+          <SelectItem value="/licenses/windows-spout.txt">Spout2</SelectItem>
         </SelectContent>
       </Select>
       <pre aria-label="许可正文" tabIndex={0} className="license-text">

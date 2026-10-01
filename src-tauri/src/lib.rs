@@ -8,6 +8,7 @@ mod motion;
 mod nvidia;
 mod obs;
 mod settings;
+mod texture;
 mod tracker;
 mod vts;
 
@@ -420,6 +421,7 @@ pub fn run() {
             #[cfg(target_os = "linux")]
             linux::configure_media(&app.get_webview_window("main").expect("工作台窗口未创建"))?;
             app.manage(Mutex::new(obs::Output::default()));
+            app.manage(Mutex::new(texture::Output::default()));
             app.manage(AppState {
                 data_dir: app.path().app_data_dir()?,
                 models: Mutex::default(),
@@ -492,7 +494,11 @@ pub fn run() {
             stop_nvidia,
             obs::obs_start,
             obs::obs_stop,
-            obs::obs_submit
+            obs::obs_submit,
+            texture::texture_start,
+            texture::texture_stop,
+            texture::texture_submit,
+            texture::texture_wanted
         ])
         .on_window_event(|window, event| {
             if window.label() == "main" && matches!(event, tauri::WindowEvent::Destroyed) {
@@ -509,6 +515,12 @@ pub fn run() {
             if let Some(state) = app.try_state::<AppState>() {
                 if let Ok(mut tracker) = state.tracker.lock() {
                     tracker.take();
+                }
+            }
+            // Quitting from the menu skips the window close handler that normally stops the output.
+            if let Some(output) = app.try_state::<Mutex<texture::Output>>() {
+                if let Ok(mut output) = output.lock() {
+                    output.stop();
                 }
             }
         }

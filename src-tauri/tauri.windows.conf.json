@@ -6,7 +6,8 @@
       "../native/windows-camera/bin/x64/VTubeLeafCamera.dll": "camera/x64/VTubeLeafCamera.dll",
       "../native/windows-camera/bin/x86/VTubeLeafCamera.dll": "camera/x86/VTubeLeafCamera.dll",
       "../native/windows-camera/vendor/LICENSE.microsoft": "camera/LICENSE.microsoft",
-      "../native/windows-camera/vendor/LICENSE.softcam": "camera/LICENSE.softcam"
+      "../native/windows-camera/vendor/LICENSE.softcam": "camera/LICENSE.softcam",
+      "../native/windows-spout/vendor/LICENSE.spout": "LICENSE.spout"
     },
     "windows": {
       "nsis": {
