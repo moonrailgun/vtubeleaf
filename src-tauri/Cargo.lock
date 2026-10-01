@@ -4233,6 +4233,7 @@ dependencies = [
 name = "vtubeleaf"
 version = "1.0.5"
 dependencies = [
+ "gtk",
  "serde",
  "serde_json",
  "tauri",
@@ -4240,6 +4241,7 @@ dependencies = [
  "tauri-plugin-dialog",
  "tauri-plugin-updater",
  "tempfile",
+ "webkit2gtk",
  "zip 6.0.0",
 ]
 

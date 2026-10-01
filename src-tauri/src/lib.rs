@@ -1,6 +1,8 @@
 mod assets;
 mod camera;
 mod downloads;
+#[cfg(any(target_os = "linux", test))]
+mod linux;
 mod models;
 mod motion;
 mod nvidia;
@@ -414,6 +416,8 @@ pub fn run() {
         .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(camera::init())
         .setup(|app| {
+            #[cfg(target_os = "linux")]
+            linux::configure_media(&app.get_webview_window("main").expect("工作台窗口未创建"))?;
             app.manage(AppState {
                 data_dir: app.path().app_data_dir()?,
                 models: Mutex::default(),

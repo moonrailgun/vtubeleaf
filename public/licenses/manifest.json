@@ -6,8 +6,8 @@
     "scripts/licenses.hbs": "d610eaccb5fa21eda12278ccb82387c024deb4c65ebe64fdfa706c2a06cb620d",
     "scripts/licenses.mjs": "435e51b6bea761c64d7e8cae1e28797db5e12c808595be456f6737bb49e95ee0",
     "scripts/setup-assets.mjs": "266596132d87c5426fb8bb55601155a1c36570a31fdabdde358cb895595c176a",
-    "src-tauri/Cargo.lock": "693e4d79717e2392bda24bd43af0b7587267d8bbae899f9ad0bb796aab308403",
-    "src-tauri/Cargo.toml": "fd8afc2d8d0c60a252e7eec44f36b3524eff276e445cb75b736d1e96c427c7e9",
+    "src-tauri/Cargo.lock": "0703d30e3bc9183ab05c81c4e8a5679ecd308ef0980dc06dee15e57776f52ea1",
+    "src-tauri/Cargo.toml": "0a47dbb9aeb0498a26049f9e2fda25e4f2587a1d7d89e1a93a81f2897b65b24e",
     "src-tauri/about.toml": "5023e7d6d9b2a82666774bce222a7e0c3296f21a90c4461dd2c46117b8f6afa8"
   },
   "outputs": {
