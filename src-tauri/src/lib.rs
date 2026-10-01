@@ -6,6 +6,7 @@ mod linux;
 mod models;
 mod motion;
 mod nvidia;
+mod obs;
 mod settings;
 mod tracker;
 mod vts;
@@ -418,6 +419,7 @@ pub fn run() {
         .setup(|app| {
             #[cfg(target_os = "linux")]
             linux::configure_media(&app.get_webview_window("main").expect("工作台窗口未创建"))?;
+            app.manage(Mutex::new(obs::Output::default()));
             app.manage(AppState {
                 data_dir: app.path().app_data_dir()?,
                 models: Mutex::default(),
@@ -487,7 +489,10 @@ pub fn run() {
             start_openseeface,
             stop_openseeface,
             start_nvidia,
-            stop_nvidia
+            stop_nvidia,
+            obs::obs_start,
+            obs::obs_stop,
+            obs::obs_submit
         ])
         .on_window_event(|window, event| {
             if window.label() == "main" && matches!(event, tauri::WindowEvent::Destroyed) {
