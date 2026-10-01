@@ -13,8 +13,8 @@ root = Path(__file__).resolve().parent.parent
 source = root / ".local/openseeface"
 work = root / ".local/openseeface-build"
 arch = {"arm64": "aarch64", "aarch64": "aarch64", "amd64": "x86_64", "x86_64": "x86_64"}.get(platform.machine().lower())
-if arch is None or sys.platform not in ("darwin", "win32") or (sys.platform == "win32" and arch != "x86_64"):
-    raise SystemExit("OpenSeeFace bundles support macOS arm64/x86_64 and Windows x64")
+if arch is None or sys.platform not in ("darwin", "win32", "linux") or (sys.platform != "darwin" and arch != "x86_64"):
+    raise SystemExit("OpenSeeFace bundles support macOS arm64/x86_64, Windows x64 and Linux x64")
 
 command = [
     sys.executable, "-m", "PyInstaller", "--noconfirm", "--clean", "--onedir",
@@ -72,6 +72,6 @@ if sys.platform == "darwin":
     executable = app / "Contents/Resources/OpenSeeFace/facetracker"
 else:
     shutil.copytree(bundle, target, symlinks=True)
-    executable = target / "facetracker.exe"
+    executable = target / ("facetracker.exe" if sys.platform == "win32" else "facetracker")
 subprocess.run([str(executable), "--help"], cwd=target, check=True, stdout=subprocess.DEVNULL)
 print(f"Bundled OpenSeeFace ({arch}): {executable}")

@@ -1,0 +1,69 @@
+name: Package Linux release
+
+on:
+  workflow_dispatch:
+  workflow_call:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: package-linux-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  package:
+    # Build on the oldest supported distribution to preserve glibc compatibility.
+    runs-on: ubuntu-22.04
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: npm
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.10'
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+      - name: Install Linux build and media dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev build-essential libssl-dev librsvg2-dev libayatana-appindicator3-dev patchelf libfuse2 gstreamer1.0-plugins-base gstreamer1.0-plugins-good gstreamer1.0-plugins-bad gstreamer1.0-libav
+      - run: npm ci
+      - run: npm run setup:assets
+      - run: npm run setup:assets -- --check
+      - run: npm run bundle:openseeface -- --python python
+      - run: python tests/openseeface-launcher.test.py
+      - name: Validate frozen OpenSeeFace inference
+        run: python scripts/check-openseeface.py .local/openseeface/models/benchmark.bin --executable .local/openseeface-bundle/x86_64/facetracker
+      - name: Build Linux packages
+        run: npm run tauri -- build --bundles deb,appimage -- --locked
+      - name: Package tracker and sign updates
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        run: |
+          test -n "$TAURI_SIGNING_PRIVATE_KEY" || { echo 'Missing updater signing key'; exit 1; }
+          version=$(node -p 'require("./package.json").version')
+          mkdir -p packages
+          cp src-tauri/target/release/bundle/deb/*.deb packages/
+          cp src-tauri/target/release/bundle/appimage/*.AppImage packages/
+          for package in packages/*.deb packages/*.AppImage; do
+            npm run tauri -- signer sign "$package"
+          done
+          folder="VTubeLeaf-OpenSeeFace-${version}-linux-x86_64"
+          mv .local/openseeface-bundle/x86_64 ".local/$folder"
+          tar -czf "packages/$folder.tar.gz" -C .local "$folder"
+      - uses: actions/upload-artifact@v7
+        with:
+          name: VTubeLeaf-linux-x86_64-${{ github.run_number }}
+          path: packages/*
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 30

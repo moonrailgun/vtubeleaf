@@ -23,6 +23,8 @@ jobs:
             bundle: nsis
           - os: macos-15
             bundle: app
+          - os: ubuntu-22.04
+            bundle: deb,appimage
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-node@v6
@@ -36,6 +38,11 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           workspaces: src-tauri
+      - name: Install Linux build and media dependencies
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev build-essential libssl-dev librsvg2-dev libayatana-appindicator3-dev patchelf libfuse2 gstreamer1.0-plugins-base gstreamer1.0-plugins-good gstreamer1.0-plugins-bad gstreamer1.0-libav
       - run: npm ci
       - run: npm test
       - run: node scripts/check-macos-release.mjs --self-test
@@ -45,6 +52,9 @@ jobs:
       - run: npm run setup:assets
       - run: npm run setup:assets -- --check
       - run: npm run bundle:openseeface -- --python python
+      - name: Verify Linux frozen OpenSeeFace inference
+        if: runner.os == 'Linux'
+        run: python scripts/check-openseeface.py .local/openseeface/models/benchmark.bin --executable .local/openseeface-bundle/x86_64/facetracker
       - name: Verify native OpenSeeFace launcher
         if: runner.os == 'macOS'
         run: |
