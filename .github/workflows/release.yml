@@ -47,8 +47,13 @@ jobs:
     uses: ./.github/workflows/release-windows.yml
     secrets: inherit
 
+  linux:
+    needs: version
+    uses: ./.github/workflows/release-linux.yml
+    secrets: inherit
+
   publish:
-    needs: [version, checks, macos, windows]
+    needs: [version, checks, macos, windows, linux]
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -78,15 +83,15 @@ jobs:
         run: |
           sha256sum --check SHA256SUMS.txt
           node -e 'const fs = require("node:fs"); const config = require("../src-tauri/tauri.conf.json"); fs.writeFileSync(process.env.RUNNER_TEMP + "/updater.pub", Buffer.from(config.plugins.updater.pubkey, "base64"));'
-          for package in ./*.exe ./*.app.tar.gz; do
+          for package in ./*.exe ./*.app.tar.gz ./*.deb ./*.AppImage; do
             base64 --decode "$package.sig" > "$RUNNER_TEMP/updater.sig"
             minisign -V -p "$RUNNER_TEMP/updater.pub" -m "$package" -x "$RUNNER_TEMP/updater.sig"
           done
           gh api "repos/$GH_REPO/releases/generate-notes" -f "tag_name=$RELEASE_TAG" --jq .body > "$RUNNER_TEMP/release-notes.md"
           node ../scripts/create-updater-manifest.mjs . "$RELEASE_TAG" "$RUNNER_TEMP/release-notes.md"
           test -s openseeface-aarch64.xml && test -s openseeface-x86_64.xml
-          sha256sum ./*.dmg ./*.zip ./*.exe ./*.app.tar.gz ./*.sig ./openseeface-*.xml latest.json > SHA256SUMS.txt
-          gh release create "$RELEASE_TAG" ./*.dmg ./*.zip ./*.exe ./*.app.tar.gz ./*.sig ./openseeface-*.xml latest.json SHA256SUMS.txt \
+          sha256sum ./*.dmg ./*.zip ./*.exe ./*.tar.gz ./*.deb ./*.AppImage ./*.sig ./openseeface-*.xml latest.json > SHA256SUMS.txt
+          gh release create "$RELEASE_TAG" ./*.dmg ./*.zip ./*.exe ./*.tar.gz ./*.deb ./*.AppImage ./*.sig ./openseeface-*.xml latest.json SHA256SUMS.txt \
             --draft --verify-tag --title "$RELEASE_TAG" --notes-file "$RUNNER_TEMP/release-notes.md" --prerelease="$PRERELEASE"
           gh release edit "$RELEASE_TAG" --draft=false
   website:

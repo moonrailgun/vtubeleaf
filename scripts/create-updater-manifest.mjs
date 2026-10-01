@@ -21,7 +21,13 @@ export async function createUpdaterManifest(directory, tag, notes) {
     version,
     notes,
     pub_date: new Date().toISOString(),
-    platforms: { 'windows-x86_64': windows, 'darwin-aarch64': mac, 'darwin-x86_64': mac },
+    platforms: {
+      'windows-x86_64': windows,
+      'darwin-aarch64': mac,
+      'darwin-x86_64': mac,
+      'linux-x86_64-appimage': await artifact(`VTubeLeaf_${version}_amd64.AppImage`),
+      'linux-x86_64-deb': await artifact(`VTubeLeaf_${version}_amd64.deb`),
+    },
   };
 }
 
