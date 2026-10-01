@@ -3577,7 +3577,7 @@ test('meeting tabs show only the selected integration method', async ({ page }, 
   const camera = page.getByRole('tab', { name: '内置虚拟摄像头', exact: true });
   const obs = page.getByRole('tab', { name: 'OBS 接入', exact: true });
   const cameraControls = page.getByRole('button', { name: '安装虚拟摄像头', exact: true });
-  const obsSteps = page.getByText('在 OBS 添加捕获源', { exact: true });
+  const obsSteps = page.getByText('在 OBS 添加浏览器源', { exact: true });
 
   await expect(camera).toHaveAttribute('aria-selected', 'true');
   await expect(cameraControls).toBeVisible();

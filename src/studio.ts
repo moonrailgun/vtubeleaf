@@ -27,6 +27,7 @@ import { MotionRecording } from './recording';
 import { sampleCalibration } from './calibration';
 import { AudioLipSync, type Vowel } from './lipsync';
 import { VirtualCamera, type CameraStatus } from './virtual-camera';
+import { ObsOutput } from './obs-output';
 import { importVtsConfig, repairVtsMappings } from './vts';
 import { readComposition, snapshotScene, type Composition, type SceneItem } from './scenes';
 import type { OutputFrame, OutputState } from './output';
@@ -107,6 +108,7 @@ export function createStudio(
       if (modelLoading || sceneBusy) throw new Error('正在加载角色或场景，请稍后再安装。');
       await save(true);
       await virtualCamera.stop(true);
+      await obsOutput.setEnabled(false);
       await stop();
       await (await WebviewWindow.getByLabel('output'))?.close();
     },
@@ -133,6 +135,7 @@ export function createStudio(
     selectedItem,
     sceneBusy,
     virtualCamera: cameraStatus,
+    obsOutput: { ...obsOutput.state },
     cameraDevices,
     micDevices,
     micActive: audio.active,
@@ -271,6 +274,12 @@ export function createStudio(
     cameraStatus = status;
     if (ready) publish();
   });
+  const obsOutput = new ObsOutput(
+    () => {
+      if (ready) publish();
+    },
+    (message) => notify(message, true),
+  );
   const outputPressed = new Set<string>();
   function releaseOutputHotkeys() {
     for (const id of outputPressed) void run(() => shortcutAction(id, false));
@@ -624,6 +633,16 @@ export function createStudio(
     startCamera: () => virtualCamera.start(),
     stopCamera: () => virtualCamera.stop(),
     refreshCamera: () => virtualCamera.refresh(),
+    setObsOutput(enabled: boolean) {
+      // The frame loop submits nothing while rendering is broken, so OBS would stay blank.
+      if (enabled && (!stage || failedRevision === modelRevision))
+        throw new Error('画面渲染失败，无法启动透明输出。请重新加载角色后再试。');
+      return obsOutput.setEnabled(enabled, settings.obsOutput);
+    },
+    async copyObsUrl() {
+      await navigator.clipboard.writeText(obsOutput.state.url);
+      notify('OBS 浏览器源地址已复制。');
+    },
     selectItem(id: string) {
       selectedItem = id;
       publish();
@@ -1301,6 +1320,7 @@ export function createStudio(
       }
     },
     async resetAll() {
+      if (native) await obsOutput.setEnabled(false);
       modelOperation++;
       modelLoading = false;
       stage?.clear();
@@ -1449,6 +1469,7 @@ export function createStudio(
           if (updater.state.status === 'installing') return;
           try {
             await virtualCamera.stop();
+            await obsOutput.setEnabled(false);
             await stop();
             await save();
             await hotkeys.destroy();
@@ -1532,11 +1553,13 @@ export function createStudio(
         );
       } catch (error) {
         failedRevision = modelRevision;
+        if (obsOutput.state.active) void obsOutput.setEnabled(false).catch(report);
         report(error instanceof Error ? `模型渲染失败：${error.message}` : error);
       }
     }
     if (stage)
       virtualCamera.submit(stage.canvas, settings.background, settings.virtualCameraMirror);
+    if (stage && failedRevision !== modelRevision) obsOutput.submit(stage);
     recording.capture(stage?.frame ?? {}, now);
     if (native && outputOpen && !frameSending) {
       frameSending = true;
@@ -1587,7 +1610,7 @@ export function createStudio(
   const stopRendering = startFrameLoop(
     tick,
     () => settings.renderFps,
-    () => tracking === 'running' || tracking === 'paused',
+    () => tracking === 'running' || tracking === 'paused' || obsOutput.state.active,
   );
   return {
     actions,
@@ -1608,6 +1631,7 @@ export function createStudio(
       void stopAudio().catch(() => {});
       void hotkeys.destroy();
       virtualCamera.destroy();
+      obsOutput.destroy();
       stage?.destroy();
       previewStage?.clear();
       Object.values(previews).forEach(URL.revokeObjectURL);

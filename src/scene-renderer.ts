@@ -211,6 +211,10 @@ export class SceneLayers {
     );
   }
 
+  get background() {
+    return this.visuals.find((visual) => !visual.item)?.node;
+  }
+
   draw(
     s: Settings,
     width: number,

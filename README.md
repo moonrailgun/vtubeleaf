@@ -49,6 +49,13 @@ Linux 暂无内置虚拟摄像头，请通过 OBS 输出；会议使用需要安
 
 ### 使用 OBS 直播或录屏
 
+需要透明背景时，在 VTubeLeaf「接入 → OBS 接入」中启动透明输出。角色和道具的透明度会直接保留，无需色键；VTubeLeaf 的纯色和背景图不会进入此来源，可在 OBS 中添加背景。输出方式有两种：
+
+- **Syphon（macOS）/ Spout2（Windows）**：默认方式，以 `1920×1080` 直接向 OBS 共享画面，帧率跟随「渲染帧率」设置，延迟和占用最低。macOS 在 OBS 添加「Syphon客户端」来源，选择 VTubeLeaf 并勾选「允许透明度」；Windows 需先为 OBS 安装 [Spout2 插件](https://github.com/Off-World-Live/obs-spout2-plugin)，再添加「Spout2 Capture」来源，选择 VTubeLeaf，并把「Composite mode」设为 Premultiplied Alpha。
+- **浏览器源**：无需插件。复制地址后在 OBS 添加「浏览器」来源，粘贴地址，宽度设为 `1280`、高度 `720`、帧率 `30`。画面仅通过本机地址提供，实际帧率取决于 PNG 编码速度，上限为 30 FPS。
+
+两种方式都需要保持 VTubeLeaf 运行。停止输出后会清空画面，重新启动输出后自动恢复。
+
 点击 VTubeLeaf 顶部的「直播模式」，隐藏设置面板，再在 OBS 中捕获 VTubeLeaf 窗口。回到 VTubeLeaf 按 `Esc` 可以恢复界面，角色会继续跟随你的动作。
 
 如果需要一边调整设置一边输出画面，可以使用「独立输出窗口」。应用「接入」页面也提供了 OBS 的操作说明。

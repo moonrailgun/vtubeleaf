@@ -9,7 +9,7 @@ export function startFrameLoop(
   function schedule(delay: number) {
     if (background()) {
       // WKWebView throttles hidden-page DOM timers even with backgroundThrottling disabled.
-      // Only keep a worker alive while tracking needs uninterrupted frames.
+      // Only keep a worker alive while tracking or output needs uninterrupted frames.
       if (!worker) {
         const url = URL.createObjectURL(
           new Blob(['onmessage = ({ data }) => setTimeout(() => postMessage(null), data);'], {

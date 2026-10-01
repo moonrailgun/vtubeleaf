@@ -994,6 +994,62 @@ h1 span {
   color: var(--muted-foreground);
   margin-top: 7px;
 }
+.obs-card {
+  display: grid;
+  gap: 12px;
+  margin-top: 14px;
+  padding: 14px;
+  border: 1px solid #f0e0e9;
+  border-radius: 12px;
+  background: #fdf8fb;
+}
+.obs-alpha {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 42px;
+  height: 42px;
+  border: 1px solid #ebd4e1;
+  border-radius: 10px;
+  /* Checkerboard: the output has no background. */
+  background: repeating-conic-gradient(#f5e1eb 0 25%, #fff 0 50%) 0 0 / 14px 14px;
+  color: #c79ab1;
+}
+.obs-alpha svg {
+  width: 20px;
+  height: 20px;
+}
+.obs-card.live .obs-alpha {
+  color: var(--primary);
+}
+.obs-state {
+  min-width: 0;
+}
+.obs-state strong {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 12px;
+  font-weight: 600;
+}
+.obs-state strong::before {
+  content: '';
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #b6adb5;
+}
+.obs-card.live .obs-state strong::before {
+  background: #69a77d;
+  box-shadow: 0 0 0 3px #69a77d18;
+}
+.obs-state small {
+  display: block;
+  margin-top: 4px;
+  font-size: 11px;
+  line-height: 1.5;
+  color: var(--muted-foreground);
+}
 .privacy-note {
   background: #f6f0f7;
   border-radius: 10px;

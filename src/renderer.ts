@@ -104,6 +104,9 @@ export class AvatarStage {
   private app: PIXI.Application;
   readonly content = new PIXI.Container();
   private layers?: SceneLayers;
+  private transparentTexture?: PIXI.RenderTexture;
+  private transparentStage?: PIXI.RenderTexture;
+  private transparentPixelBuffer?: Uint8Array;
   private model?: Live2DModel;
   private urls: string[] = [];
   private generation = 0;
@@ -522,6 +525,79 @@ export class AvatarStage {
     return this.app.view;
   }
 
+  private renderTransparent(width: number, height: number): PIXI.RenderTexture {
+    const renderer = this.app.renderer as PIXI.Renderer;
+    // A lost context renders and reads nothing, which would republish the previous frame.
+    if (renderer.gl.isContextLost()) throw new Error('显卡上下文已丢失');
+    if (this.transparentTexture?.width !== width || this.transparentTexture.height !== height) {
+      this.transparentStage?.destroy();
+      this.transparentStage = undefined;
+      this.transparentTexture?.destroy(true);
+      this.transparentTexture = PIXI.RenderTexture.create({ width, height });
+    }
+    // Render into the letterboxed area only, so its viewport crops overflow like the preview does.
+    const screen = this.app.screen;
+    const scale = Math.min(width / screen.width, height / screen.height);
+    const frame = new PIXI.Rectangle(
+      0,
+      0,
+      Math.round(screen.width * scale),
+      Math.round(screen.height * scale),
+    );
+    frame.x = Math.round((width - frame.width) / 2);
+    frame.y = Math.round((height - frame.height) / 2);
+    const previous = this.transparentStage?.frame;
+    if (
+      previous?.x !== frame.x ||
+      previous.y !== frame.y ||
+      previous.width !== frame.width ||
+      previous.height !== frame.height
+    ) {
+      // The previous letterbox may have covered pixels outside the new one.
+      renderer.renderTexture.bind(this.transparentTexture);
+      renderer.renderTexture.clear();
+      this.transparentStage?.destroy();
+      this.transparentStage = new PIXI.RenderTexture(
+        this.transparentTexture.baseTexture as PIXI.BaseRenderTexture,
+        frame,
+      );
+    }
+    const transform = new PIXI.Matrix(
+      frame.width / screen.width,
+      0,
+      0,
+      frame.height / screen.height,
+    );
+    const background = this.layers?.background;
+    const visible = background?.visible;
+    try {
+      if (background) background.visible = false;
+      renderer.render(this.app.stage, {
+        renderTexture: this.transparentStage,
+        transform,
+        clear: true,
+      });
+      return this.transparentTexture;
+    } finally {
+      if (background) background.visible = visible!;
+    }
+  }
+
+  transparentCanvas(): HTMLCanvasElement {
+    return this.app.renderer.plugins.extract.canvas(this.renderTransparent(1280, 720));
+  }
+
+  /** Top-down premultiplied RGBA. The buffer is reused by the next call. */
+  transparentPixels(width: number, height: number): Uint8Array {
+    const renderer = this.app.renderer as PIXI.Renderer;
+    renderer.renderTexture.bind(this.renderTransparent(width, height));
+    if (this.transparentPixelBuffer?.length !== width * height * 4)
+      this.transparentPixelBuffer = new Uint8Array(width * height * 4);
+    const gl = renderer.gl;
+    gl.readPixels(0, 0, width, height, gl.RGBA, gl.UNSIGNED_BYTE, this.transparentPixelBuffer);
+    return this.transparentPixelBuffer;
+  }
+
   centeredItem() {
     if (!this.model) return;
     this.model.anchor.set(0.5);
@@ -835,6 +911,8 @@ export class AvatarStage {
     this.clear();
     this.observer?.disconnect();
     this.layers?.destroy();
+    this.transparentStage?.destroy();
+    this.transparentTexture?.destroy(true);
     if (this.sharedApp) this.content.destroy();
     else this.app.destroy(true);
   }

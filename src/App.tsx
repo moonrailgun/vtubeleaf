@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
-import { AlertDialog, ContextMenu, DropdownMenu, Tabs } from 'radix-ui';
+import { AlertDialog, ContextMenu, DropdownMenu, Tabs, ToggleGroup } from 'radix-ui';
 import {
   Image,
   FolderHeart,
@@ -12,6 +12,7 @@ import {
   ArrowUpRight,
   Plus,
   ChevronDown,
+  Copy,
   Ellipsis,
   Video,
   Sparkles,
@@ -144,6 +145,7 @@ const initialView: StudioView = {
   tracking: 'stopped',
   selectedItem: '',
   sceneBusy: false,
+  obsOutput: { supported: false, native: undefined, active: false, pending: false, url: '' },
   virtualCamera: {
     supported: false,
     installed: false,
@@ -248,6 +250,8 @@ export function App() {
     }
   };
   const s = view.settings;
+  const obsNative = !!view.obsOutput.native && s.obsOutput === 'native';
+  const obsSource = view.obsOutput.native === 'Spout2' ? 'Spout2 Capture' : 'Syphon客户端';
   const active = view.tracking !== 'stopped';
   const busy = !view.ready || view.modelLoading || view.sceneBusy;
   const draggable = !!(view.model || view.selectedItem) && !busy;
@@ -1425,22 +1429,135 @@ export function App() {
               </Tabs.Content>
               <Tabs.Content value="obs">
                 <div className="section-title">
-                  <h2>接入直播或视频软件</h2>
-                  <span>OBS → 直播 / 视频</span>
+                  <h2>OBS 透明输出</h2>
+                  <span>
+                    {obsNative
+                      ? `Alpha · 1920×1080 · ${s.renderFps} FPS`
+                      : 'Alpha · 1280×720 · 最高 30 FPS'}
+                  </span>
                 </div>
+                <div className={`obs-card${view.obsOutput.active ? ' live' : ''}`}>
+                  <div className="flex items-center gap-3">
+                    <span className="obs-alpha" aria-hidden="true">
+                      <UserRound />
+                    </span>
+                    <div className="obs-state">
+                      <strong role="status">
+                        {view.obsOutput.pending
+                          ? '切换中…'
+                          : view.obsOutput.active
+                            ? '正在输出'
+                            : '未启动'}
+                      </strong>
+                      <small>
+                        {!view.obsOutput.supported
+                          ? '请在桌面应用中启用'
+                          : !view.obsOutput.active
+                            ? '只输出角色和道具，背景保持透明'
+                            : obsNative
+                              ? `在 OBS 的「${obsSource}」来源中选择 VTubeLeaf`
+                              : '把地址粘贴到 OBS「浏览器」来源'}
+                      </small>
+                    </div>
+                  </div>
+                  {view.obsOutput.native && (
+                    <ToggleGroup.Root
+                      type="single"
+                      aria-label="输出方式"
+                      className="grid grid-cols-2 gap-1 rounded-lg bg-secondary p-1"
+                      value={s.obsOutput}
+                      disabled={view.obsOutput.active || view.obsOutput.pending}
+                      onValueChange={(value) =>
+                        value && set('obsOutput', value as Settings['obsOutput'])
+                      }
+                    >
+                      {[
+                        ['native', view.obsOutput.native],
+                        ['browser', '浏览器源'],
+                      ].map(([value, label]) => (
+                        <ToggleGroup.Item key={value} value={value} asChild>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="data-[state=on]:bg-background data-[state=on]:text-accent-foreground data-[state=on]:shadow-sm"
+                          >
+                            {label}
+                          </Button>
+                        </ToggleGroup.Item>
+                      ))}
+                    </ToggleGroup.Root>
+                  )}
+                  {!obsNative && view.obsOutput.url && (
+                    <div className="flex items-center gap-2">
+                      <Input
+                        aria-label="OBS 浏览器源地址"
+                        readOnly
+                        value={view.obsOutput.url}
+                        onFocus={(event) => event.target.select()}
+                      />
+                      <Button
+                        variant="outline"
+                        size="icon"
+                        aria-label="复制地址"
+                        title="复制地址"
+                        onClick={() => run(() => a?.copyObsUrl())}
+                      >
+                        <Copy aria-hidden="true" />
+                      </Button>
+                    </div>
+                  )}
+                  <Button
+                    variant={view.obsOutput.active ? 'outline' : 'default'}
+                    className="w-full"
+                    disabled={!view.obsOutput.supported || view.obsOutput.pending || busy}
+                    onClick={() => run(() => a?.setObsOutput(!view.obsOutput.active))}
+                  >
+                    {view.obsOutput.pending
+                      ? '切换中…'
+                      : view.obsOutput.active
+                        ? '停止透明输出'
+                        : '启动透明输出'}
+                  </Button>
+                </div>
+                <p className="hint">
+                  {obsNative
+                    ? `${view.obsOutput.native} 直接共享画面，延迟和占用最低；浏览器源无需插件，画质为 720p。`
+                    : '地址仅限本机使用。'}
+                  保留半透明边缘，纯色和背景图自动排除，停止输出后画面清空。
+                </p>
                 <ol className="guide">
                   {[
+                    ...(view.obsOutput.native === 'Spout2' && obsNative
+                      ? [
+                          [
+                            '为 OBS 安装 Spout2 插件',
+                            '安装 OBS Spout2 插件（obs-spout2-plugin）并重启 OBS。只需安装一次。',
+                          ],
+                        ]
+                      : []),
+                    obsNative
+                      ? ['启动透明输出', '点击「启动透明输出」。保持 VTubeLeaf 运行。']
+                      : [
+                          '启动并复制地址',
+                          '点击「启动透明输出」，复制上方浏览器源地址。保持 VTubeLeaf 运行。',
+                        ],
+                    !obsNative
+                      ? [
+                          '在 OBS 添加浏览器源',
+                          '添加「浏览器」来源，粘贴地址，宽度设为 1280、高度 720，帧率设为 30。无需色键或额外插件。',
+                        ]
+                      : view.obsOutput.native === 'Spout2'
+                        ? [
+                            '在 OBS 添加 Spout2 来源',
+                            '添加「Spout2 Capture」来源，「Spout Senders」选择 VTubeLeaf，「Composite mode」选择 Premultiplied Alpha。',
+                          ]
+                        : [
+                            '在 OBS 添加 Syphon 来源',
+                            '添加「Syphon客户端」来源，「来源」选择 VTubeLeaf，并勾选「允许透明度」。无需色键或额外插件。',
+                          ],
                     [
-                      '进入直播模式',
-                      '调整角色构图和背景后，点击顶部「直播模式」隐藏面板。按 Esc 恢复界面。',
-                    ],
-                    [
-                      '在 OBS 添加捕获源',
-                      '选择 VTubeLeaf 主窗口。Windows 使用「窗口捕获」；macOS 使用「macOS 屏幕捕获」并授予屏幕录制权限。裁掉系统标题栏。',
-                    ],
-                    [
-                      '启动虚拟摄像头',
-                      '在 OBS 点击「启动虚拟摄像头」。可在场景中添加背景或使用色键。',
+                      '在 OBS 合成背景',
+                      '将游戏、视频或背景放在此来源下方。麦克风在 OBS 中单独添加。',
                     ],
                     [
                       '在直播或视频软件中选择摄像头',
@@ -1454,9 +1571,10 @@ export function App() {
                   ))}
                 </ol>
                 <p className="hint">
-                  需要边调整边输出时，可使用「独立输出窗口」并在 OBS 捕获 VTubeLeaf
-                  Output。先用另一参会端确认画面，后台与最小化表现需按平台实测。 Linux Wayland 使用
-                  PipeWire 捕获；会议输出需先安装 v4l2loopback，再在 OBS 启动虚拟摄像头。
+                  需要保留 VTubeLeaf 背景时，可使用「独立输出窗口」并在 OBS 捕获 VTubeLeaf Output。
+                  Windows 使用窗口捕获，macOS 使用 macOS 屏幕捕获，Linux Wayland 使用 PipeWire
+                  捕获。视频会议可在 OBS 启动虚拟摄像头后选择 OBS Virtual Camera；Linux 需先安装
+                  v4l2loopback。
                 </p>
               </Tabs.Content>
             </Tabs.Root>

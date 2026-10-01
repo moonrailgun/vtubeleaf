@@ -145,6 +145,7 @@ export type Settings = ModelProfile & {
   autoStopVirtualCamera: boolean;
   autoStartMic: boolean;
   virtualCameraMirror: boolean;
+  obsOutput: 'native' | 'browser';
   engine: 'mediapipe' | 'openseeface' | 'nvidia';
   deviceId: string;
   previewMirror: boolean;
@@ -192,6 +193,7 @@ export const defaults: Settings = {
   autoStopVirtualCamera: false,
   autoStartMic: false,
   virtualCameraMirror: false,
+  obsOutput: 'native',
   engine: 'mediapipe',
   deviceId: '',
   previewMirror: true,
@@ -530,6 +532,7 @@ export function readSettings(value: unknown): Settings {
     s.autoStopVirtualCamera = v.autoStopVirtualCamera;
   if (typeof v.autoStartMic === 'boolean') s.autoStartMic = v.autoStartMic;
   if (typeof v.virtualCameraMirror === 'boolean') s.virtualCameraMirror = v.virtualCameraMirror;
+  if (v.obsOutput === 'browser') s.obsOutput = v.obsOutput;
   if (typeof v.skippedUpdateVersion === 'string' && v.skippedUpdateVersion.length <= 128)
     s.skippedUpdateVersion = v.skippedUpdateVersion;
   if (typeof v.previewMirror === 'boolean') s.previewMirror = v.previewMirror;

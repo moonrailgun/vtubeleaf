@@ -141,6 +141,52 @@ test.afterEach(async ({ page }) => {
   });
 });
 
+test('transparent OBS render includes the real Cubism avatar without changing its pose', async ({
+  page,
+}, testInfo) => {
+  await loadControls(page);
+  const result = await page.evaluate(() => {
+    const { stage, settings } = (window as any).rendererControls;
+    stage.draw({ ParamAngleX: 12 }, 16);
+    const before = JSON.stringify(stage.frame);
+    const canvas = stage.transparentCanvas();
+    const bytes = canvas.getContext('2d')!.getImageData(0, 0, 1280, 720).data;
+    let opaque = 0,
+      partial = 0;
+    for (let i = 3; i < bytes.length; i += 4) {
+      if (bytes[i] === 255) opaque++;
+      else if (bytes[i] > 0) partial++;
+    }
+    const unchanged = before === JSON.stringify(stage.frame);
+    // The square stage is letterboxed to x 280..1000. Zoom the avatar past the stage edges:
+    // the preview crops it there, so nothing may leak into the side bars.
+    settings.zoom = 4;
+    stage.display(settings);
+    stage.draw({ ParamAngleX: 12 }, 16);
+    const zoomed = stage.transparentCanvas();
+    const pixels = zoomed.getContext('2d')!.getImageData(0, 0, 1280, 720).data;
+    let bars = 0,
+      edges = 0;
+    for (let y = 0; y < 720; y++)
+      for (let x = 0; x < 1280; x++) {
+        const alpha = pixels[(y * 1280 + x) * 4 + 3];
+        if (x < 280 || x >= 1000) bars += alpha;
+        else if (x === 281 || x === 998) edges += alpha;
+      }
+    return { opaque, partial, border: bytes[3], unchanged, bars, edges, image: zoomed.toDataURL() };
+  });
+  writeFileSync(
+    testInfo.outputPath('letterbox.png'),
+    Buffer.from(result.image.split(',')[1], 'base64'),
+  );
+  expect(result.opaque).toBeGreaterThan(10000);
+  expect(result.partial).toBeGreaterThan(100);
+  expect(result.border).toBe(0);
+  expect(result.unchanged).toBe(true);
+  expect(result.edges).toBeGreaterThan(0);
+  expect(result.bars).toBe(0);
+});
+
 test('depth scales the avatar and attached props and matches passive output', async ({
   page,
 }, testInfo) => {
