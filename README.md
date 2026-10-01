@@ -2,7 +2,7 @@
 
 <img src="public/brand/lockup-light.svg" width="360" alt="VTubeLeaf" />
 
-VTubeLeaf 是一款适用于 **Windows 和 macOS** 的免费虚拟形象软件。用摄像头，让 Live2D 角色跟着你眨眼、说话和转头，用于直播、录屏或视频聊天。
+VTubeLeaf 是一款适用于 **Windows 和 macOS** 的免费虚拟形象软件，提供 **Linux x64 实验支持**。用摄像头，让 Live2D 角色跟着你眨眼、说话和转头，用于直播、录屏或视频聊天。
 
 摄像头画面在你的电脑上处理，不会上传。应用内置三个角色，安装后就可以开始体验。
 
@@ -12,6 +12,7 @@ VTubeLeaf 是一款适用于 **Windows 和 macOS** 的免费虚拟形象软件�
 
 - **Windows**：需要 Windows 10 或更新版本，支持 Intel / AMD 的 64 位电脑。下载安装包后，按提示完成安装。
 - **macOS**：需要 macOS 14 或更新版本，支持 Apple 芯片和 Intel 芯片。打开安装包，把 VTubeLeaf 拖进「应用程序」文件夹。
+- **Linux（实验中）**：以 Ubuntu 22.04 及以上 x64 为构建基线，提供 `.deb` 和 AppImage。仅在对应 Release 已发布时显示下载；也可按 [Linux 构建说明](docs/SETUP.md#linux-开发与打包)从源码运行。摄像头与桌面兼容性仍待实机验证。
 
 首次使用时，请允许应用访问摄像头。如果想让角色根据麦克风声音张嘴，也需要允许使用麦克风。
 
@@ -43,6 +44,8 @@ VTubeLeaf 是一款适用于 **Windows 和 macOS** 的免费虚拟形象软件�
 4. 在直播或视频聊天软件里，重新打开摄像头列表，选择 **VTubeLeaf Camera**。麦克风仍选择你平时使用的设备。
 
 不同软件对虚拟摄像头的支持可能不同。如果找不到角色画面，可以尝试下面的 OBS 方式。
+
+Linux 暂无内置虚拟摄像头，请通过 OBS 输出；会议使用需要安装 `v4l2loopback`，在 OBS 启动虚拟摄像头后选择「OBS Virtual Camera」。
 
 ### 使用 OBS 直播或录屏
 

@@ -42,7 +42,7 @@ npm run build
 
 `npm run dev` 是浏览器开发页面；本地文件、设置、输出窗口和 OpenSeeFace 进程功能需要通过 `npm run tauri dev` 使用。
 
-Windows 的 MSVC、WebView2、PowerShell 命令与 `.exe` 安装包构建见 [Windows 开发与打包](docs/SETUP.md#windows-开发与打包)。`Desktop checks` 检查两端编译与打包，包含固定版本的 Cubism Core。推送版本 tag 后，[Release 工作流](.github/workflows/release.yml) 自动构建 Windows 安装包与 macOS 通用 DMG / ZIP，全部成功后上传到对应 GitHub Release；macOS 包包含内置摄像头、签名和公证，需要先配置 [Apple 发行凭据](docs/RELEASE-MACOS.md)。
+Windows 的 MSVC、WebView2、PowerShell 命令与 `.exe` 安装包构建见 [Windows 开发与打包](docs/SETUP.md#windows-开发与打包)。Linux x64 的依赖、构建命令和验证范围见 [Linux 开发与打包](docs/SETUP.md#linux-开发与打包)。`Desktop checks` 检查 Windows、macOS 和 Linux 编译与打包，包含固定版本的 Cubism Core。推送版本 tag 后，[Release 工作流](.github/workflows/release.yml) 自动构建 Windows 安装包、macOS 通用 DMG / ZIP 与 Linux .deb / AppImage，全部成功后上传到对应 GitHub Release；macOS 包包含内置摄像头、签名和公证，需要先配置 [Apple 发行凭据](docs/RELEASE-MACOS.md)。
 
 使用 `npm run format` 格式化 TypeScript、JavaScript、CSS、HTML、JSON 和 Markdown，`npm run format:check` 检查格式。Prettier 不处理 Rust 和 Python；Rust 使用 `cargo fmt --manifest-path src-tauri/Cargo.toml`。
 
@@ -79,7 +79,7 @@ npm run release -- patch --dry-run  # 仅预览，不改文件、提交或推送
 
 ### 版本提交与打包
 
-检查通过后更新 `package-lock.json`，将 Rust 版本和许可证文件纳入同一次 Git 提交（如 `chore(release): bump version to 0.1.2`），创建对应 tag（如 `v0.1.2`），并推送提交和 tag。命令使用 `--ci` 无交互执行，不发布 npm 包；推送 `v*` tag 后自动触发 [Release 工作流](.github/workflows/release.yml)，校验 tag 与应用版本一致，待两端检查和 macOS 签名、公证全部成功后创建 GitHub Release，上传 Windows `.exe`、macOS `.dmg` / `.zip` 与 `SHA256SUMS.txt`，并自动生成发行说明。预发布版本（如 `v0.2.0-beta.1`）会标记为 prerelease。命令结束表示 tag 已推送，实际打包和发布进度需在 Actions 查看。
+检查通过后更新 `package-lock.json`，将 Rust 版本和许可证文件纳入同一次 Git 提交（如 `chore(release): bump version to 0.1.2`），创建对应 tag（如 `v0.1.2`），并推送提交和 tag。命令使用 `--ci` 无交互执行，不发布 npm 包；推送 `v*` tag 后自动触发 [Release 工作流](.github/workflows/release.yml)，校验 tag 与应用版本一致，待三端检查和 macOS 签名、公证全部成功后创建 GitHub Release，上传 Windows `.exe`、macOS `.dmg` / `.zip`、Linux `.deb` / `.AppImage`、各平台 OpenSeeFace 独立包与 `SHA256SUMS.txt`，并自动生成发行说明。预发布版本（如 `v0.2.0-beta.1`）会标记为 prerelease。命令结束表示 tag 已推送，实际打包和发布进度需在 Actions 查看。
 
 ### 中途失败的处理
 
@@ -87,7 +87,7 @@ npm run release -- patch --dry-run  # 仅预览，不改文件、提交或推送
 
 ### 应用更新签名
 
-发布需配置 GitHub Actions Secrets：`TAURI_SIGNING_PRIVATE_KEY` 填更新私钥文件的完整内容，`TAURI_SIGNING_PRIVATE_KEY_PASSWORD` 填生成时的密码；对应公钥保存在 `src-tauri/tauri.conf.json`。请长期备份这对密钥，后续版本继续使用。更新签名独立于 Apple/Windows 代码签名。CI 会签名 Windows 安装器及最终签名、公证后的 macOS `.app.tar.gz`，用配置公钥验证签名，生成 `.sig` 与 `latest.json` 并在资产全部上传后公开 Release。稳定版更新地址为 GitHub Releases 的 `latest/download/latest.json`，不推送预发布版本；此前未内置更新器的应用需要先手动安装一次新版。
+发布需配置 GitHub Actions Secrets：`TAURI_SIGNING_PRIVATE_KEY` 填更新私钥文件的完整内容，`TAURI_SIGNING_PRIVATE_KEY_PASSWORD` 填生成时的密码；对应公钥保存在 `src-tauri/tauri.conf.json`。请长期备份这对密钥，后续版本继续使用。更新签名独立于 Apple/Windows 代码签名。CI 会签名 Windows 安装器、Linux `.deb` / `.AppImage` 及最终签名、公证后的 macOS `.app.tar.gz`，用配置公钥验证签名，生成 `.sig` 与 `latest.json` 并在资产全部上传后公开 Release。稳定版更新地址为 GitHub Releases 的 `latest/download/latest.json`，不推送预发布版本；此前未内置更新器的应用需要先手动安装一次新版。
 
 ### 应用内更新行为
 

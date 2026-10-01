@@ -39,7 +39,39 @@ cargo test --locked --manifest-path src-tauri/Cargo.toml
 
 Windows 的浏览器测试环境变量使用 PowerShell 语法，例如 `$env:VTUBELEAF_MODEL_FIXTURE = "C:\Models\Haru\Haru.model3.json"`，再运行 `npm run test:browser`。构建时自动编译并携带 64 位、32 位内置摄像头 DLL，供相应位数的桌面会议客户端加载。
 
-[Desktop checks](../.github/workflows/check.yml) 在 Windows 与 macOS runner 上执行 Node 测试、资源脚本自检、固定 Cubism Core 和 MediaPipe 资源校验、Tauri 安装包构建和 Rust 测试；Windows 另运行 x64/x86 摄像头 CTest。CI 从项目依赖取得 Core，不下载整份 Cubism SDK、不发布安装包；构建结果不代表真实摄像头、应用快捷键或会议接入验收通过。新增工作流尚未在远端执行。
+[Desktop checks](../.github/workflows/check.yml) 在 Windows、macOS 与 Ubuntu 22.04 runner 上执行 Node 测试、资源脚本自检、固定 Cubism Core 和 MediaPipe 资源校验、Tauri 安装包构建和 Rust 测试；Windows 另运行 x64/x86 摄像头 CTest。CI 从项目依赖取得 Core，不下载整份 Cubism SDK、不发布安装包；构建结果不代表真实摄像头、应用快捷键或会议接入验收通过。新增工作流尚未在远端执行。
+
+## Linux 开发与打包
+
+Linux x64 处于实验支持阶段，CI 以 Ubuntu 22.04 构建 `.deb` 与 AppImage；尚未记录真实 Linux 摄像头、WebKitGTK 面捕或 X11 / Wayland 输出验收。最低系统版本是构建基线，不代表所有发行版均已验证。
+
+先安装 Node.js、Rust，以及 [Tauri 系统依赖](https://v2.tauri.app/start/prerequisites/#linux)。Ubuntu 22.04 的构建与媒体依赖可安装为：
+
+```sh
+sudo apt-get update
+sudo apt-get install -y libwebkit2gtk-4.1-dev build-essential libssl-dev librsvg2-dev libayatana-appindicator3-dev patchelf libfuse2 gstreamer1.0-plugins-base gstreamer1.0-plugins-good gstreamer1.0-plugins-bad gstreamer1.0-libav
+npm ci
+npm run setup:assets
+npm run tauri dev
+```
+
+打包使用平台配置 `src-tauri/tauri.linux.conf.json`，AppImage 包含媒体框架，`.deb` 声明 GStreamer 运行依赖：
+
+```sh
+npm test
+cargo test --locked --manifest-path src-tauri/Cargo.toml
+npm run tauri -- build --bundles deb,appimage -- --locked
+```
+
+产物分别位于 `src-tauri/target/release/bundle/deb/` 与 `appimage/`。`.deb` 使用 `sudo apt install ./VTubeLeaf_<版本>_amd64.deb` 安装；AppImage 添加执行权限后运行，系统需有 FUSE 2（Ubuntu 24.04 包名为 `libfuse2t64`）。AppImage 更新需要文件可写；`.deb` 更新会请求系统提权。发布流程分别签名两种包，更新器保持原安装包类型。
+
+开始跟踪时，工作台会弹出摄像头许可；麦克风口型同步单独请求麦克风许可。拒绝后可再次启动重试。WebKitGTK 的媒体支持取决于发行版构建及 GStreamer 插件；无法打开摄像头时检查设备占用、系统权限和媒体插件，再尝试 OpenSeeFace。不能用 Chromium 浏览器测试代替 WebKitGTK 的桌面验收。
+
+Linux OpenSeeFace 独立包为 `VTubeLeaf-OpenSeeFace-<版本>-linux-x86_64.tar.gz`，完整解压后在目录内执行 `./facetracker --launcher`，按提示选择摄像头和 UDP 端口，在主应用选 OpenSeeFace 并开始接收。无需安装 Python；按 Ctrl+C 停止。开发者可用 Python 3.10 执行 `npm run bundle:openseeface -- --python python3.10`，产物位于 `.local/openseeface-bundle/x86_64/`。
+
+Linux 首版通过 OBS 捕获直播模式或「独立输出窗口」：X11 使用窗口捕获，Wayland 使用 PipeWire 捕获。会议输出依赖 [OBS 的 v4l2loopback 虚拟摄像头](https://obsproject.com/kb/virtual-camera-troubleshooting)，按发行版说明安装并加载模块。暂未实现 Linux 原生虚拟摄像头或 NVIDIA RTX 面捕。
+
+发行前需在 Linux 桌面验证：两种安装包启动、摄像头和麦克风允许/拒绝/重试、MediaPipe 与 OpenSeeFace、角色导入与保存、OBS 窗口捕获、后台持续跟踪，以及两种包各自的签名更新。
 
 ## 准备本地运行资源
 

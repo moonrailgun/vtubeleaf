@@ -1455,7 +1455,8 @@ export function App() {
                 </ol>
                 <p className="hint">
                   需要边调整边输出时，可使用「独立输出窗口」并在 OBS 捕获 VTubeLeaf
-                  Output。先用另一参会端确认画面，后台与最小化表现需按平台实测。
+                  Output。先用另一参会端确认画面，后台与最小化表现需按平台实测。 Linux Wayland 使用
+                  PipeWire 捕获；会议输出需先安装 v4l2loopback，再在 OBS 启动虚拟摄像头。
                 </p>
               </Tabs.Content>
             </Tabs.Root>

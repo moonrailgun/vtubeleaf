@@ -55,7 +55,7 @@ fn control(operation: i32) -> Result<CameraStatus, String> {
             supported: false,
             installed: false,
             active: false,
-            message: "原生虚拟摄像头支持 Windows 10/11 x64 和 macOS 14 及以上版本".into(),
+            message: "Linux 请通过 OBS 输出画面；会议摄像头需在 OBS 中启动虚拟摄像头，并安装 v4l2loopback".into(),
         })
     }
 }
