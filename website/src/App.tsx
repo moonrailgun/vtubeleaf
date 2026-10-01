@@ -3,15 +3,19 @@ import { loadLatestRelease } from './release';
 
 declare const __RELEASE__: Awaited<ReturnType<typeof loadLatestRelease>>;
 
-type Platform = 'win' | 'mac';
+const platforms = ['win', 'mac', 'linux'] as const;
+type Platform = (typeof platforms)[number];
+const platformNames = { win: 'Windows', mac: 'macOS', linux: 'Linux' };
 function initialPlatform(): Platform {
   try {
     const saved = localStorage.getItem('vtl.tab');
-    if (saved === 'tab-win' || saved === 'tab-mac') return saved === 'tab-mac' ? 'mac' : 'win';
+    const platform = platforms.find((platform) => saved === `tab-${platform}`);
+    if (platform) return platform;
   } catch {
     // Storage can be disabled in private browsing.
   }
-  return /Mac|iPhone|iPad/.test(navigator.platform) ? 'mac' : 'win';
+  if (/Mac|iPhone|iPad/.test(navigator.platform)) return 'mac';
+  return /Linux/.test(navigator.platform) && !/Android/.test(navigator.userAgent) ? 'linux' : 'win';
 }
 
 export default function App() {
@@ -32,6 +36,16 @@ export default function App() {
   const [platform, setPlatform] = useState<Platform>('win');
   useEffect(() => setPlatform(initialPlatform()), []);
   const tabs = useRef<Array<HTMLButtonElement | null>>([]);
+  const downloads = [
+    { platform: 'win', label: 'Windows 版', url: release.windows },
+    { platform: 'mac', label: 'macOS 版', url: release.mac },
+    ...(release.linux
+      ? [
+          { platform: 'linux', label: 'Linux AppImage', url: release.linux.appimage },
+          { platform: 'linux', label: 'Linux .deb', url: release.linux.deb },
+        ]
+      : []),
+  ].sort((a, b) => Number(b.platform === platform) - Number(a.platform === platform));
   function selectPlatform(next: Platform) {
     setPlatform(next);
     try {
@@ -45,13 +59,15 @@ export default function App() {
       event.key === 'Home'
         ? 0
         : event.key === 'End'
-          ? 1
-          : event.key === 'ArrowLeft' || event.key === 'ArrowRight'
-            ? 1 - index
-            : null;
+          ? platforms.length - 1
+          : event.key === 'ArrowLeft'
+            ? (index + platforms.length - 1) % platforms.length
+            : event.key === 'ArrowRight'
+              ? (index + 1) % platforms.length
+              : null;
     if (next === null) return;
     event.preventDefault();
-    selectPlatform(next === 0 ? 'win' : 'mac');
+    selectPlatform(platforms[next]);
     tabs.current[next]?.focus();
   }
 
@@ -69,9 +85,10 @@ export default function App() {
             description: '免费的 Live2D 虚拟形象桌面应用，使用普通摄像头进行本地面部与手势追踪。',
             applicationCategory: 'MultimediaApplication',
             operatingSystem:
-              'Windows 10 or later (x64), macOS 14 or later (Apple Silicon and Intel)',
+              'Windows 10 or later (x64), macOS 14 or later (Apple Silicon and Intel)' +
+              (release.linux ? ', Linux x64 (experimental)' : ''),
             softwareVersion: release.version,
-            downloadUrl: [release.windows, release.mac],
+            downloadUrl: [release.windows, release.mac, ...Object.values(release.linux || {})],
             releaseNotes: release.url,
             offers: { '@type': 'Offer', price: '0', priceCurrency: 'CNY' },
           }).replace(/</g, '\\u003c'),
@@ -163,7 +180,8 @@ export default function App() {
               </a>
             </div>
             <p className="hero-note">
-              支持 Windows 10 及以上、macOS 14 及以上 · 当前版本 {release.version}
+              支持 Windows 10 及以上、macOS 14 及以上{release.linux ? '、Linux x64（实验版）' : ''}{' '}
+              · 当前版本 {release.version}
             </p>
 
             <figure className="app-screenshot" data-od-id="hero-app-screenshot">
@@ -343,7 +361,7 @@ export default function App() {
                 <h3>在其他软件里选它</h3>
                 <p>
                   在「接入」中安装并启动虚拟摄像头，再到直播、会议或录屏软件里选择 VTubeLeaf
-                  Camera。
+                  Camera。 Linux 通过 OBS 输出。
                 </p>
               </article>
             </div>
@@ -356,23 +374,26 @@ export default function App() {
               <p className="eyebrow">安装</p>
               <h2 style={{ fontSize: 'clamp(30px,3.6vw,44px)' }}>选择你的系统</h2>
               <p style={{ marginTop: '14px', color: 'var(--muted)', fontSize: '17px' }}>
-                最新稳定版 v{release.version}，两个系统都免费。
+                最新稳定版 v{release.version}，各平台均免费。Linux 支持处于实验阶段。
               </p>
               <div className="download-actions">
-                {(platform === 'mac' ? ['mac', 'win'] : ['win', 'mac']).map((system) => (
+                {downloads.map((download) => (
                   <a
-                    key={system}
-                    className={`btn ${system === platform ? 'btn-primary' : 'btn-ghost'}`}
-                    href={system === 'mac' ? release.mac : release.windows}
+                    key={download.url}
+                    className={`btn ${download.platform === platform ? 'btn-primary' : 'btn-ghost'}`}
+                    href={download.url}
                     data-tianji-event="download"
-                    data-tianji-event-platform={system}
+                    data-tianji-event-platform={download.platform}
                     data-tianji-event-version={release.version}
                   >
-                    下载 {system === 'mac' ? 'macOS' : 'Windows'} 版
+                    下载 {download.label}
                   </a>
                 ))}
               </div>
-              <p className="download-note">Windows x64 · macOS 通用版（Apple Silicon / Intel）</p>
+              <p className="download-note">
+                Windows x64 · macOS 通用版（Apple Silicon / Intel）
+                {release.linux ? ' · Linux x64' : ''}
+              </p>
               <p className="download-note">
                 <a href={release.url} data-tianji-event="release-notes">
                   更新说明与全部安装包
@@ -384,38 +405,25 @@ export default function App() {
                 aria-label="选择操作系统"
                 data-od-id="install-tabs"
               >
-                <button
-                  className="tab"
-                  role="tab"
-                  id="tab-win"
-                  aria-selected={platform === 'win'}
-                  aria-controls="panel-win"
-                  tabIndex={platform === 'win' ? 0 : -1}
-                  ref={(element) => {
-                    tabs.current[0] = element;
-                  }}
-                  onClick={() => selectPlatform('win')}
-                  onKeyDown={(event) => navigateTabs(event, 0)}
-                  type="button"
-                >
-                  Windows
-                </button>
-                <button
-                  className="tab"
-                  role="tab"
-                  id="tab-mac"
-                  aria-selected={platform === 'mac'}
-                  aria-controls="panel-mac"
-                  tabIndex={platform === 'mac' ? 0 : -1}
-                  ref={(element) => {
-                    tabs.current[1] = element;
-                  }}
-                  onClick={() => selectPlatform('mac')}
-                  onKeyDown={(event) => navigateTabs(event, 1)}
-                  type="button"
-                >
-                  macOS
-                </button>
+                {platforms.map((system, index) => (
+                  <button
+                    key={system}
+                    className="tab"
+                    role="tab"
+                    id={`tab-${system}`}
+                    aria-selected={platform === system}
+                    aria-controls={`panel-${system}`}
+                    tabIndex={platform === system ? 0 : -1}
+                    ref={(element) => {
+                      tabs.current[index] = element;
+                    }}
+                    onClick={() => selectPlatform(system)}
+                    onKeyDown={(event) => navigateTabs(event, index)}
+                    type="button"
+                  >
+                    {platformNames[system]}
+                  </button>
+                ))}
               </div>
               <div
                 className={`panel${platform === 'win' ? ' show' : ''}`}
@@ -459,6 +467,41 @@ export default function App() {
                 <p className="hint">
                   macOS 15 及以上：系统设置 → 通用 → 登录项与扩展 → 摄像头扩展。 macOS 14：系统设置
                   → 隐私与安全性。启用 VTubeLeaf 后按应用提示继续。
+                </p>
+              </div>
+              <div
+                className={`panel${platform === 'linux' ? ' show' : ''}`}
+                id="panel-linux"
+                role="tabpanel"
+                aria-labelledby="tab-linux"
+                hidden={platform !== 'linux'}
+                tabIndex={0}
+              >
+                {!release.linux && (
+                  <p className="hint">
+                    当前版本尚未发布 Linux 安装包，可按{' '}
+                    <a href="https://github.com/moonrailgun/vtubeleaf/blob/main/docs/SETUP.md#linux-开发与打包">
+                      Linux 构建说明
+                    </a>
+                    从源码体验。
+                  </p>
+                )}
+                <ol>
+                  <li>
+                    实验版面向 Ubuntu 22.04 及以上 x64。使用 .deb 安装包，或给 AppImage
+                    添加执行权限后运行。
+                  </li>
+                  <li>开始跟踪时允许使用摄像头；口型同步需要另行允许麦克风。</li>
+                  <li>
+                    进入直播模式或打开独立输出窗口，在 OBS 捕获窗口；Wayland 使用 PipeWire 捕获。
+                  </li>
+                  <li>
+                    会议输出需安装 v4l2loopback，在 OBS 启动虚拟摄像头后选择「OBS Virtual Camera」。
+                  </li>
+                </ol>
+                <p className="hint">
+                  Linux 暂无内置虚拟摄像头。面捕遇到兼容问题时可使用独立 OpenSeeFace
+                  启动包。桌面环境和摄像头兼容性仍在验证中。
                 </p>
               </div>
             </div>
@@ -516,8 +559,8 @@ export default function App() {
                 <p className="k">额外设备，一颗普通摄像头即可</p>
               </div>
               <div className="fact" data-od-id="fact-os">
-                <p className="v">2</p>
-                <p className="k">支持的系统：Windows 与 macOS</p>
+                <p className="v">3</p>
+                <p className="k">桌面平台 · Linux 为实验支持</p>
               </div>
             </div>
           </div>
@@ -630,7 +673,7 @@ export default function App() {
                   </tr>
                   <tr>
                     <th scope="row">支持的系统</th>
-                    <td className="me">Windows、macOS</td>
+                    <td className="me">Windows、macOS、Linux（实验中）</td>
                     <td>Windows、macOS</td>
                     <td>Windows、macOS</td>
                     <td>仅 Windows</td>
@@ -661,6 +704,7 @@ export default function App() {
                     <td className="me">
                       <span className="yes">内置</span>
                       <span className="sub">Windows / macOS，首次使用需安装或激活</span>
+                      <span className="sub">Linux 需配合 OBS</span>
                     </td>
                     <td>需配合 OBS</td>
                     <td>需配合 OBS 插件</td>

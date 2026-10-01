@@ -14,6 +14,49 @@ test.beforeEach(async ({ page }) => {
   await page.route(latestReleaseApi, (route) => route.fulfill({ json: latestRelease }));
 });
 
+test('Linux downloads require published assets and tabs cycle through all platforms', async ({
+  page,
+}) => {
+  await page.addInitScript(() =>
+    Object.defineProperty(navigator, 'platform', { value: 'Linux x86_64' }),
+  );
+  await page.goto('/');
+  const linux = page.getByRole('tab', { name: 'Linux' });
+  await expect(linux).toHaveAttribute('aria-selected', 'true');
+  await expect(page.getByRole('tabpanel')).toContainText('尚未发布 Linux 安装包');
+  await expect(page.getByRole('link', { name: '下载 Linux AppImage' })).toHaveCount(0);
+
+  const downloads = {
+    appimage:
+      'https://github.com/moonrailgun/vtubeleaf/releases/download/v99.98.97/VTubeLeaf_99.98.97_amd64.AppImage',
+    deb: 'https://github.com/moonrailgun/vtubeleaf/releases/download/v99.98.97/VTubeLeaf_99.98.97_amd64.deb',
+  };
+  await page.route(latestReleaseApi, (route) =>
+    route.fulfill({ json: { ...latestRelease, linux: downloads } }),
+  );
+  await page.reload();
+  await expect(page.getByRole('link', { name: '下载 Linux AppImage' })).toHaveAttribute(
+    'href',
+    downloads.appimage,
+  );
+  await expect(page.getByRole('link', { name: '下载 Linux .deb' })).toHaveAttribute(
+    'href',
+    downloads.deb,
+  );
+  await expect(page.locator('.download-actions a').first()).toHaveText('下载 Linux AppImage');
+  await expect(page.getByRole('tabpanel')).toContainText('v4l2loopback');
+  await linux.focus();
+  await page.keyboard.press('ArrowRight');
+  await expect(page.getByRole('tab', { name: 'Windows' })).toBeFocused();
+  await page.keyboard.press('ArrowLeft');
+  await expect(linux).toBeFocused();
+  await page.keyboard.press('Home');
+  await page.keyboard.press('End');
+  await expect(linux).toBeFocused();
+  await page.setViewportSize({ width: 375, height: 812 });
+  expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(375);
+});
+
 test('downloads and version refresh to the latest release without rebuilding', async ({ page }) => {
   const errors: string[] = [];
   page.on('pageerror', (error) => errors.push(error.message));

@@ -17,14 +17,34 @@ export function createReleaseManifest(latest) {
     url: `${base}/tag/v${version}`,
     windows: `${base}/download/v${version}/VTubeLeaf_${version}_x64-setup.exe`,
     mac: `${base}/download/v${version}/VTubeLeaf-${version}-macos-universal.dmg`,
+    linux: {
+      appimage: `${base}/download/v${version}/VTubeLeaf_${version}_amd64.AppImage`,
+      deb: `${base}/download/v${version}/VTubeLeaf_${version}_amd64.deb`,
+    },
     openseeface: {
       'windows-x86_64': `${base}/download/v${version}/VTubeLeaf-OpenSeeFace-${version}-windows-x64.zip`,
       'darwin-aarch64': `${base}/download/v${version}/VTubeLeaf-OpenSeeFace-${version}-macos-aarch64.dmg`,
       'darwin-x86_64': `${base}/download/v${version}/VTubeLeaf-OpenSeeFace-${version}-macos-x86_64.dmg`,
+      'linux-x86_64': `${base}/download/v${version}/VTubeLeaf-OpenSeeFace-${version}-linux-x86_64.tar.gz`,
     },
   };
   assert.ok(Array.isArray(latest.assets), 'Expected uploaded release assets');
-  for (const url of [manifest.windows, manifest.mac, ...Object.values(manifest.openseeface)]) {
+  // Releases published before Linux support must still refresh the website.
+  const linuxDownloads = [...Object.values(manifest.linux), manifest.openseeface['linux-x86_64']];
+  if (
+    !latest.assets.some((asset) =>
+      linuxDownloads.some((url) => asset?.name === url.split('/').at(-1)),
+    )
+  ) {
+    delete manifest.linux;
+    delete manifest.openseeface['linux-x86_64'];
+  }
+  for (const url of [
+    manifest.windows,
+    manifest.mac,
+    ...Object.values(manifest.linux || {}),
+    ...Object.values(manifest.openseeface),
+  ]) {
     assert.ok(
       latest.assets.some(
         (asset) =>

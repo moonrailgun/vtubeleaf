@@ -8,6 +8,7 @@ const platforms = {
   'windows-x86_64': 'Windows x64',
   'darwin-aarch64': 'macOS Apple Silicon',
   'darwin-x86_64': 'macOS Intel',
+  'linux-x86_64': 'Linux x64',
 };
 
 export function OpenSeeFaceDownload() {

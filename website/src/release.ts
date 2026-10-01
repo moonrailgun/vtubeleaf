@@ -19,7 +19,21 @@ export function parseRelease(value: unknown) {
     'darwin-aarch64': `${base}/download/v${version}/VTubeLeaf-OpenSeeFace-${version}-macos-aarch64.dmg`,
     'darwin-x86_64': `${base}/download/v${version}/VTubeLeaf-OpenSeeFace-${version}-macos-x86_64.dmg`,
   };
-  const result: typeof expected & { openseeface?: typeof downloads } = expected;
+  const linux = {
+    appimage: `${base}/download/v${version}/VTubeLeaf_${version}_amd64.AppImage`,
+    deb: `${base}/download/v${version}/VTubeLeaf_${version}_amd64.deb`,
+  };
+  const result: typeof expected & {
+    linux?: typeof linux;
+    openseeface?: typeof downloads & { 'linux-x86_64'?: string };
+  } = expected;
+  if (release.linux !== undefined) {
+    const supplied = release.linux as Record<string, unknown> | null;
+    for (const [format, url] of Object.entries(linux)) {
+      if (supplied?.[format] !== url) throw new Error(`Invalid Linux download: ${format}`);
+    }
+    result.linux = linux;
+  }
   // Older manifests still provide valid application downloads for the website.
   if (release.openseeface !== undefined) {
     const supplied = release.openseeface as Record<string, unknown> | null;
@@ -28,6 +42,11 @@ export function parseRelease(value: unknown) {
         throw new Error(`Invalid OpenSeeFace download: ${platform}`);
     }
     result.openseeface = downloads;
+    if (supplied?.['linux-x86_64'] !== undefined) {
+      const url = `${base}/download/v${version}/VTubeLeaf-OpenSeeFace-${version}-linux-x86_64.tar.gz`;
+      if (supplied['linux-x86_64'] !== url) throw new Error('Invalid Linux OpenSeeFace download');
+      result.openseeface['linux-x86_64'] = url;
+    }
   }
   return result;
 }
