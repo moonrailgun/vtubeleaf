@@ -39,6 +39,7 @@ export function Output() {
     let depthScale = 1;
     let received = 0;
     let tracking = false;
+    let fps = defaults.renderFps;
     let disposed = false;
     let stateOperation = 0;
     let pendingState: OutputState | undefined;
@@ -81,6 +82,7 @@ export function Output() {
         listen<OutputState>('output-state', async ({ payload }) => {
           if (disposed) return;
           const settings = readSettings(payload.settings);
+          fps = settings.renderFps;
           const bindings = settings.useKeyboardHotkeys
             ? { ...settings.globalHotkeys, ...settings.hotkeys }
             : {};
@@ -158,15 +160,17 @@ export function Output() {
       () => {
         const now = performance.now();
         if (now - received > 1000) {
+          // 15% per frame at 30 FPS, held constant in time at other frame rates.
+          const ease = 1 - 0.85 ** ((now - before) / (1000 / 30));
           for (const p of stage?.parameters ?? [])
             values[p.id] =
-              (values[p.id] ?? p.default) + (p.default - (values[p.id] ?? p.default)) * 0.15;
-          depthScale += (1 - depthScale) * 0.15;
+              (values[p.id] ?? p.default) + (p.default - (values[p.id] ?? p.default)) * ease;
+          depthScale += (1 - depthScale) * ease;
         }
         stage?.draw(values, now - before, parts, sceneFrames, depthScale);
         before = now;
       },
-      () => 30,
+      () => fps,
       () => tracking,
     );
     return () => {
