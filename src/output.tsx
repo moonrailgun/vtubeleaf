@@ -172,6 +172,7 @@ export function Output() {
       },
       () => fps,
       () => tracking,
+      true,
     );
     return () => {
       disposed = true;

@@ -25,7 +25,8 @@ export class MotionRecording {
     const time = Math.min(60, Math.max(0, (now - this.started) / 1000));
     if (this.frames.length && time <= this.duration) return;
     // ponytail: cap manual takes at 60 seconds / 30 fps; stream to disk for longer recording.
-    if (time - this.duration < 1 / 30 && this.frames.length && time < 60) return;
+    // The 4 ms slack admits render ticks that land slightly early.
+    if (time - this.duration < 1 / 30 - 0.004 && this.frames.length && time < 60) return;
     const finite = Object.fromEntries(
       Object.entries(values).filter(([, value]) => Number.isFinite(value)),
     );

@@ -1611,6 +1611,7 @@ export function createStudio(
     tick,
     () => settings.renderFps,
     () => tracking === 'running' || tracking === 'paused' || obsOutput.state.active,
+    true,
   );
   return {
     actions,

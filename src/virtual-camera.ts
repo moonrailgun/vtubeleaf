@@ -105,7 +105,8 @@ export class VirtualCamera {
       this.stopping ||
       !this.current.active ||
       this.pending ||
-      now - this.lastFrame < 1000 / 30 ||
+      // Slack for a render loop whose ticks land slightly early.
+      now - this.lastFrame < 1000 / 30 - 4 ||
       canvas.width <= 0 ||
       canvas.height <= 0
     )

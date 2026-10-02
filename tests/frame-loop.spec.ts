@@ -127,3 +127,83 @@ test('a frame can stop its own loop', async ({ page }) => {
   });
   expect(frames).toBe(3);
 });
+
+test('visible frames follow vsync and survive a stalled animation frame', async ({ page }) => {
+  await page.goto('/?output=1');
+  const result = await page.evaluate(async () => {
+    const module = '/src/frame-loop.ts';
+    const { startFrameLoop } = await import(module);
+    const wait = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
+    const animationFrame = window.requestAnimationFrame.bind(window);
+    let painting = false;
+    let stalled = false;
+    window.requestAnimationFrame = (callback) =>
+      stalled
+        ? 0
+        : animationFrame((time) => {
+            painting = true;
+            try {
+              callback(time);
+            } finally {
+              painting = false;
+            }
+          });
+    let frames = 0;
+    let vsynced = 0;
+    const stop = startFrameLoop(
+      () => {
+        frames++;
+        if (painting) vsynced++;
+      },
+      () => 30,
+      () => true,
+      true,
+    );
+    try {
+      await wait(1000);
+      const visible = { frames, vsynced };
+      stalled = true;
+      await wait(200);
+      frames = 0;
+      await wait(1000);
+      return { visible, stalled: frames };
+    } finally {
+      stop();
+      window.requestAnimationFrame = animationFrame;
+    }
+  });
+  expect(result.visible.frames).toBeGreaterThanOrEqual(20);
+  expect(result.visible.frames).toBeLessThanOrEqual(36);
+  expect(result.visible.vsynced).toBeGreaterThanOrEqual(result.visible.frames * 0.8);
+  // An occluded page stops painting; the timer must then hold the full rate.
+  expect(result.stalled).toBeGreaterThanOrEqual(20);
+  expect(result.stalled).toBeLessThanOrEqual(36);
+});
+
+test('a throwing frame keeps its cadence instead of retrying on every refresh', async ({
+  page,
+}) => {
+  await page.goto('/?output=1');
+  const frames = await page.evaluate(async () => {
+    const module = '/src/frame-loop.ts';
+    const { startFrameLoop } = await import(module);
+    let frames = 0;
+    const ignore = (event: ErrorEvent) => event.preventDefault();
+    window.addEventListener('error', ignore);
+    const stop = startFrameLoop(
+      () => {
+        frames++;
+        throw new Error('frame failed');
+      },
+      () => 30,
+      () => true,
+      true,
+    );
+    await new Promise((resolve) => setTimeout(resolve, 1000));
+    stop();
+    window.removeEventListener('error', ignore);
+    return frames;
+  });
+  expect(frames).toBeGreaterThanOrEqual(20);
+  expect(frames).toBeLessThanOrEqual(36);
+});

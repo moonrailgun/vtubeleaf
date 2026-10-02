@@ -352,7 +352,8 @@ export class Tracker {
         const result = this.landmarker.detectForVideo(input.canvas, started);
         const matrix = result.facialTransformationMatrixes[0]?.data;
         const face = matrix && fromMediaPipe(result.faceBlendshapes[0]?.categories ?? [], matrix);
-        if (this.pose && started - this.lastPoseAt >= 1000 / this.bodyFps) {
+        // Slack (here and for hands) for a tracking loop whose ticks land slightly early.
+        if (this.pose && started - this.lastPoseAt >= 1000 / this.bodyFps - 4) {
           this.lastPoseAt = started;
           try {
             const pose = this.pose.detectForVideo(input.canvas, started);
@@ -372,7 +373,7 @@ export class Tracker {
             this.bodyStatus = '上半身识别中断 · 仅面捕，停止后重试';
           }
         }
-        if (this.hand && started - this.lastHandAt >= 1000 / this.handFps) {
+        if (this.hand && started - this.lastHandAt >= 1000 / this.handFps - 4) {
           this.lastHandAt = started;
           try {
             const result = this.hand.detectForVideo(input.canvas, started);
