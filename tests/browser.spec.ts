@@ -2690,8 +2690,10 @@ test('quality settings preserve privacy and calibration samples cancel on stop',
     await route.fulfill({ response, body: bootstrap + (await response.text()) });
   });
   await page.goto('/');
+  await page.getByRole('button', { name: '画面', exact: true }).click();
   await expect(page.locator('#render-fps')).toBeVisible();
   await chooseOption(page, page.locator('#render-fps'), '60 FPS · 流畅');
+  await page.getByRole('button', { name: '面捕', exact: true }).click();
   await page.locator('#start').click();
   await expect(page.locator('#tracking-status')).toHaveText('正在跟踪');
   await page.evaluate(() => {

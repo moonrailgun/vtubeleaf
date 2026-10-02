@@ -897,20 +897,6 @@ export function App() {
                 重置
               </Button>
             </div>
-            <label htmlFor="render-fps">角色渲染帧率</label>
-            <Select
-              value={String(s.renderFps)}
-              onValueChange={(value) => set('renderFps', Number(value) as Settings['renderFps'])}
-            >
-              <SelectTrigger id="render-fps">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="30">30 FPS · 省电</SelectItem>
-                <SelectItem value="60">60 FPS · 流畅</SelectItem>
-              </SelectContent>
-            </Select>
-            {toggle('supersample', '高清渲染（2 倍超采样，显卡吃力时关闭）')}
             {toggle('motionMirror', '镜像角色转头方向')}
             {range('sensitivity', '头部灵敏度', 0.2, 3, 0.1)}
             {range('depthSensitivity', '前后移动幅度', 0, 2, 0.1)}
@@ -1299,6 +1285,24 @@ export function App() {
             <p className="hint">
               直播模式显示角色、道具和背景，按 Esc 恢复界面。色键可在 OBS 中配置。
             </p>
+            <div className="divider" />
+            <div className="section-title">
+              <h2>渲染质量</h2>
+            </div>
+            <label htmlFor="render-fps">角色渲染帧率</label>
+            <Select
+              value={String(s.renderFps)}
+              onValueChange={(value) => set('renderFps', Number(value) as Settings['renderFps'])}
+            >
+              <SelectTrigger id="render-fps">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="30">30 FPS · 省电</SelectItem>
+                <SelectItem value="60">60 FPS · 流畅</SelectItem>
+              </SelectContent>
+            </Select>
+            {toggle('supersample', '高清渲染（2 倍超采样，显卡吃力时关闭）')}
             {a && <SceneControls view={view} actions={a} />}
           </section>
           <section id="model-controls" className="panel" hidden={tab !== 'model-controls'}>

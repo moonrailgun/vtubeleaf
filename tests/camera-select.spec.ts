@@ -141,6 +141,7 @@ test('custom settings menus preserve numeric values and the default microphone',
   page,
 }) => {
   await openCameraSettings(page);
+  await page.getByRole('button', { name: '画面', exact: true }).click();
   const renderFps = page.getByRole('combobox', { name: '角色渲染帧率', exact: true });
   await renderFps.click();
   await page.getByRole('option', { name: '60 FPS · 流畅', exact: true }).click();
@@ -151,6 +152,7 @@ test('custom settings menus preserve numeric values and the default microphone',
     )
     .toBe(60);
 
+  await page.getByRole('button', { name: '面捕', exact: true }).click();
   await page.getByRole('button', { name: '麦克风口型', exact: true }).click();
   const microphone = page.getByRole('combobox', { name: '麦克风', exact: true });
   await expect(microphone).toHaveText('上次选择的麦克风（当前不可用）');
