@@ -910,6 +910,7 @@ export function App() {
                 <SelectItem value="60">60 FPS · 流畅</SelectItem>
               </SelectContent>
             </Select>
+            {toggle('supersample', '高清渲染（2 倍超采样，显卡吃力时关闭）')}
             {toggle('motionMirror', '镜像角色转头方向')}
             {range('sensitivity', '头部灵敏度', 0.2, 3, 0.1)}
             {range('depthSensitivity', '前后移动幅度', 0, 2, 0.1)}

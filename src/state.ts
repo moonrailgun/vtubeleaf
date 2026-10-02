@@ -157,6 +157,7 @@ export type Settings = ModelProfile & {
   bodyFps: 5 | 10 | 15 | 30;
   handFps: 5 | 10 | 15 | 30;
   renderFps: 30 | 60;
+  supersample: boolean;
   micDeviceId: string;
   micGain: number;
   micNoiseGate: number;
@@ -205,6 +206,7 @@ export const defaults: Settings = {
   bodyFps: 10,
   handFps: 10,
   renderFps: 30,
+  supersample: true,
   micDeviceId: '',
   micGain: 4,
   micNoiseGate: 0.02,
@@ -546,6 +548,7 @@ export function readSettings(value: unknown): Settings {
   for (const key of ['bodyFps', 'handFps'] as const)
     if (v[key] === 5 || v[key] === 15 || v[key] === 30) s[key] = v[key];
   if (v.renderFps === 60) s.renderFps = v.renderFps;
+  if (typeof v.supersample === 'boolean') s.supersample = v.supersample;
   if (typeof v.micGain === 'number' && Number.isFinite(v.micGain))
     s.micGain = clamp(v.micGain, 0.1, 20);
   if (typeof v.micNoiseGate === 'number' && Number.isFinite(v.micNoiseGate))

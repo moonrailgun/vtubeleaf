@@ -8,6 +8,8 @@ import { physicsGroupsFromJson, wrapPhysics, type PhysicsGroup } from './physics
 import { layoutMasks, maskBufferSize } from './masks';
 
 install(PIXI);
+// Deformed meshes minify unevenly; without this the mip level follows the blurrier axis.
+PIXI.settings.ANISOTROPIC_LEVEL = 16;
 
 export type ModelInfo = {
   id: string;
@@ -106,6 +108,8 @@ export class AvatarStage {
   private layers?: SceneLayers;
   private transparentTexture?: PIXI.RenderTexture;
   private transparentStage?: PIXI.RenderTexture;
+  private transparentOutput?: PIXI.RenderTexture;
+  private transparentSprite?: PIXI.Sprite;
   private transparentPixelBuffer?: Uint8Array;
   private model?: Live2DModel;
   private urls: string[] = [];
@@ -529,11 +533,20 @@ export class AvatarStage {
     const renderer = this.app.renderer as PIXI.Renderer;
     // A lost context renders and reads nothing, which would republish the previous frame.
     if (renderer.gl.isContextLost()) throw new Error('显卡上下文已丢失');
-    if (this.transparentTexture?.width !== width || this.transparentTexture.height !== height) {
+    const resolution = this.settings?.supersample ? 2 : 1;
+    if (
+      this.transparentTexture?.width !== width ||
+      this.transparentTexture.height !== height ||
+      this.transparentTexture.resolution !== resolution
+    ) {
       this.transparentStage?.destroy();
       this.transparentStage = undefined;
+      this.transparentSprite?.destroy();
+      this.transparentSprite = undefined;
+      this.transparentOutput?.destroy(true);
+      this.transparentOutput = undefined;
       this.transparentTexture?.destroy(true);
-      this.transparentTexture = PIXI.RenderTexture.create({ width, height });
+      this.transparentTexture = PIXI.RenderTexture.create({ width, height, resolution });
     }
     // Render into the letterboxed area only, so its viewport crops overflow like the preview does.
     const screen = this.app.screen;
@@ -577,7 +590,16 @@ export class AvatarStage {
         transform,
         clear: true,
       });
-      return this.transparentTexture;
+      if (resolution === 1) return this.transparentTexture;
+      // ponytail: linear sampling at exactly half size is a 2x2 box filter; use a Lanczos
+      // shader if sharper output is ever needed.
+      this.transparentOutput ??= PIXI.RenderTexture.create({ width, height });
+      this.transparentSprite ??= new PIXI.Sprite(this.transparentTexture);
+      renderer.render(this.transparentSprite, {
+        renderTexture: this.transparentOutput,
+        clear: true,
+      });
+      return this.transparentOutput;
     } finally {
       if (background) background.visible = visible!;
     }
@@ -687,6 +709,12 @@ export class AvatarStage {
     if (this.sharedApp) return;
     const { width, height } = this.container.getBoundingClientRect();
     if (width < 1 || height < 1) return;
+    const native = Math.min(devicePixelRatio, 2);
+    // Extra samples keep line art and edges sharp where trilinear mipmapping alone blurs them.
+    // Cap them at a 4K drawing buffer so a large window cannot exhaust the GPU.
+    this.app.renderer.resolution = this.settings?.supersample
+      ? Math.max(native, Math.min(2, Math.sqrt((3840 * 2160) / (width * height))))
+      : native;
     this.app.renderer.resize(width, height);
     if (!this.model || !this.settings) return;
     const model = this.model,
@@ -912,6 +940,8 @@ export class AvatarStage {
     this.observer?.disconnect();
     this.layers?.destroy();
     this.transparentStage?.destroy();
+    this.transparentSprite?.destroy();
+    this.transparentOutput?.destroy(true);
     this.transparentTexture?.destroy(true);
     if (this.sharedApp) this.content.destroy();
     else this.app.destroy(true);
