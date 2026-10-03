@@ -57,6 +57,9 @@
     "gh-pages": "^6.3.0",
     "get-uri": {
       "basic-ftp": "^6.2.1"
+    },
+    "release-it": {
+      "undici": "7.29.1"
     }
   },
   "devDependencies": {
