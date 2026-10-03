@@ -2,12 +2,12 @@
   "schema": 1,
   "inputs": {
     "LICENSE": "dbf5b94233912b21c2d6c30f6bc621c54feb014eb182e6ad8fe9fc3e55781e3d",
-    "package-lock.json": "a06863fc87a8834dafddc08ef32695f588ecdabac0241e96a2e8b495820c4157",
+    "package-lock.json": "9c1d2846ed2b41a72bf72b2fd451f9b1d73660270a2e2900bd9dbf9517a585ef",
     "scripts/licenses.hbs": "d610eaccb5fa21eda12278ccb82387c024deb4c65ebe64fdfa706c2a06cb620d",
     "scripts/licenses.mjs": "435e51b6bea761c64d7e8cae1e28797db5e12c808595be456f6737bb49e95ee0",
     "scripts/setup-assets.mjs": "266596132d87c5426fb8bb55601155a1c36570a31fdabdde358cb895595c176a",
-    "src-tauri/Cargo.lock": "658fd03f45ef160f247a6aab8049000d54db389f59ddf742bf6f9ed583cdfde3",
-    "src-tauri/Cargo.toml": "6be2950f53be30b8afcbc6d0a8ee91b6ec792a1992c2109110ef07221f482034",
+    "src-tauri/Cargo.lock": "5dbaea0b0556a97af28aef51de85fc240673bee57993ab06c6df8717ffb9b10e",
+    "src-tauri/Cargo.toml": "a95af47901bb791c1a4373d4266fe1cfbdfb526936952740736709cdbae68450",
     "src-tauri/about.toml": "5023e7d6d9b2a82666774bce222a7e0c3296f21a90c4461dd2c46117b8f6afa8"
   },
   "outputs": {
