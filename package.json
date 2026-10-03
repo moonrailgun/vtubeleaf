@@ -4,6 +4,7 @@
   "private": true,
   "license": "MIT",
   "type": "module",
+  "packageManager": "npm@11.19.0",
   "scripts": {
     "dev": "vite --host 127.0.0.1",
     "build": "npm run licenses:check && tsc --noEmit && vite build",
