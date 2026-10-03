@@ -404,15 +404,38 @@ section {
   align-items: start;
 }
 .download-actions {
+  margin-bottom: 32px;
+  font-size: 13px;
+  color: var(--muted);
+}
+.download-main,
+.download-others {
   display: flex;
   flex-wrap: wrap;
-  gap: 12px;
-  margin: 24px 0 12px;
+  align-items: center;
+  gap: 10px 14px;
+}
+.download-others {
+  gap: 8px;
+  margin-top: 14px;
+}
+.download-others .btn {
+  height: 34px;
+  padding: 0 14px;
+  font-size: 13px;
 }
 .download-note {
   font-size: 13px;
   color: var(--muted);
-  margin-top: 6px;
+  margin-top: 18px;
+}
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
 }
 .tabs {
   display: inline-flex;
@@ -420,7 +443,7 @@ section {
   border-radius: 999px;
   padding: 4px;
   background: var(--surface);
-  margin: 28px 0 24px;
+  margin: 24px 0 20px;
 }
 .tab {
   height: 40px;

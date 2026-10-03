@@ -6,6 +6,11 @@ declare const __RELEASE__: Awaited<ReturnType<typeof loadLatestRelease>>;
 const platforms = ['win', 'mac', 'linux'] as const;
 type Platform = (typeof platforms)[number];
 const platformNames = { win: 'Windows', mac: 'macOS', linux: 'Linux' };
+const platformNotes = {
+  win: '适用于 x64 电脑',
+  mac: 'Apple Silicon 与 Intel 通用',
+  linux: '适用于 x64 电脑',
+};
 function initialPlatform(): Platform {
   try {
     const saved = localStorage.getItem('vtl.tab');
@@ -45,7 +50,9 @@ export default function App() {
           { platform: 'linux', label: 'Linux .deb', url: release.linux.deb },
         ]
       : []),
-  ].sort((a, b) => Number(b.platform === platform) - Number(a.platform === platform));
+  ];
+  const selected = downloads.filter((download) => download.platform === platform);
+  const others = downloads.filter((download) => download.platform !== platform);
   function selectPlatform(next: Platform) {
     setPlatform(next);
     try {
@@ -376,29 +383,6 @@ export default function App() {
               <p style={{ marginTop: '14px', color: 'var(--muted)', fontSize: '17px' }}>
                 最新稳定版 v{release.version}，各平台均免费。Linux 支持处于实验阶段。
               </p>
-              <div className="download-actions">
-                {downloads.map((download) => (
-                  <a
-                    key={download.url}
-                    className={`btn ${download.platform === platform ? 'btn-primary' : 'btn-ghost'}`}
-                    href={download.url}
-                    data-tianji-event="download"
-                    data-tianji-event-platform={download.platform}
-                    data-tianji-event-version={release.version}
-                  >
-                    下载 {download.label}
-                  </a>
-                ))}
-              </div>
-              <p className="download-note">
-                Windows x64 · macOS 通用版（Apple Silicon / Intel）
-                {release.linux ? ' · Linux x64' : ''}
-              </p>
-              <p className="download-note">
-                <a href={release.url} data-tianji-event="release-notes">
-                  更新说明与全部安装包
-                </a>
-              </p>
               <div
                 className="tabs"
                 role="tablist"
@@ -424,6 +408,41 @@ export default function App() {
                     {platformNames[system]}
                   </button>
                 ))}
+              </div>
+              <div className="download-actions">
+                {selected.length > 0 && (
+                  <div className="download-main">
+                    {selected.map((download) => (
+                      <a
+                        key={download.url}
+                        className="btn btn-primary"
+                        href={download.url}
+                        data-tianji-event="download"
+                        data-tianji-event-platform={download.platform}
+                        data-tianji-event-version={release.version}
+                      >
+                        下载 {download.label}
+                      </a>
+                    ))}
+                    <span>{platformNotes[platform]}</span>
+                  </div>
+                )}
+                <div className="download-others">
+                  <span>其他系统</span>
+                  {others.map((download) => (
+                    <a
+                      key={download.url}
+                      className="btn btn-ghost"
+                      href={download.url}
+                      data-tianji-event="download"
+                      data-tianji-event-platform={download.platform}
+                      data-tianji-event-version={release.version}
+                    >
+                      <span className="sr-only">下载 </span>
+                      {download.label}
+                    </a>
+                  ))}
+                </div>
               </div>
               <div
                 className={`panel${platform === 'win' ? ' show' : ''}`}
@@ -504,6 +523,11 @@ export default function App() {
                   启动包。桌面环境和摄像头兼容性仍在验证中。
                 </p>
               </div>
+              <p className="download-note">
+                <a href={release.url} data-tianji-event="release-notes">
+                  更新说明与全部安装包
+                </a>
+              </p>
             </div>
             <aside className="req" data-od-id="install-requirements">
               <h3 style={{ fontSize: '22px', marginBottom: '8px' }}>你需要准备</h3>
