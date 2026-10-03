@@ -2,7 +2,7 @@
   "schema": 1,
   "inputs": {
     "LICENSE": "dbf5b94233912b21c2d6c30f6bc621c54feb014eb182e6ad8fe9fc3e55781e3d",
-    "package-lock.json": "db7c559f25cbcbadba755037d75cae16094468af22e36b696629c0c7c50ae986",
+    "package-lock.json": "5a21fb614cbb9f908ce3637ab3c831da8e63062b50286b2b07877ad5a921fc4b",
     "scripts/licenses.hbs": "d610eaccb5fa21eda12278ccb82387c024deb4c65ebe64fdfa706c2a06cb620d",
     "scripts/licenses.mjs": "435e51b6bea761c64d7e8cae1e28797db5e12c808595be456f6737bb49e95ee0",
     "scripts/setup-assets.mjs": "266596132d87c5426fb8bb55601155a1c36570a31fdabdde358cb895595c176a",

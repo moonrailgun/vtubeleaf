@@ -54,7 +54,10 @@
     "tailwind-merge": "^3.6.0"
   },
   "overrides": {
-    "gh-pages": "^6.3.0"
+    "gh-pages": "^6.3.0",
+    "get-uri": {
+      "basic-ftp": "^6.2.1"
+    }
   },
   "devDependencies": {
     "@playwright/test": "^1.58.2",
