@@ -475,12 +475,18 @@ section {
 }
 .panel ol {
   margin: 0;
-  padding-left: 22px;
+  padding-left: 26px;
   color: var(--fg);
   font-size: 15px;
 }
 .panel li {
   margin-bottom: 12px;
+  padding-left: 6px;
+}
+.panel li::marker {
+  font-family: var(--display);
+  font-size: 19px;
+  color: var(--accent-hover);
 }
 .panel li b {
   font-weight: 600;
@@ -490,7 +496,7 @@ section {
   font-size: 13px;
   color: var(--muted);
   padding: 12px 14px;
-  border: 1px dashed var(--border);
+  background: var(--accent-soft);
   border-radius: 10px;
 }
 .req {

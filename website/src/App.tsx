@@ -484,8 +484,11 @@ export default function App() {
                   <li>回到应用启动虚拟摄像头，再到会议或直播软件中选择「VTubeLeaf Camera」。</li>
                 </ol>
                 <p className="hint">
-                  macOS 15 及以上：系统设置 → 通用 → 登录项与扩展 → 摄像头扩展。 macOS 14：系统设置
-                  → 隐私与安全性。启用 VTubeLeaf 后按应用提示继续。
+                  macOS 15 及以上：系统设置 → 通用 → 登录项与扩展 → 摄像头扩展。
+                  <br />
+                  macOS 14：系统设置 → 隐私与安全性。
+                  <br />
+                  启用 VTubeLeaf 后按应用提示继续。
                 </p>
               </div>
               <div
