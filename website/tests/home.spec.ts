@@ -217,7 +217,11 @@ test('the built response contains indexable content and crawl metadata', async (
   expect(schema.name).toBe('VTubeLeaf');
   expect(schema.softwareVersion).toMatch(/^\d+\.\d+\.\d+$/);
   expect(schema.softwareVersion).toBe(release.version);
-  expect(schema.downloadUrl).toEqual([release.windows, release.mac]);
+  expect(schema.downloadUrl).toEqual([
+    release.windows,
+    release.mac,
+    ...(release.linux ? [release.linux.appimage, release.linux.deb] : []),
+  ]);
   expect(html).toContain(
     `v${schema.softwareVersion}/VTubeLeaf_${schema.softwareVersion}_x64-setup.exe`,
   );
