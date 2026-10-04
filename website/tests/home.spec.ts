@@ -65,10 +65,11 @@ test('downloads and version refresh to the latest release without rebuilding', a
   await expect(page.locator('.hero-note')).toContainText('99.98.97');
   await expect(page.locator('#install')).toContainText('最新稳定版 v99.98.97');
   await expect(page.locator('footer')).toContainText('版本 99.98.97');
-  for (const [name, asset] of [
-    ['下载 Windows 版', latestRelease.windows],
-    ['下载 macOS 版', latestRelease.mac],
+  for (const [platform, name, asset] of [
+    ['Windows', '下载 Windows 版', latestRelease.windows],
+    ['macOS', '下载 macOS 版', latestRelease.mac],
   ] as const) {
+    await page.getByRole('tab', { name: platform }).click();
     await expect(page.getByRole('link', { name })).toHaveAttribute('href', asset);
   }
   await expect(page.getByRole('link', { name: 'macOS ZIP 下载' })).toHaveCount(0);
@@ -109,6 +110,7 @@ test('unavailable or incomplete releases retain the build-time downloads', async
       'href',
       schema.downloadUrl[0],
     );
+    await page.getByRole('tab', { name: 'macOS' }).click();
     await expect(page.getByRole('link', { name: '下载 macOS 版' })).toHaveAttribute(
       'href',
       schema.downloadUrl[1],
@@ -129,21 +131,20 @@ test('homepage keeps the design and its keyboard-accessible interactions', async
   for (const link of await downloads.all()) await expect(link).toHaveAttribute('href', '#install');
   await downloads.first().click();
   await expect(page).toHaveURL(/#install$/);
+  const windows = page.getByRole('tab', { name: 'Windows' });
+  const mac = page.getByRole('tab', { name: 'macOS' });
+  await windows.click();
   await expect(page.getByRole('link', { name: '下载 Windows 版' })).toHaveAttribute(
     'href',
     /^https:\/\/github\.com\/moonrailgun\/vtubeleaf\/releases\/download\/v[\d.]+\/VTubeLeaf_[\d.]+_x64-setup\.exe$/,
   );
+  await page.keyboard.press('ArrowRight');
+  await expect(mac).toBeFocused();
+  await expect(mac).toHaveAttribute('aria-selected', 'true');
   await expect(page.getByRole('link', { name: '下载 macOS 版' })).toHaveAttribute(
     'href',
     /^https:\/\/github\.com\/moonrailgun\/vtubeleaf\/releases\/download\/v[\d.]+\/VTubeLeaf-[\d.]+-macos-universal\.dmg$/,
   );
-
-  const windows = page.getByRole('tab', { name: 'Windows' });
-  const mac = page.getByRole('tab', { name: 'macOS' });
-  await windows.click();
-  await page.keyboard.press('ArrowRight');
-  await expect(mac).toBeFocused();
-  await expect(mac).toHaveAttribute('aria-selected', 'true');
   await expect(page.getByRole('tabpanel')).toContainText('macOS 14');
   await page.reload();
   await expect(mac).toHaveAttribute('aria-selected', 'true');
@@ -233,7 +234,9 @@ test('the built response contains indexable content and crawl metadata', async (
   expect(await sitemap.text()).toContain('<loc>https://vtubeleaf.vercel.app/</loc>');
 });
 
-test('content and both platform downloads work without JavaScript', async ({ browser }) => {
+test('content, default download and all-packages link work without JavaScript', async ({
+  browser,
+}) => {
   const context = await browser.newContext({ javaScriptEnabled: false, reducedMotion: 'reduce' });
   try {
     const page = await context.newPage();
@@ -241,7 +244,10 @@ test('content and both platform downloads work without JavaScript', async ({ bro
     await expect(page.getByRole('heading', { level: 1 })).toContainText('替你出镜');
     await page.getByRole('link', { name: '免费下载', exact: true }).first().click();
     await expect(page.getByRole('link', { name: '下载 Windows 版' })).toBeVisible();
-    await expect(page.getByRole('link', { name: '下载 macOS 版' })).toBeVisible();
+    await expect(page.getByRole('link', { name: '更新说明与全部安装包' })).toHaveAttribute(
+      'href',
+      /^https:\/\/github\.com\/moonrailgun\/vtubeleaf\/releases\/tag\/v[\d.]+$/,
+    );
     await page.locator('.faq summary').nth(1).click();
     await expect(page.locator('.faq details').nth(1)).toHaveAttribute('open', '');
   } finally {
@@ -253,7 +259,7 @@ for (const [system, preferred, other] of [
   ['MacIntel', 'macOS', 'Windows'],
   ['Win32', 'Windows', 'macOS'],
 ] as const)
-  test(`${preferred} downloads are first and highlighted, following the selected platform`, async ({
+  test(`${preferred} downloads follow the selected platform without other-system links`, async ({
     page,
   }) => {
     const errors: string[] = [];
@@ -271,14 +277,13 @@ for (const [system, preferred, other] of [
       'true',
     );
     const buttons = page.locator('.download-actions a');
-    await expect(buttons).toHaveText([`下载 ${preferred} 版`, `下载 ${other} 版`]);
+    await expect(buttons).toHaveText([`下载 ${preferred} 版`]);
     await expect(buttons.first()).toHaveClass('btn btn-primary');
-    await expect(buttons.last()).toHaveClass('btn btn-ghost');
     await page.getByRole('tab', { name: other }).click();
-    await expect(buttons).toHaveText([`下载 ${other} 版`, `下载 ${preferred} 版`]);
+    await expect(buttons).toHaveText([`下载 ${other} 版`]);
     await expect(buttons.first()).toHaveClass('btn btn-primary');
     await page.reload();
     await expect(page.getByRole('tab', { name: other })).toHaveAttribute('aria-selected', 'true');
-    await expect(buttons).toHaveText([`下载 ${other} 版`, `下载 ${preferred} 版`]);
+    await expect(buttons).toHaveText([`下载 ${other} 版`]);
     expect(errors).toEqual([]);
   });

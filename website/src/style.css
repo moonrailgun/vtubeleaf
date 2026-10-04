@@ -408,34 +408,16 @@ section {
   font-size: 13px;
   color: var(--muted);
 }
-.download-main,
-.download-others {
+.download-main {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
   gap: 10px 14px;
 }
-.download-others {
-  gap: 8px;
-  margin-top: 14px;
-}
-.download-others .btn {
-  height: 34px;
-  padding: 0 14px;
-  font-size: 13px;
-}
 .download-note {
   font-size: 13px;
   color: var(--muted);
   margin-top: 18px;
-}
-.sr-only {
-  position: absolute;
-  width: 1px;
-  height: 1px;
-  overflow: hidden;
-  clip-path: inset(50%);
-  white-space: nowrap;
 }
 .tabs {
   display: inline-flex;

@@ -52,7 +52,6 @@ export default function App() {
       : []),
   ];
   const selected = downloads.filter((download) => download.platform === platform);
-  const others = downloads.filter((download) => download.platform !== platform);
   function selectPlatform(next: Platform) {
     setPlatform(next);
     try {
@@ -427,22 +426,6 @@ export default function App() {
                     <span>{platformNotes[platform]}</span>
                   </div>
                 )}
-                <div className="download-others">
-                  <span>其他系统</span>
-                  {others.map((download) => (
-                    <a
-                      key={download.url}
-                      className="btn btn-ghost"
-                      href={download.url}
-                      data-tianji-event="download"
-                      data-tianji-event-platform={download.platform}
-                      data-tianji-event-version={release.version}
-                    >
-                      <span className="sr-only">下载 </span>
-                      {download.label}
-                    </a>
-                  ))}
-                </div>
               </div>
               <div
                 className={`panel${platform === 'win' ? ' show' : ''}`}
