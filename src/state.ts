@@ -886,19 +886,23 @@ export class FaceMapper {
     this.elapsed += clamp(Number.isFinite(dt) ? dt : 0, 0, 0.1);
     const depth = trackingFace?.positionZ;
     const validDepth = depth !== undefined && Number.isFinite(depth) && Math.abs(depth) > 0.0001;
+    // Opening the jaw enlarges the face every tracker fits, which reads as moving closer.
+    // ponytail: hold depth while the mouth is open; derive it from rigid landmarks if needed.
+    const opened = (trackingFace?.mouthOpen ?? 0) - (s.neutral?.mouthOpen ?? 0);
+    const rest = clamp(1 - (Number.isFinite(opened) ? opened : 0) / 0.2, 0, 1);
     const calibrated = s.neutral?.positionZ;
     // Relative distance keeps MediaPipe and OpenSeeFace's different units equivalent.
     const reference =
       calibrated !== undefined && Number.isFinite(calibrated) && Math.abs(calibrated) > 0.0001
         ? calibrated
-        : (this.depthNeutral ??= validDepth ? depth : undefined);
+        : (this.depthNeutral ??= validDepth && rest === 1 ? depth : undefined);
     const ratio = validDepth && reference !== undefined ? reference / depth : 0;
     const hasDepth = ratio > 0 && Number.isFinite(ratio);
     if (hasDepth || !trackingFace || s.lostMode !== 'hold' || s.depthSensitivity === 0) {
       const target = hasDepth ? clamp(1 + (ratio - 1) * s.depthSensitivity, 0.5, 1.5) : 1;
       const tau = hasDepth ? s.headSmooth : Math.max(s.headSmooth, 0.12);
       const alpha = tau <= 0 ? 1 : 1 - Math.exp(-clamp(Number.isFinite(dt) ? dt : 0, 0, 0.1) / tau);
-      this.depthScale += (target - this.depthScale) * alpha;
+      this.depthScale += (target - this.depthScale) * alpha * (hasDepth ? rest : 1);
     }
     const values = face ? normalizedFace(face, s) : null;
     const breath = (1 - Math.cos((this.elapsed * Math.PI * 2) / 3.2345)) / 2;

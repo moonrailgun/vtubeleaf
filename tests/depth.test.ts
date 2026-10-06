@@ -106,3 +106,21 @@ test('old depth defaults migrate once across profiles while custom strengths sur
   assert.equal(saved.depthSensitivity, 1);
   assert.equal(switchProfile(switchProfile(saved, '/b'), '/a').depthSensitivity, 1);
 });
+
+test('an open mouth holds depth instead of reading as moving closer', () => {
+  const s = readSettings({ neutral: { ...NEUTRAL, positionZ: -4 }, headSmooth: 0 });
+  const mapper = new FaceMapper();
+  mapper.map({ positionZ: -4, mouthOpen: 0 }, [], s, 0.1);
+  assert.equal(mapper.depthScale, 1);
+  mapper.map({ positionZ: -3.2, mouthOpen: 0.6 }, [], s, 0.1);
+  assert.equal(mapper.depthScale, 1);
+  mapper.map({ positionZ: -3.2, mouthOpen: 0 }, [], s, 0.1);
+  assert.equal(mapper.depthScale, 1.075);
+  // Without calibration, an open mouth must not become the depth reference.
+  const uncalibrated = new FaceMapper();
+  const plain = readSettings({ headSmooth: 0 });
+  uncalibrated.map({ positionZ: -3.2, mouthOpen: 0.6 }, [], plain, 0.1);
+  uncalibrated.map({ positionZ: -4, mouthOpen: 0 }, [], plain, 0.1);
+  uncalibrated.map({ positionZ: -3.2, mouthOpen: 0 }, [], plain, 0.1);
+  assert.equal(uncalibrated.depthScale, 1.075);
+});
