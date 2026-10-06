@@ -1778,15 +1778,34 @@ function ModelControls({ view, actions: a }: { view: StudioView; actions: Studio
         <div className="fold-content">
           <div className="section-title">
             <h2>角色参数</h2>
-            <Button
-              id="reset-profile"
-              variant="ghost"
-              size="sm"
-              disabled={!view.model}
-              onClick={() => run(a.resetProfile)}
-            >
-              重置本模型
-            </Button>
+            <AlertDialog.Root>
+              <AlertDialog.Trigger asChild>
+                <Button id="reset-profile" variant="ghost" size="sm" disabled={!view.model}>
+                  重置本模型
+                </Button>
+              </AlertDialog.Trigger>
+              <AlertDialog.Portal>
+                <AlertDialog.Overlay className="fixed inset-0 z-40 bg-black/30" />
+                <AlertDialog.Content className="fixed top-1/2 left-1/2 z-50 w-[calc(100%_-_2rem)] max-w-sm -translate-x-1/2 -translate-y-1/2 rounded-2xl border bg-background p-6 shadow-lg">
+                  <AlertDialog.Title className="text-lg font-medium">
+                    重置「{view.model?.name}」？
+                  </AlertDialog.Title>
+                  <AlertDialog.Description className="mt-2 text-sm text-muted-foreground">
+                    将清除该模型的手动参数、映射、校准、构图、快捷键和待机设置。此操作无法撤销。
+                  </AlertDialog.Description>
+                  <div className="mt-5 flex justify-end gap-2">
+                    <AlertDialog.Cancel asChild>
+                      <Button variant="outline">取消</Button>
+                    </AlertDialog.Cancel>
+                    <AlertDialog.Action asChild>
+                      <Button variant="destructive" onClick={() => run(a.resetProfile)}>
+                        确认重置
+                      </Button>
+                    </AlertDialog.Action>
+                  </div>
+                </AlertDialog.Content>
+              </AlertDialog.Portal>
+            </AlertDialog.Root>
           </div>
           <p className="hint">手动参数、映射、校准、构图、快捷键和待机设置按模型自动保存。</p>
           <div className="button-list">

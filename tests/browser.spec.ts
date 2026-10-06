@@ -2143,6 +2143,11 @@ test('model controls save profiles, expressions, shortcuts and a manual motion r
   await expect(page.locator('#hotkey-binding')).toBeHidden();
   await page.screenshot({ path: testInfo.outputPath('studio-model-simple.png') });
   await page.locator('#model-advanced > summary').click();
+  await page.locator('#reset-profile').click();
+  const resetDialog = page.getByRole('alertdialog');
+  await expect(resetDialog).toContainText('此操作无法撤销');
+  await resetDialog.getByRole('button', { name: '取消' }).click();
+  await expect(resetDialog).toBeHidden();
   await page.locator('#parameter-search').fill('角度 X');
   await page.locator('#mapping-parameter').click();
   await expect(page.getByRole('option')).toHaveCount(1);
