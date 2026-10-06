@@ -238,6 +238,22 @@ export function createStudio(
         revision: modelRevision,
       } satisfies OutputState);
   }
+  // Window transparency is fixed at creation, so an open output window is recreated.
+  // Serialized so fast toggles never create two windows under one label.
+  let outputReopen = Promise.resolve();
+  function reopenOutput() {
+    outputReopen = outputReopen.then(() =>
+      run(async () => {
+        const existing = await WebviewWindow.getByLabel('output');
+        if (!existing) return;
+        await existing.close();
+        // The label stays taken until the old window is destroyed.
+        for (let i = 0; i < 40 && (await WebviewWindow.getByLabel('output')); i++)
+          await new Promise((resolve) => setTimeout(resolve, 50));
+        await actions.openOutput();
+      }),
+    );
+  }
   function changed() {
     stage?.display(settings);
     window.clearTimeout(saveTimer);
@@ -855,6 +871,7 @@ export function createStudio(
         profileRevision++;
       }
       if (key === 'useKeyboardHotkeys') void run(bindHotkeys);
+      if (key === 'outputTransparent' && native) reopenOutput();
       if (key === 'engine' || key === 'deviceId') {
         cancelCalibration();
         settings.neutral = null;
@@ -1357,7 +1374,8 @@ export function createStudio(
         height: 720,
         minWidth: 320,
         minHeight: 180,
-        backgroundColor: settings.background,
+        transparent: settings.outputTransparent,
+        backgroundColor: settings.outputTransparent ? undefined : settings.background,
         backgroundThrottling: 'disabled' as BackgroundThrottlingPolicy,
       });
       await own(

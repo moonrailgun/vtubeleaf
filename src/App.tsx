@@ -1282,6 +1282,13 @@ export function App() {
                 />
               ))}
             </div>
+            <Toggle
+              id="outputTransparent"
+              label="独立窗口透明背景"
+              note="不显示背景色和背景图，切换时会重开窗口"
+              checked={s.outputTransparent}
+              onChange={(value) => set('outputTransparent', value)}
+            />
             <p className="hint">
               直播模式显示角色、道具和背景，按 Esc 恢复界面。色键可在 OBS 中配置。
             </p>

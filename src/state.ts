@@ -165,6 +165,7 @@ export type Settings = ModelProfile & {
   scenes: Scene[];
   globalHotkeys: Record<string, string>;
   background: string;
+  outputTransparent: boolean;
   modelPath: string;
   recentModels: { name: string; path: string }[];
   port: number;
@@ -242,6 +243,7 @@ export const defaults: Settings = {
   scenes: [],
   globalHotkeys: {},
   background: '#e5ebdd',
+  outputTransparent: false,
   modelPath: '',
   recentModels: [],
   port: 11573,
@@ -564,6 +566,7 @@ export function readSettings(value: unknown): Settings {
     s.camera = Math.round(clamp(v.camera, 0, 32));
   if (typeof v.background === 'string' && /^#[0-9a-f]{6}$/i.test(v.background))
     s.background = v.background;
+  if (typeof v.outputTransparent === 'boolean') s.outputTransparent = v.outputTransparent;
 
   if (Array.isArray(v.recentModels))
     s.recentModels = v.recentModels

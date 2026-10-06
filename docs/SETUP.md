@@ -302,7 +302,7 @@ Windows 将命令中的 Python 路径替换为 `.local/openseeface-venv/Scripts/
 6. 用第二个会议端确认最终画面和延迟。将飞书置前、遮挡或最小化 VTubeLeaf，分别记录表现，不仅查看自己的会议预览。
 7. 会议结束后停止 OBS 虚拟摄像头与 VTubeLeaf 跟踪；若 OpenSeeFace 是手动启动的，也结束该进程。
 
-若需要边调整边直播，可改用顶部「独立输出窗口」，在 OBS 中选择 **VTubeLeaf Output**；这个窗口只包含角色与背景。主窗口直播模式中按 `Esc` 会让面板重新进入主窗口捕获画面，调整前可先在 OBS 切换场景。
+若需要边调整边直播，可改用顶部「独立输出窗口」，在 OBS 中选择 **VTubeLeaf Output**；这个窗口只包含角色与背景；在「画面 → 角色构图」中开启「独立窗口透明背景」后，窗口不再绘制背景色和背景图。主窗口直播模式中按 `Esc` 会让面板重新进入主窗口捕获画面，调整前可先在 OBS 切换场景。
 
 macOS 捕获权限、OBS 虚拟摄像头安装或会议端无法识别时，按 [OBS 官方故障说明](https://obsproject.com/kb/virtual-camera-troubleshooting)逐项排查。本仓库没有记录这条真实会议链路的通过证据。
 

@@ -72,7 +72,8 @@ export function Output() {
     );
     try {
       stage = new AvatarStage(container.current!, report, true);
-      stage.display(defaults);
+      // Until the studio state arrives, show the window's own background instead of the default.
+      stage.display(native ? { ...defaults, background: 'transparent' } : defaults);
     } catch {
       report();
     }
@@ -82,6 +83,10 @@ export function Output() {
         listen<OutputState>('output-state', async ({ payload }) => {
           if (disposed) return;
           const settings = readSettings(payload.settings);
+          if (settings.outputTransparent) {
+            settings.background = 'transparent';
+            settings.composition = { ...settings.composition, backgroundImage: '' };
+          }
           fps = settings.renderFps;
           const bindings = settings.useKeyboardHotkeys
             ? { ...settings.globalHotkeys, ...settings.hotkeys }
