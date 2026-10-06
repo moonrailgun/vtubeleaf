@@ -125,7 +125,7 @@ export function readScenes(v: unknown): Scene[] {
         {
           x: number(p.x, 0, -0.8, 0.8),
           y: number(p.y, 0, -3, 3),
-          zoom: number(p.zoom, 1, 0.25, 10),
+          zoom: number(p.zoom, 1, 0.05, 10),
           rotation: number(p.rotation, 0, -180, 180),
           modelVisible: p.modelVisible !== false,
         },
