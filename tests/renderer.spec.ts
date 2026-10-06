@@ -295,6 +295,41 @@ test('depth scales the avatar and attached props and matches passive output', as
   expect(result.parity.different, JSON.stringify(result.parity)).toBe(0);
 });
 
+test('Live2D prop opacity fades the prop', async ({ page }) => {
+  await loadControls(page);
+  const [opaque, half, hidden] = await page.evaluate(async () => {
+    const { stage, settings, info } = (window as any).rendererControls;
+    const state = '/src/state.ts';
+    const { readSettings } = await import(state);
+    const alpha = async (opacity: number) => {
+      const s = readSettings({
+        ...settings,
+        modelVisible: false,
+        composition: {
+          items: [{ id: 'prop', kind: 'live2d', source: info.path, scale: 0.5, opacity }],
+        },
+      });
+      await stage.compose(s, [info]);
+      stage.draw({}, 16, {});
+      const pixels = stage.app.renderer.extract.pixels(stage.app.stage);
+      let sum = 0,
+        max = 0;
+      for (let i = 3; i < pixels.length; i += 4) {
+        sum += pixels[i];
+        max = Math.max(max, pixels[i]);
+      }
+      return { sum, max };
+    };
+    return [await alpha(1), await alpha(0.5), await alpha(0)];
+  });
+  expect(opaque.max).toBe(255);
+  expect(half.sum / opaque.sum).toBeGreaterThan(0.4);
+  expect(half.sum / opaque.sum).toBeLessThan(0.6);
+  // The prop fades as one image: overlapping meshes must not show through each other.
+  expect(half.max).toBeLessThanOrEqual(130);
+  expect(hidden.sum).toBe(0);
+});
+
 test('CDI names and groups load while manual overrides take final priority and can be released', async ({
   page,
 }) => {

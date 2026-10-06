@@ -19,6 +19,7 @@ type Visual = {
   update: (dt: number, frame?: SceneFrame) => void;
   capture: () => SceneFrame;
   destroy: () => void;
+  fade?: [InstanceType<typeof PIXI.filters.AlphaFilter>];
 };
 
 async function imageAsset(id: string): Promise<Visual> {
@@ -184,6 +185,9 @@ export class SceneLayers {
               update: (dt, frame) => stage.draw(frame?.parameters ?? {}, dt, frame?.parts),
               capture: () => ({ parameters: stage.frame, parts: stage.parts }),
               destroy: () => stage.destroy(),
+              // Cubism ignores PIXI alpha and draws mesh by mesh, so fade the prop as one image.
+              // Resolution 2 matches the sharpest stage (supersampling); lower targets downsample it.
+              fade: [Object.assign(new PIXI.filters.AlphaFilter(), { resolution: 2 })],
             });
           } catch (error) {
             stage.destroy();
@@ -236,7 +240,10 @@ export class SceneLayers {
         node.position.set(width / 2, height / 2);
       } else {
         node.visible = item.visible;
-        node.alpha = item.opacity;
+        if (visual.fade) {
+          visual.fade[0].alpha = item.opacity;
+          node.filters = item.opacity < 1 ? visual.fade : null;
+        } else node.alpha = item.opacity;
         node.zIndex = (item.behind ? -500 : 1) + s.composition.items.indexOf(item);
         const attached = item.attach === 'model';
         const angle = attached ? (s.rotation * Math.PI) / 180 : 0;
