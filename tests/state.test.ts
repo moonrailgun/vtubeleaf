@@ -928,3 +928,20 @@ test('unclamped mappings extrapolate but remain within model limits; automatic b
   assert.equal(state.normalizedFace({ browLeft: 0.6, browRight: 0.2 }, settings).brows, 0.7);
   assert.equal(state.normalizedFace(NEUTRAL, settings).tongueOut, undefined);
 });
+
+test('eye smile follows the smile input by default and ignores frowns', () => {
+  const s = readSettings({ mouthSmooth: 0 });
+  const p = [
+    { id: 'ParamEyeLSmile', min: 0, max: 1, default: 0 },
+    { id: 'ParamEyeRSmile', min: 0, max: 1, default: 0 },
+  ];
+  const mapper = new FaceMapper();
+  const smile = mapper.map({ ...NEUTRAL, mouthSmile: NEUTRAL.mouthSmile + 0.6 }, p, s, 1 / 30);
+  assert.ok(Math.abs(smile.ParamEyeLSmile - 0.6) < 1e-6);
+  assert.ok(Math.abs(smile.ParamEyeRSmile - 0.6) < 1e-6);
+  assert.equal(mapper.map({ ...NEUTRAL, mouthSmile: 0 }, p, s, 1 / 30).ParamEyeLSmile, 0);
+  // Saving the editor's prefilled mapping keeps rest at the parameter minimum.
+  s.mappings.ParamEyeLSmile = state.defaultMapping(p[0], s);
+  assert.equal(mapper.map({ ...NEUTRAL }, p, s, 1 / 30).ParamEyeLSmile, 0);
+  assert.equal(state.parameterNames.ParamEyeLSmile, '左眼微笑');
+});

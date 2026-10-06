@@ -661,6 +661,8 @@ const parameterSources: Record<string, FaceKey> = {
   ParamEyeROpen: 'eyeRight',
   ParamMouthOpenY: 'mouthOpen',
   ParamMouthForm: 'mouthSmile',
+  ParamEyeLSmile: 'mouthSmile',
+  ParamEyeRSmile: 'mouthSmile',
   ParamEyeBallX: 'gazeX',
   ParamEyeBallY: 'gazeY',
   ParamBrowLY: 'browLeft',
@@ -675,9 +677,15 @@ const parameterSources: Record<string, FaceKey> = {
   ParamArmRB: 'elbowRight',
 };
 
-export const parameterNames: Record<string, string> = Object.fromEntries(
-  Object.entries(parameterSources).map(([id, source]) => [id, faceSources[source]]),
-);
+export const parameterNames: Record<string, string> = {
+  ...Object.fromEntries(
+    Object.entries(parameterSources).map(([id, source]) => [id, faceSources[source]]),
+  ),
+  ParamEyeLSmile: '左眼微笑',
+  ParamEyeRSmile: '右眼微笑',
+};
+// Eye smile only closes toward a smile; a frown must not push it below rest.
+const eyeSmile = (id: string) => id === 'ParamEyeLSmile' || id === 'ParamEyeRSmile';
 
 const bodyFallback = { bodyYaw: 'yaw', bodyPitch: 'pitch', bodyRoll: 'roll' } as const;
 const unipolar = (source: FaceKey) =>
@@ -700,7 +708,7 @@ export function defaultMapping(p: Parameter, s: Settings): Mapping | undefined {
 
   return {
     source,
-    inputMin: unipolar(source) ? 0 : -1,
+    inputMin: unipolar(source) || eyeSmile(p.id) ? 0 : -1,
     inputMax: 1,
     // Cubism's normal eye/mouth opening is 0..1; wider bounds are for exaggerated expressions.
     outputMin: unipolar(source) ? clamp(0, p.min, p.max) : p.min,
