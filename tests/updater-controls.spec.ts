@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs';
 import { test, expect } from '@playwright/test';
 
 test('About controls the main-owned download and installation waits for settings and camera shutdown', async ({
@@ -124,4 +125,47 @@ test('About controls the main-owned download and installation waits for settings
     'plugin:updater|install',
     'restart_app',
   ]);
+});
+
+test('after an update the main window lists what changed since the last launch once', async ({
+  page,
+  context,
+}, testInfo) => {
+  const { version } = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8'));
+  await context.route('**/src/main.tsx*', async (route) => {
+    const response = await route.fetch();
+    const bootstrap = `import { mockIPC, mockWindows } from '/node_modules/@tauri-apps/api/mocks.js';
+      window.isTauri = true;
+      mockWindows('main');
+      mockIPC((cmd, args) => {
+        if (cmd === 'load_settings')
+          return JSON.parse(localStorage.getItem('whats-new-settings') ?? '{"lastSeenVersion":"1.0.0"}');
+        if (cmd === 'save_settings')
+          return localStorage.setItem('whats-new-settings', JSON.stringify(args.settings));
+        if (cmd === 'list_models') return { models: [], directory: '', errors: [] };
+        if (cmd === 'plugin:virtual-camera|status')
+          return { supported: false, installed: false, active: false, message: '' };
+      }, { shouldMockEvents: true });\n`;
+    await route.fulfill({ response, body: bootstrap + (await response.text()) });
+  });
+  await page.goto('/');
+  const dialog = page.getByRole('dialog', { name: `已更新到 v${version}` });
+  await expect(dialog).toBeVisible();
+  await expect(dialog.getByRole('heading', { name: /^v1\.0\.3/ })).toBeVisible();
+  await expect(dialog.getByText('虚拟摄像头新增「镜像输出」开关', { exact: false })).toBeVisible();
+  await expect(dialog.getByRole('heading', { name: /^v1\.0\.0/ })).toHaveCount(0);
+  await page.screenshot({ path: testInfo.outputPath('whats-new.png') });
+  await dialog.getByRole('button', { name: '知道了' }).click();
+  await expect(dialog).toBeHidden();
+  await expect
+    .poll(() =>
+      page.evaluate(
+        () => JSON.parse(localStorage.getItem('whats-new-settings') ?? 'null')?.lastSeenVersion,
+      ),
+    )
+    .toBe(version);
+  await page.reload();
+  await expect(page.getByRole('button', { name: '关于与检查更新', exact: true })).toBeVisible();
+  await expect(page.locator('#stage canvas')).toBeVisible();
+  await expect(dialog).toHaveCount(0);
 });

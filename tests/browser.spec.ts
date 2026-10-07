@@ -1832,13 +1832,15 @@ test('NVIDIA experimental settings are visible on Windows and survive reload', a
   await page.locator('#nvidia-camera').fill('2');
   await chooseOption(page, page.locator('#nvidia-fps'), '24 FPS');
   await chooseOption(page, page.locator('#nvidia-resolution'), '1280 × 720');
+  // Settings are also saved at startup, so wait for values that differ from the defaults.
   await expect
     .poll(() =>
-      page.evaluate(
-        () => JSON.parse(localStorage.getItem('vtubeleaf-preview') || '{}').cameraResolution,
-      ),
+      page.evaluate(() => {
+        const saved = JSON.parse(localStorage.getItem('vtubeleaf-preview') || '{}');
+        return [saved.engine, saved.trackingFps, saved.cameraResolution];
+      }),
     )
-    .toBe('720p');
+    .toEqual(['nvidia', 24, '720p']);
   await page.reload();
   await expect(page.locator('#engine')).toHaveText('NVIDIA RTX · 实验中');
   await expect(page.locator('#nvidia-path')).toHaveValue('C:\\ARSDK\\bin\\VTubeLeafNvidia.exe');
@@ -3628,6 +3630,11 @@ test('standalone about window groups FAQs and licenses under desktop CSP', async
   await expect(about).toHaveTitle('关于 VTubeLeaf');
   await expect(about.getByRole('heading', { name: 'VTubeLeaf', exact: true })).toBeVisible();
   await expect(about.locator('#stage, #controls, video, canvas')).toHaveCount(0);
+  await about.getByText('更新记录', { exact: true }).click();
+  await expect(about.getByRole('heading', { name: /^v1\.0\.0/ })).toBeVisible();
+  await expect(about.getByText('当前版本', { exact: true })).toBeVisible();
+  await about.screenshot({ path: testInfo.outputPath('releases.png') });
+  await about.getByText('更新记录', { exact: true }).click();
   await about.getByText('常见问题与运行记录', { exact: true }).click();
   await expect(about.getByText('黑屏：检查模型是否成功加载', { exact: false })).toBeVisible();
   await about.screenshot({ path: testInfo.outputPath('about.png') });

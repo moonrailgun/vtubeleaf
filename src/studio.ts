@@ -32,6 +32,7 @@ import { importVtsConfig, repairVtsMappings } from './vts';
 import { readComposition, snapshotScene, type Composition, type SceneItem } from './scenes';
 import type { OutputFrame, OutputState } from './output';
 import { AppUpdater } from './updater';
+import { version } from '../package.json';
 
 export function createStudio(
   container: HTMLElement,
@@ -1343,7 +1344,7 @@ export function createStudio(
       stage?.clear();
       await stop();
       if (disposed) return;
-      settings = structuredClone(defaults);
+      settings = { ...structuredClone(defaults), lastSeenVersion: settings.lastSeenVersion };
       model = null;
       modelRevision++;
       profileRevision++;
@@ -1393,6 +1394,11 @@ export function createStudio(
         : JSON.parse(localStorage.getItem('vtubeleaf-preview') ?? 'null');
       if (disposed) return;
       settings = readSettings(stored);
+      // Fresh installs and settings from before release notes start from the running version.
+      if (!settings.lastSeenVersion) {
+        settings.lastSeenVersion = version;
+        void save();
+      }
     } catch {
       notify('上次设置无法读取，已使用默认设置。请重新选择模型与摄像头。', true);
     }

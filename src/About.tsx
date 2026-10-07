@@ -13,6 +13,8 @@ import { version } from '../package.json';
 import { Button } from './components/ui/button';
 import { Switch } from './components/ui/switch';
 import { initialUpdateState, type UpdateState } from './updater';
+import { parseNotes } from './changelog';
+import { Notes, ReleaseList, releases } from './ReleaseNotes';
 
 export function About() {
   const [events, setEvents] = useState<string[]>([]);
@@ -52,6 +54,15 @@ export function About() {
         </div>
       </header>
       <Updates />
+      <details className="about-section">
+        <summary>
+          更新记录
+          <ChevronDown aria-hidden="true" />
+        </summary>
+        <div className="pb-4 text-xs leading-6">
+          <ReleaseList list={releases} current={version} />
+        </div>
+      </details>
       <details className="about-section">
         <summary>
           常见问题与运行记录
@@ -218,8 +229,10 @@ function Updates() {
         </div>
         {state.notes && (
           <div>
-            <h2 className="font-semibold">更新说明</h2>
-            <p className="whitespace-pre-wrap break-words text-muted-foreground">{state.notes}</p>
+            <h2 className="font-semibold">v{state.version} 更新说明</h2>
+            <div className="mt-1 break-words text-muted-foreground">
+              <Notes groups={parseNotes(state.notes)} />
+            </div>
           </div>
         )}
       </div>

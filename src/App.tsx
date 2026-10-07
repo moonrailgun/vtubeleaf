@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
-import { AlertDialog, ContextMenu, DropdownMenu, Tabs, ToggleGroup } from 'radix-ui';
+import { AlertDialog, ContextMenu, Dialog, DropdownMenu, Tabs, ToggleGroup } from 'radix-ui';
 import {
   Image,
   FolderHeart,
@@ -47,6 +47,8 @@ import { vowels } from './lipsync';
 import { version } from '../package.json';
 import { initialUpdateState } from './updater';
 import { OpenSeeFaceDownload } from './OpenSeeFaceDownload';
+import { releasesSince } from './changelog';
+import { ReleaseList, releases } from './ReleaseNotes';
 
 function Fold({ title, children }: { title: string; children: ReactNode }) {
   return (
@@ -256,6 +258,7 @@ export function App() {
   const busy = !view.ready || view.modelLoading || view.sceneBusy;
   const draggable = !!(view.model || view.selectedItem) && !busy;
   const set = <K extends keyof Settings>(key: K, value: Settings[K]) => a?.setSetting(key, value);
+  const whatsNew = view.ready ? releasesSince(releases, version, s.lastSeenVersion) : [];
   const range = (key: keyof Settings, label: string, min: number, max: number, step: number) => (
     <Range
       key={key}
@@ -1624,6 +1627,31 @@ export function App() {
           </footer>
         </aside>
       </main>
+      <Dialog.Root
+        open={!!whatsNew.length}
+        onOpenChange={(open) => !open && set('lastSeenVersion', version)}
+      >
+        <Dialog.Portal>
+          <Dialog.Overlay className="fixed inset-0 z-40 bg-black/30" />
+          <Dialog.Content className="fixed top-1/2 left-1/2 z-50 flex max-h-[calc(100%_-_2rem)] w-[calc(100%_-_2rem)] max-w-md -translate-x-1/2 -translate-y-1/2 flex-col rounded-2xl border bg-background p-6 shadow-lg">
+            <Dialog.Title className="text-lg font-medium">已更新到 v{version}</Dialog.Title>
+            <Dialog.Description className="mt-1 text-sm text-muted-foreground">
+              {whatsNew.length > 1
+                ? `距离上次打开，一共更新了 ${whatsNew.length} 个版本。`
+                : '看看这次有什么变化。'}
+            </Dialog.Description>
+            <div className="mt-4 min-h-0 overflow-y-auto text-sm leading-6">
+              <ReleaseList list={whatsNew} />
+            </div>
+            <div className="mt-5 flex items-center justify-between gap-3">
+              <p className="text-xs text-muted-foreground">全部更新记录在「关于 VTubeLeaf」里。</p>
+              <Dialog.Close asChild>
+                <Button>知道了</Button>
+              </Dialog.Close>
+            </div>
+          </Dialog.Content>
+        </Dialog.Portal>
+      </Dialog.Root>
     </div>
   );
 }

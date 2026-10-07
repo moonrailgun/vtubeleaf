@@ -141,6 +141,7 @@ export type ModelProfile = {
 export type Settings = ModelProfile & {
   autoCheckUpdates: boolean;
   skippedUpdateVersion: string;
+  lastSeenVersion: string;
   autoStartVirtualCamera: boolean;
   autoStopVirtualCamera: boolean;
   autoStartMic: boolean;
@@ -191,6 +192,7 @@ export const NEUTRAL: Face = {
 export const defaults: Settings = {
   autoCheckUpdates: true,
   skippedUpdateVersion: '',
+  lastSeenVersion: '',
   autoStartVirtualCamera: false,
   autoStopVirtualCamera: false,
   autoStartMic: false,
@@ -539,6 +541,8 @@ export function readSettings(value: unknown): Settings {
   if (v.obsOutput === 'browser') s.obsOutput = v.obsOutput;
   if (typeof v.skippedUpdateVersion === 'string' && v.skippedUpdateVersion.length <= 128)
     s.skippedUpdateVersion = v.skippedUpdateVersion;
+  if (typeof v.lastSeenVersion === 'string' && v.lastSeenVersion.length <= 128)
+    s.lastSeenVersion = v.lastSeenVersion;
   if (typeof v.previewMirror === 'boolean') s.previewMirror = v.previewMirror;
   if (typeof v.previewCamera === 'boolean') s.previewCamera = v.previewCamera;
   if (typeof v.upperBody === 'boolean') s.upperBody = v.upperBody;
