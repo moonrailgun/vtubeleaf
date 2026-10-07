@@ -2,12 +2,55 @@ fn trusted_page(uri: &str) -> bool {
     let Ok(url) = tauri::Url::parse(uri) else {
         return false;
     };
-    url.host_str() == Some("localhost")
+    // WebView2 serves the bundled page from http://tauri.localhost instead of tauri://localhost.
+    let bundled = url.port().is_none()
+        && matches!(
+            (url.scheme(), url.host_str()),
+            ("tauri", Some("localhost")) | ("http", Some("tauri.localhost"))
+        );
+    let dev = cfg!(debug_assertions)
+        && url.scheme() == "http"
+        && url.host_str() == Some("localhost")
+        && url.port() == Some(1420);
+    (bundled || dev)
         && url.username().is_empty()
         && url.password().is_none()
         && matches!(url.path(), "" | "/" | "/index.html")
-        && ((url.scheme() == "tauri" && url.port().is_none())
-            || (cfg!(debug_assertions) && url.scheme() == "http" && url.port() == Some(1420)))
+}
+
+#[cfg(windows)]
+pub fn configure_media(window: &tauri::WebviewWindow) -> tauri::Result<()> {
+    use webview2_com::{Microsoft::Web::WebView2::Win32::*, PermissionRequestedEventHandler};
+    use windows::core::PWSTR;
+
+    window.with_webview(|platform| unsafe {
+        let Ok(view) = platform.controller().CoreWebView2() else {
+            return;
+        };
+        let mut token = 0;
+        // Skip WebView2's per-launch camera prompt for the local workbench; Windows privacy settings still apply.
+        let _ = view.add_PermissionRequested(
+            &PermissionRequestedEventHandler::create(Box::new(|view, args| {
+                let (Some(view), Some(args)) = (view, args) else {
+                    return Ok(());
+                };
+                let mut kind = COREWEBVIEW2_PERMISSION_KIND::default();
+                args.PermissionKind(&mut kind)?;
+                if kind != COREWEBVIEW2_PERMISSION_KIND_CAMERA
+                    && kind != COREWEBVIEW2_PERMISSION_KIND_MICROPHONE
+                {
+                    return Ok(());
+                }
+                let mut uri = PWSTR::null();
+                view.Source(&mut uri)?;
+                if trusted_page(&webview2_com::take_pwstr(uri)) {
+                    args.SetState(COREWEBVIEW2_PERMISSION_STATE_ALLOW)?;
+                }
+                Ok(())
+            })),
+            &mut token,
+        );
+    })
 }
 
 #[cfg(target_os = "linux")]
@@ -89,6 +132,7 @@ mod tests {
         assert!(super::trusted_page("tauri://localhost"));
         assert!(super::trusted_page("tauri://localhost/index.html"));
         assert!(super::trusted_page("tauri://localhost/"));
+        assert!(super::trusted_page("http://tauri.localhost/index.html"));
         assert_eq!(
             super::trusted_page("http://localhost:1420/"),
             cfg!(debug_assertions)
@@ -98,6 +142,10 @@ mod tests {
             "tauri://localhost.evil/index.html",
             "tauri://localhost@evil/index.html",
             "tauri://localhost/output.html",
+            "http://tauri.localhost/output.html",
+            "https://tauri.localhost/",
+            "http://tauri.localhost:1420/",
+            "tauri://tauri.localhost/",
             "http://localhost:1234/",
             "http://localhost:1420/output.html",
             "invalid",

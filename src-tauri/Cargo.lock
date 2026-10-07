@@ -4253,6 +4253,8 @@ dependencies = [
  "tempfile",
  "tokio",
  "webkit2gtk",
+ "webview2-com",
+ "windows",
  "zip 6.0.0",
 ]
 

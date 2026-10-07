@@ -34,3 +34,7 @@ tokio = { version = "1", features = ["net", "time", "sync"] }
 [target.'cfg(target_os = "linux")'.dependencies]
 gtk = "0.18"
 webkit2gtk = { version = "2", features = ["v2_24"] }
+
+[target.'cfg(windows)'.dependencies]
+webview2-com = "0.38"
+windows = "0.61"

@@ -1,8 +1,8 @@
 mod assets;
 mod camera;
 mod downloads;
-#[cfg(any(target_os = "linux", test))]
-mod linux;
+#[cfg(any(target_os = "linux", windows, test))]
+mod media;
 mod models;
 mod motion;
 mod nvidia;
@@ -418,8 +418,8 @@ pub fn run() {
         .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(camera::init())
         .setup(|app| {
-            #[cfg(target_os = "linux")]
-            linux::configure_media(&app.get_webview_window("main").expect("工作台窗口未创建"))?;
+            #[cfg(any(target_os = "linux", windows))]
+            media::configure_media(&app.get_webview_window("main").expect("工作台窗口未创建"))?;
             app.manage(Mutex::new(obs::Output::default()));
             app.manage(Mutex::new(texture::Output::default()));
             app.manage(AppState {
