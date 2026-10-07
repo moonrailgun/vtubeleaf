@@ -10,3 +10,10 @@
 
 - 修改 macOS 虚拟摄像头扩展内部逻辑（如 `native/macos-camera/Extension.swift`、`Frame.swift`、`main.swift`）时，必须同步递增 `native/macos-camera/Info.plist` 中的 `CFBundleShortVersionString` 和 `CFBundleVersion`，并保持两者一致，以便 macOS 识别并更新已安装的扩展。
 - 扩展版本独立于主应用版本；仅修改主应用或宿主桥接逻辑时，无需递增扩展版本。
+
+## 更新日志
+
+- 桌面应用中用户能感知到的改动（新功能、行为变化、问题修复），必须在同一次提交里更新根目录 `CHANGELOG.md` 的 `## 未发布` 一节。纯重构、测试、CI、依赖升级、`website` 官网改动等用户感受不到的，不写。
+- 写给主播看的人话：中文，从“用起来有什么不同”的角度写，一条一句话。界面上的名称用「」原样引用；不出现代码、参数 ID、文件名或 commit 类型。
+- 按 `### 新增`、`### 改进`、`### 修复` 分组，空分组不写。同一个功能在发版前又改了，就修改原来那条，不要追加新条目。
+- 不要自行填写版本号和日期。`npm run release` 会自动把 `## 未发布` 改为 `## vX.Y.Z · YYYY-MM-DD` 并新开一个空的 `## 未发布`；「未发布」为空时会拒绝发版。GitHub Release 和应用内更新说明都取自对应版本这一节。

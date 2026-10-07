@@ -32,8 +32,9 @@
       "publish": false
     },
     "hooks": {
+      "before:init": "node scripts/changelog.mjs check",
       "after:git:init": "node scripts/check-release-sync.mjs",
-      "after:bump": "node scripts/sync-version.mjs && npm run licenses:generate"
+      "after:bump": "node scripts/sync-version.mjs && node scripts/changelog.mjs release && npm run licenses:generate"
     }
   },
   "dependencies": {

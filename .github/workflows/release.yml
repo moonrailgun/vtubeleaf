@@ -87,7 +87,7 @@ jobs:
             base64 --decode "$package.sig" > "$RUNNER_TEMP/updater.sig"
             minisign -V -p "$RUNNER_TEMP/updater.pub" -m "$package" -x "$RUNNER_TEMP/updater.sig"
           done
-          gh api "repos/$GH_REPO/releases/generate-notes" -f "tag_name=$RELEASE_TAG" --jq .body > "$RUNNER_TEMP/release-notes.md"
+          node ../scripts/changelog.mjs notes "$RELEASE_TAG" > "$RUNNER_TEMP/release-notes.md"
           node ../scripts/create-updater-manifest.mjs . "$RELEASE_TAG" "$RUNNER_TEMP/release-notes.md"
           test -s openseeface-aarch64.xml && test -s openseeface-x86_64.xml
           sha256sum ./*.dmg ./*.zip ./*.exe ./*.tar.gz ./*.deb ./*.AppImage ./*.sig ./openseeface-*.xml latest.json > SHA256SUMS.txt
