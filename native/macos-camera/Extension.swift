@@ -7,6 +7,7 @@ import OSLog
 // Provider callbacks, consumption completions and the timer use this serial queue.
 let cameraQueue = DispatchQueue(label: "com.vtubeleaf.camera.extension", qos: .userInteractive)
 private let cameraAuthorizationLog = Logger(subsystem: "com.moonrailgun.vtubeleaf.camera", category: "authorization")
+private let cameraConsumersProperty = CMIOExtensionProperty(rawValue: "4cc_vlcs_glob_0000")
 
 final class CameraStream: NSObject, CMIOExtensionStreamSource {
     var stream: CMIOExtensionStream!
@@ -93,10 +94,12 @@ final class CameraStream: NSObject, CMIOExtensionStreamSource {
     func startStream() throws {
         if sink && sinkClient == nil { throw cameraError("输入客户端未授权") }
         running += 1
+        if !sink { owner.notifyConsumers() }
         owner.updateTimer()
     }
     func stopStream() throws {
         running = max(0, running - 1)
+        if !sink { owner.notifyConsumers() }
         if sink && running == 0 {
             generation += 1
             consuming = false
@@ -148,13 +151,23 @@ final class CameraDevice: NSObject, CMIOExtensionDeviceSource {
         do { try device.addStream(source.stream); try device.addStream(sink.stream) }
         catch { fatalError("Camera stream registration failed: \(error)") }
     }
-    var availableProperties: Set<CMIOExtensionProperty> { [.deviceTransportType, .deviceModel, .deviceCanBeDefaultInputDevice] }
+    var availableProperties: Set<CMIOExtensionProperty> { [.deviceTransportType, .deviceModel, .deviceCanBeDefaultInputDevice, cameraConsumersProperty] }
+    // Custom CoreMediaIO properties bridge strings/data, not native Boolean values.
+    var consumersState: CMIOExtensionPropertyState<AnyObject> {
+        CMIOExtensionPropertyState(value: (source.running > 0 ? "1" : "0") as NSString, attributes: .readOnlyPropertyAttribute)
+    }
+    func notifyConsumers() {
+        device.notifyPropertiesChanged([cameraConsumersProperty: consumersState])
+    }
     func deviceProperties(forProperties properties: Set<CMIOExtensionProperty>) throws -> CMIOExtensionDeviceProperties {
         let result = CMIOExtensionDeviceProperties(dictionary: [:])
         if properties.contains(.deviceTransportType) { result.transportType = kIOAudioDeviceTransportTypeVirtual }
         if properties.contains(.deviceModel) { result.model = "VTubeLeaf Camera" }
         if properties.contains(.deviceCanBeDefaultInputDevice) {
             result.setPropertyState(CMIOExtensionPropertyState(value: NSNumber(value: false)), forProperty: .deviceCanBeDefaultInputDevice)
+        }
+        if properties.contains(cameraConsumersProperty) {
+            result.setPropertyState(consumersState, forProperty: cameraConsumersProperty)
         }
         return result
     }

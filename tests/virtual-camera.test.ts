@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
+import { setImmediate as nextTurn, setTimeout as delay } from 'node:timers/promises';
 import { VirtualCamera } from '../src/virtual-camera.ts';
 
 test('browser construction remains unsupported without native API', async () => {
@@ -7,6 +8,82 @@ test('browser construction remains unsupported without native API', async () => 
   await camera.start();
   assert.equal(camera.status.supported, false);
   camera.destroy();
+});
+
+test('idle camera skips pixel readback and resumes when a source client connects', async (t) => {
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  const originals = ['window', 'document', 'isTauri'].map(
+    (key) => [key, Object.getOwnPropertyDescriptor(globalThis, key)] as const,
+  );
+  const state = {
+    supported: true,
+    installed: true,
+    active: true,
+    consumers: false,
+    message: 'test',
+  };
+  let draws = 0;
+  let reads = 0;
+  let submissions = 0;
+  Object.defineProperty(globalThis, 'isTauri', { configurable: true, value: true });
+  Object.defineProperty(globalThis, 'window', {
+    configurable: true,
+    value: {
+      __TAURI_INTERNALS__: {
+        invoke(command: string) {
+          if (command.endsWith('|submit')) {
+            submissions++;
+            return Promise.resolve();
+          }
+          return Promise.resolve({ ...state });
+        },
+      },
+    },
+  });
+  Object.defineProperty(globalThis, 'document', {
+    configurable: true,
+    value: {
+      createElement: () => ({
+        getContext: () => ({
+          setTransform() {},
+          fillRect() {},
+          drawImage() {
+            draws++;
+          },
+          getImageData() {
+            reads++;
+            return { data: new Uint8ClampedArray(1280 * 720 * 4) };
+          },
+        }),
+      }),
+    },
+  });
+  const camera = new VirtualCamera(() => {});
+  t.after(async () => {
+    camera.destroy();
+    t.mock.timers.reset();
+    await nextTurn();
+    for (const [key, descriptor] of originals) {
+      if (descriptor) Object.defineProperty(globalThis, key, descriptor);
+      else Reflect.deleteProperty(globalThis, key);
+    }
+  });
+  const canvas = { width: 1280, height: 720 } as HTMLCanvasElement;
+  await camera.refresh();
+  camera.submit(canvas, '#000000');
+  assert.deepEqual([draws, reads, submissions], [0, 0, 0]);
+  assert.equal(camera.status.active, true, 'idle output remains enabled');
+  state.consumers = true;
+  t.mock.timers.tick(500);
+  await nextTurn();
+  assert.equal(camera.status.consumers, true, 'polling resumes demand without rendered frames');
+  camera.submit(canvas, '#000000');
+  assert.deepEqual([draws, reads, submissions], [1, 1, 1]);
+  state.consumers = false;
+  await camera.refresh();
+  await delay(40);
+  camera.submit(canvas, '#000000');
+  assert.deepEqual([draws, reads, submissions], [1, 1, 1]);
 });
 
 test('serializes status and controls, letterboxes frames, and waits for transport before stopping', async () => {

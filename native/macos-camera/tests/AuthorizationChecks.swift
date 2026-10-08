@@ -15,12 +15,33 @@ private final class TestCameraClient: CMIOExtensionClient {
 @main struct AuthorizationChecks {
     static func main() throws {
         let client = class_createInstance(TestCameraClient.self, 0) as! TestCameraClient
-        let camera = CameraDevice()
+        let provider = CameraProvider()
+        let camera = provider.camera
         assert(camera.availableProperties.contains(.deviceCanBeDefaultInputDevice))
         let properties = try camera.deviceProperties(forProperties: [.deviceCanBeDefaultInputDevice])
         let canBeDefault = properties.propertiesDictionary[.deviceCanBeDefaultInputDevice]?.value as? NSNumber
         assert(canBeDefault == false, "The virtual camera must not become the default input device")
         print("PASS: virtual camera is ineligible as the default input device")
+        try cameraQueue.sync {
+            let demand = CMIOExtensionProperty(rawValue: "4cc_vlcs_glob_0000")
+            func hasConsumers() -> String? {
+                (try? camera.deviceProperties(forProperties: [demand]))?.propertiesDictionary[demand]?.value as? String
+            }
+            assert(camera.availableProperties.contains(demand), "The host must be able to query source demand")
+            assert(hasConsumers() == "0", "An idle source must not request frames")
+            camera.sink.running = 1
+            assert(hasConsumers() == "0", "The producer sink must not count as a source client")
+            try camera.source.startStream()
+            try camera.source.startStream()
+            assert(hasConsumers() == "1", "Source clients must resume the producer")
+            try camera.source.stopStream()
+            assert(hasConsumers() == "1", "One remaining source client still needs frames")
+            try camera.source.stopStream()
+            assert(hasConsumers() == "0", "The last departing client must stop frame requests")
+            camera.sink.running = 0
+            camera.updateTimer()
+        }
+        print("PASS: source demand excludes the producer and tracks the last client")
         assert(camera.source.authorizedToStartStream(for: client))
         assert(!camera.sink.authorizedToStartStream(for: client), "Claimed signing ID must not authorize this unsigned test process")
         assert(camera.sink.sinkClient == nil)

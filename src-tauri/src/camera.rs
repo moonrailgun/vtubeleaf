@@ -8,6 +8,8 @@ pub struct CameraStatus {
     supported: bool,
     installed: bool,
     active: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    consumers: Option<bool>,
     message: String,
 }
 
@@ -55,6 +57,7 @@ fn control(operation: i32) -> Result<CameraStatus, String> {
             supported: false,
             installed: false,
             active: false,
+            consumers: None,
             message: "Linux 请通过 OBS 输出画面；会议摄像头需在 OBS 中启动虚拟摄像头，并安装 v4l2loopback".into(),
         })
     }
@@ -164,6 +167,20 @@ pub fn init<R: Runtime>() -> TauriPlugin<R> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn preserves_optional_camera_consumers() {
+        for consumers in [None, Some(false), Some(true)] {
+            let mut input = serde_json::json!({
+                "supported": true, "installed": true, "active": true, "message": "test"
+            });
+            if let Some(consumers) = consumers {
+                input["consumers"] = serde_json::json!(consumers);
+            }
+            let status: CameraStatus = serde_json::from_value(input.clone()).unwrap();
+            assert_eq!(serde_json::to_value(status).unwrap(), input);
+        }
+    }
+
     #[test]
     fn accepts_only_exact_raw_rgba_frames() {
         assert!(frame_body(&InvokeBody::Raw(vec![0; FRAME_BYTES])).is_ok());

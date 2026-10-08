@@ -4,6 +4,7 @@ export type CameraStatus = {
   supported: boolean;
   installed: boolean;
   active: boolean;
+  consumers?: boolean;
   message: string;
 };
 
@@ -22,7 +23,7 @@ export class VirtualCamera {
   private lastFrame = -Infinity;
   private pending?: Promise<void>;
   private control: Promise<void> = Promise.resolve();
-  private poll?: ReturnType<typeof setInterval>;
+  private poll?: ReturnType<typeof setTimeout>;
   private destroyed = false;
   private stopping = 0;
   private onStatus: (status: CameraStatus) => void;
@@ -31,8 +32,15 @@ export class VirtualCamera {
     this.onStatus = onStatus;
     onStatus(this.current);
     if (isTauri()) {
-      void this.refresh();
-      this.poll = setInterval(() => void this.refresh(), 2000);
+      void this.pollStatus();
+    }
+  }
+
+  private async pollStatus(): Promise<void> {
+    await this.refresh();
+    if (!this.destroyed) {
+      const interval = this.current.active && this.current.consumers !== undefined ? 500 : 2000;
+      this.poll = setTimeout(() => void this.pollStatus(), interval);
     }
   }
 
@@ -46,6 +54,7 @@ export class VirtualCamera {
       typeof status.supported !== 'boolean' ||
       typeof status.installed !== 'boolean' ||
       typeof status.active !== 'boolean' ||
+      (status.consumers !== undefined && typeof status.consumers !== 'boolean') ||
       typeof status.message !== 'string'
     ) {
       throw new Error('无法读取摄像头状态');
@@ -104,6 +113,7 @@ export class VirtualCamera {
       this.destroyed ||
       this.stopping ||
       !this.current.active ||
+      this.current.consumers === false ||
       this.pending ||
       // Slack for a render loop whose ticks land slightly early.
       now - this.lastFrame < 1000 / 30 - 4 ||
@@ -151,7 +161,7 @@ export class VirtualCamera {
   destroy(): void {
     if (this.destroyed) return;
     this.destroyed = true;
-    clearInterval(this.poll);
+    clearTimeout(this.poll);
     if (isTauri()) {
       void this.control
         .then(() => this.pending)

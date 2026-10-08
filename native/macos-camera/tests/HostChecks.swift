@@ -10,6 +10,7 @@ private final class StartingCameraHost: CameraHost {
     var availableDevice: CMIODeviceID? = 1
     var deviceLookups = 0
     var settingsPrompts: [(title: String, instructions: String)] = []
+    var consumers: Bool?
 
     override func showSettingsPrompt(title: String, instructions: String) {
         settingsPrompts.append((title, instructions))
@@ -19,6 +20,7 @@ private final class StartingCameraHost: CameraHost {
         deviceLookups += 1
         return availableDevice
     }
+    override func hasConsumers() -> Bool? { consumers }
     override func submitRequest(_ request: OSSystemExtensionRequest) {
         submitted.append(request)
     }
@@ -36,6 +38,19 @@ private final class EnabledCameraProperties: OSSystemExtensionProperties {
 
 @main struct HostChecks {
     static func main() throws {
+        let demand = StartingCameraHost()
+        demand.installed = true
+        demand.device = 1
+        demand.stream = 2
+        for consumers: Bool? in [nil, false, true] {
+            demand.consumers = consumers
+            let status = demand.snapshot()
+            assert(status["active"] as? Bool == true, "Lack of source clients must not disable the camera")
+            assert(status["consumers"] as? Bool == consumers, "Unknown/older extensions must not be treated as idle")
+        }
+        demand.stream = 0
+        assert(demand.snapshot()["consumers"] == nil, "A stopped camera must not expose stale demand")
+        print("PASS: camera status preserves source demand and falls back for older extensions")
         let enabledProperties = EnabledCameraProperties()
         for kind in ["install", "start"] {
             let polling = StartingCameraHost()

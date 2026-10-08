@@ -95,6 +95,21 @@ class CameraHost: NSObject, OSSystemExtensionRequestDelegate {
     func findDevice() -> CMIODeviceID? {
         objectIDs(CMIOObjectID(kCMIOObjectSystemObject), CMIOObjectPropertySelector(kCMIOHardwarePropertyDevices)).first { deviceUID($0) == cameraDeviceUID }
     }
+    func hasConsumers() -> Bool? {
+        guard device != 0 else { return nil }
+        // `vlcs` is the extension's source-client property; older extensions omit it.
+        var address = CMIOObjectPropertyAddress(mSelector: 0x766c6373, mScope: CMIOObjectPropertyScope(kCMIOObjectPropertyScopeGlobal), mElement: CMIOObjectPropertyElement(kCMIOObjectPropertyElementMain))
+        guard CMIOObjectHasProperty(device, &address) else { return nil }
+        var value: Unmanaged<CFString>?
+        var size = UInt32(MemoryLayout.size(ofValue: value))
+        guard CMIOObjectGetPropertyData(device, &address, 0, nil, size, &size, &value) == noErr,
+              let value = value?.takeRetainedValue() as String? else { return nil }
+        switch value {
+        case "0": return false
+        case "1": return true
+        default: return nil
+        }
+    }
     func updateInstallation(enabled: Bool, deviceAvailable: Bool?) {
         let wasInstalled = installed
         installed = enabled
@@ -123,7 +138,9 @@ class CameraHost: NSObject, OSSystemExtensionRequestDelegate {
             lastRefresh = now
             request("status")
         }
-        return ["supported": true, "installed": installed, "active": stream != 0, "message": message]
+        var result: [String: Any] = ["supported": true, "installed": installed, "active": stream != 0, "message": message]
+        if stream != 0, let consumers = hasConsumers() { result["consumers"] = consumers }
+        return result
     }
     func request(_ kind: String) {
         if kind == "install" && startAfterActivation { return }
