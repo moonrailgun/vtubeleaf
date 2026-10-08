@@ -959,7 +959,7 @@ export function createStudio(
           void run(async () => {
             if (calibration !== current) return;
             calibration = null;
-            publish();
+            notify('');
             const result = sampleCalibration(current.samples, mode);
             if (mode === 'eyes') {
               if (
@@ -975,11 +975,6 @@ export function createStudio(
             }
             mapper.reset();
             await save();
-            notify(
-              mode === 'eyes'
-                ? '双眼闭合位置已校准。'
-                : '中立姿态已校准，可以自然转头、眨眼和说话。',
-            );
           }),
         2600,
       );

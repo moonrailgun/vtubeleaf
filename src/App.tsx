@@ -487,6 +487,7 @@ export function App() {
             <div
               id="notice"
               className={`notice${view.notice.error ? ' error' : ''}`}
+              hidden={!view.notice.message}
               role="status"
               aria-live="polite"
             >

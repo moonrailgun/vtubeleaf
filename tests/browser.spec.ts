@@ -2733,6 +2733,7 @@ test('quality settings preserve privacy and calibration samples cancel on stop',
   await expect(page.locator('#face-status')).toHaveText('已识别人脸');
   await page.locator('#calibrate').click();
   await expect(page.locator('#calibrate')).toBeDisabled();
+  await expect(page.locator('#notice')).toContainText('请正视镜头');
   await expect
     .poll(() =>
       page.evaluate(
@@ -2744,11 +2745,16 @@ test('quality settings preserve privacy and calibration samples cancel on stop',
     () => JSON.parse(localStorage.getItem('vtubeleaf-preview')!).neutral,
   );
   expect(neutral.yaw).toBeLessThan(8.6);
+  await expect(page.locator('#notice')).toBeHidden();
+  await openFold(page, '跟踪细调');
+  await page.locator('#calibrate-eyes').click();
+  await expect(page.locator('#notice')).toContainText('请闭合双眼');
+  await expect(page.locator('#notice.error')).toContainText('请双眼闭合并保持到采样结束');
   await page.locator('#calibrate').click();
   await page.locator('#start').click();
   await expect(page.locator('#tracking-status')).toHaveText('尚未开始');
+  await expect(page.locator('#notice')).not.toContainText('请正视镜头');
   await page.evaluate(() => clearInterval((window as any).qualityTimer));
-  await openFold(page, '跟踪细调');
   await chooseOption(page, page.locator('#eye-link'), '始终同步 · 取双眼平均');
   await chooseOption(page, page.locator('#lost-mode'), '保持最后姿态');
   await expect
