@@ -1,4 +1,5 @@
 import { test, expect } from '@playwright/test';
+import { openFold } from './panel';
 import { readFileSync, readdirSync } from 'node:fs';
 import { resolve } from 'node:path';
 
@@ -115,9 +116,12 @@ test('saved expressions and held poses survive reopening and can still be change
 
   await page.goto('/');
   await page.getByRole('button', { name: '角色', exact: true }).click();
+  const sign = page.getByRole('button', { name: '牌子', exact: true });
+  // Wait for the model: its controls remount once it loads, which closes any open fold.
+  await expect(sign).toBeVisible();
+  await openFold(page, '高级');
   const save = page.locator('#save-default-appearance');
   await expect(save).toBeEnabled();
-  const sign = page.getByRole('button', { name: '牌子', exact: true });
   await sign.click();
   await expect(sign).toHaveAttribute('aria-pressed', 'true');
   await save.click();
@@ -126,6 +130,7 @@ test('saved expressions and held poses survive reopening and can still be change
   await page.reload();
   await page.getByRole('button', { name: '角色', exact: true }).click();
   await expect(sign).toHaveAttribute('aria-pressed', 'true');
+  await openFold(page, '高级');
   expect(await page.evaluate(() => (window as any).appearanceStage.frame.ParamAngleZ)).toBe(10);
   await page.getByRole('button', { name: 'saved', exact: true }).click();
   await save.click();
@@ -145,6 +150,8 @@ test('saved expressions and held poses survive reopening and can still be change
 
   await page.reload();
   await page.getByRole('button', { name: '角色', exact: true }).click();
+  await expect(sign).toBeVisible();
+  await openFold(page, '高级');
   await expect(save).toBeEnabled();
   await expect.poll(frame).toBe(16);
   await expect(sign).toHaveAttribute('aria-pressed', 'true');

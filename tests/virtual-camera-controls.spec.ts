@@ -1,4 +1,5 @@
 import { test, expect } from '@playwright/test';
+import { openFold } from './panel';
 
 test('camera mirror flips output horizontally, switches live, and persists after reload', async ({
   page,
@@ -51,6 +52,7 @@ test('camera mirror flips output horizontally, switches live, and persists after
   const pixels = () => page.evaluate(() => (window as any).cameraTest.pixels);
   await page.goto('/');
   await page.getByRole('button', { name: '接入', exact: true }).click();
+  await openFold(page, '更多输出选项');
   const mirror = page.getByRole('switch', { name: '镜像输出', exact: true });
   await expect(mirror).not.toBeChecked();
   await page.getByRole('button', { name: '启动虚拟摄像头', exact: true }).click();
@@ -67,6 +69,7 @@ test('camera mirror flips output horizontally, switches live, and persists after
   await page.locator('#controls').screenshot({ path: testInfo.outputPath('camera-mirror.png') });
   await page.reload();
   await page.getByRole('button', { name: '接入', exact: true }).click();
+  await openFold(page, '更多输出选项');
   await expect(mirror).toBeChecked();
   await page.getByRole('button', { name: '启动虚拟摄像头', exact: true }).click();
   await expect.poll(pixels).toEqual([green, red, yellow, blue, border]);
@@ -206,6 +209,7 @@ test('stopping tracking optionally stops output, including an output start still
   });
   await page.goto('/');
   await page.getByRole('button', { name: '接入', exact: true }).click();
+  await openFold(page, '更多输出选项');
   const autoStop = page.getByRole('switch', { name: '停止跟踪时自动停止输出', exact: true });
   const autoStart = page.getByRole('switch', { name: '开始跟踪时自动输出', exact: true });
   const tracking = page.locator('#start');
@@ -236,6 +240,7 @@ test('stopping tracking optionally stops output, including an output start still
     .toBe(true);
   await page.reload();
   await page.getByRole('button', { name: '接入', exact: true }).click();
+  await openFold(page, '更多输出选项');
   await expect(autoStop).toBeChecked();
   await expect(autoStart).not.toBeChecked();
   expect(await actions()).not.toContain('start');
@@ -297,6 +302,7 @@ test('camera controls follow installation and output state, and confirm uninstal
   });
   await page.goto('/');
   await page.getByRole('button', { name: '接入', exact: true }).click();
+  await openFold(page, '更多输出选项');
   const panel = page.getByRole('tabpanel');
   const more = page.getByRole('button', { name: '虚拟摄像头更多操作', exact: true });
   const install = page.getByRole('button', { name: '安装虚拟摄像头', exact: true });
@@ -306,7 +312,8 @@ test('camera controls follow installation and output state, and confirm uninstal
   const autoStop = page.getByRole('switch', { name: '停止跟踪时自动停止输出', exact: true });
   const actions = () => page.evaluate(() => (window as any).cameraTest.actions);
 
-  await expect(panel.getByRole('button')).toHaveCount(2);
+  // Install, more actions, and the 「更多输出选项」 fold.
+  await expect(panel.getByRole('button')).toHaveCount(3);
   await expect(install).toBeEnabled();
   await expect(more).toBeDisabled();
   await expect(autoStart).toBeDisabled();

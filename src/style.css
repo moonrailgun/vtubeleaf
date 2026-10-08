@@ -890,21 +890,6 @@ h1 span {
   margin-bottom: 12px;
   line-height: 1.6;
 }
-.model-advanced {
-  margin-top: 20px;
-}
-.model-advanced > summary {
-  padding: 4px 4px 14px;
-  font-size: 12px;
-  font-weight: 600;
-  color: #75546d;
-  cursor: pointer;
-}
-.model-advanced > summary:focus-visible {
-  outline: 2px solid var(--ring);
-  outline-offset: 2px;
-  border-radius: 4px;
-}
 .parameter-slider {
   width: 100%;
   margin: 12px 0 0;
@@ -1049,23 +1034,6 @@ h1 span {
   font-size: 11px;
   line-height: 1.5;
   color: var(--muted-foreground);
-}
-.privacy-note {
-  background: #f6f0f7;
-  border-radius: 10px;
-  padding: 15px;
-  margin-top: 18px;
-}
-.privacy-note b {
-  font-size: 12px;
-  font-weight: 600;
-  color: #846a83;
-}
-.privacy-note p {
-  font-size: 11px;
-  color: #827382;
-  line-height: 1.85;
-  margin-top: 8px;
 }
 .events {
   font-size: 11px;

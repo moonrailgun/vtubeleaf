@@ -30,7 +30,7 @@ import {
 import { isVTubeLeafCamera } from './camera-devices';
 import { Switch } from './components/ui/switch';
 import { Slider } from './components/ui/slider';
-import { Collapsible, CollapsibleTrigger, CollapsibleContent } from './components/ui/collapsible';
+import { Fold } from './Fold';
 import { createStudio, type Studio, type StudioView } from './studio';
 import {
   defaults,
@@ -50,19 +50,6 @@ import { OpenSeeFaceDownload } from './OpenSeeFaceDownload';
 import { releasesSince } from './changelog';
 import { ReleaseList, releases } from './ReleaseNotes';
 
-function Fold({ title, children }: { title: string; children: ReactNode }) {
-  return (
-    <Collapsible className="fold">
-      <CollapsibleTrigger asChild>
-        <Button variant="ghost" className="fold-trigger">
-          {title}
-          <ChevronDown aria-hidden="true" />
-        </Button>
-      </CollapsibleTrigger>
-      <CollapsibleContent className="fold-content">{children}</CollapsibleContent>
-    </Collapsible>
-  );
-}
 function Toggle({
   id,
   label,
@@ -298,7 +285,6 @@ export function App() {
         : active
           ? '摄像头使用中'
           : '摄像头未使用';
-  const common = view.parameters.filter((p) => Object.hasOwn(parameterNames, p.id));
   const openLibraryButton = (
     <Button
       variant="ghost"
@@ -540,25 +526,6 @@ export function App() {
               <h2>跟踪来源</h2>
               <span>LOCAL ONLY</span>
             </div>
-            <label htmlFor="engine">跟踪引擎</label>
-            <Select
-              disabled={active || !view.ready}
-              value={s.engine}
-              onValueChange={(value) => set('engine', value as Settings['engine'])}
-            >
-              <SelectTrigger id="engine">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="mediapipe">MediaPipe · 默认</SelectItem>
-                <SelectItem value="openseeface">OpenSeeFace · 备选</SelectItem>
-                {(/Win/.test(navigator.platform) || s.engine === 'nvidia') && (
-                  <SelectItem value="nvidia" disabled={!/Win/.test(navigator.platform)}>
-                    NVIDIA RTX · 实验中
-                  </SelectItem>
-                )}
-              </SelectContent>
-            </Select>
             <div id="mediapipe-options" hidden={s.engine !== 'mediapipe'}>
               <div className="label-row">
                 <label htmlFor="device">摄像头</label>
@@ -598,68 +565,6 @@ export function App() {
                 </SelectContent>
               </Select>
               {view.cameraLabel && <p className="hint break-all">正在使用：{view.cameraLabel}</p>}
-              <Fold title="采集质量与帧率">
-                <label htmlFor="camera-resolution">采集分辨率</label>
-                <Select
-                  disabled={active}
-                  value={s.cameraResolution}
-                  onValueChange={(value) =>
-                    set('cameraResolution', value as Settings['cameraResolution'])
-                  }
-                >
-                  <SelectTrigger id="camera-resolution">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="360p">640 × 360 · 省电</SelectItem>
-                    <SelectItem value="720p">1280 × 720 · 推荐</SelectItem>
-                    <SelectItem value="1080p">1920 × 1080 · 高清</SelectItem>
-                  </SelectContent>
-                </Select>
-                <label htmlFor="tracking-fps">面部识别帧率</label>
-                <Select
-                  disabled={active}
-                  value={String(s.trackingFps)}
-                  onValueChange={(value) =>
-                    set('trackingFps', Number(value) as Settings['trackingFps'])
-                  }
-                >
-                  <SelectTrigger id="tracking-fps">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {[15, 24, 30, 60].map((fps) => (
-                      <SelectItem key={fps} value={String(fps)}>
-                        {fps} FPS
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                {(['bodyFps', 'handFps'] as const).map((key) => (
-                  <label key={key}>
-                    {key === 'bodyFps' ? '上半身识别帧率' : '手部识别帧率'}
-                    <Select
-                      disabled={active}
-                      value={String(s[key])}
-                      onValueChange={(value) => set(key, Number(value) as Settings[typeof key])}
-                    >
-                      <SelectTrigger>
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {[5, 10, 15, 30].map((fps) => (
-                          <SelectItem key={fps} value={String(fps)}>
-                            {fps} FPS
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </label>
-                ))}
-                <p className="hint">
-                  停止后可调整采集设置。实际分辨率和帧率受摄像头与设备性能限制。
-                </p>
-              </Fold>
               <Toggle
                 id="upper-body"
                 label="识别上半身"
@@ -683,7 +588,6 @@ export function App() {
                 onChange={(value) => set('handTracking', value)}
                 note={active ? view.handStatus : '需将手部输入映射到角色参数'}
               />
-              {view.cameraSettings && <p className="hint">实际采集 · {view.cameraSettings}</p>}
               <Toggle
                 id="show-preview"
                 label="显示面捕预览"
@@ -691,42 +595,32 @@ export function App() {
                 onChange={setPreview}
                 note="仅本窗口"
               />
-              <Toggle
-                id="show-camera"
-                label="显示真人画面"
-                checked={s.previewCamera}
-                onChange={(value) => set('previewCamera', value)}
-                note="默认关闭，只显示关键点"
-              />
-              <div className="camera-preview">
+              <div className="camera-preview" hidden={!preview}>
                 <video
                   id="camera-video"
                   ref={video}
                   autoPlay
                   muted
                   playsInline
-                  className={`${preview && active && s.previewCamera ? 'preview-enabled' : ''}${s.previewMirror ? ' mirrored' : ''}`}
+                  className={`${active && s.previewCamera ? 'preview-enabled' : ''}${s.previewMirror ? ' mirrored' : ''}`}
                 />
                 <canvas
                   id="face-mesh"
                   ref={mesh}
-                  hidden={!preview || !active}
+                  hidden={!active}
                   className={s.previewMirror ? 'mirrored' : ''}
                   role="img"
                   aria-label="面部网格与上半身关键点"
                 />
-                <span id="preview-caption" hidden={preview && view.tracking === 'running'}>
+                <span id="preview-caption" hidden={view.tracking === 'running'}>
                   <ScanFace aria-hidden="true" />
-                  {!preview
-                    ? '开启预览，查看跟踪关键点'
-                    : view.tracking === 'paused'
-                      ? '跟踪已暂停'
-                      : view.tracking === 'starting'
-                        ? '正在启动面捕…'
-                        : '开始跟踪后显示预览'}
+                  {view.tracking === 'paused'
+                    ? '跟踪已暂停'
+                    : view.tracking === 'starting'
+                      ? '正在启动面捕…'
+                      : '开始跟踪后显示预览'}
                 </span>
               </div>
-              {toggle('previewMirror', '镜像摄像头预览')}
             </div>
             <div id="osf-options" hidden={s.engine !== 'openseeface'}>
               <p className="hint">
@@ -900,66 +794,8 @@ export function App() {
                 重置
               </Button>
             </div>
-            {toggle('motionMirror', '镜像角色转头方向')}
             {range('sensitivity', '头部灵敏度', 0.2, 3, 0.1)}
-            {range('depthSensitivity', '前后移动幅度', 0, 2, 0.1)}
-            <p className="hint">
-              {s.engine === 'nvidia'
-                ? '当前 NVIDIA 追踪未提供距离数据，前后移动暂不可用。'
-                : '靠近变大，远离变小；设为 0 关闭。以校准位置或开始追踪时的位置为基准，共用头部平滑。'}
-            </p>
-            {range('headSmooth', '头部平滑', 0, 0.5, 0.01)}
-            <Fold title="眼睛、嘴部与丢脸恢复">
-              <label htmlFor="eye-link">双眼联动</label>
-              <Select
-                value={s.eyeLink}
-                onValueChange={(value) => set('eyeLink', value as Settings['eyeLink'])}
-              >
-                <SelectTrigger id="eye-link">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="off">关闭 · 独立眨眼</SelectItem>
-                  <SelectItem value="side">侧脸时同步 · 保留正脸单眼眨眼</SelectItem>
-                  <SelectItem value="always">始终同步 · 取双眼平均</SelectItem>
-                </SelectContent>
-              </Select>
-              {s.eyeLink === 'side' && range('eyeLinkAngle', '侧脸联动起始角度', 10, 60, 1)}
-              <Button
-                id="calibrate-eyes"
-                variant="outline"
-                disabled={view.tracking !== 'running' || !!view.calibrating || !s.neutral}
-                onClick={() => a?.calibrate('eyes')}
-              >
-                校准双眼闭合
-              </Button>
-              <p className="hint">
-                先校准自然睁眼的中立姿态，再点击此按钮闭眼保持 3 秒。
-                {s.eyeClosedLeft !== null && '已保存双眼闭合位置。'}
-              </p>
-              {range('eyeSensitivity', '眨眼灵敏度', 0.3, 2, 0.1)}
-              {s.eyeClosedLeft === null && range('eyeClosedThreshold', '闭眼阈值', 0, 0.6, 0.01)}
-              <p className="hint">闭眼仍未闭合时重新校准，或在未校准时调高阈值。</p>
-              {range('eyeSmooth', '眼睛平滑', 0, 0.3, 0.01)}
-              {range('mouthSensitivity', '嘴部灵敏度', 0.2, 3, 0.1)}
-              {range('mouthSmooth', '嘴部平滑', 0, 0.4, 0.01)}
-              <p className="hint">调整嘴部平滑会同步已有嘴部映射；仍可在角色参数中单独微调。</p>
-              {range('lostDelay', '丢脸容错时间', 0.1, 2, 0.1)}
-              <label htmlFor="lost-mode">丢失跟踪后</label>
-              <Select
-                value={s.lostMode}
-                onValueChange={(value) => set('lostMode', value as Settings['lostMode'])}
-              >
-                <SelectTrigger id="lost-mode">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="neutral">平滑回到中立姿态</SelectItem>
-                  <SelectItem value="hold">保持最后姿态</SelectItem>
-                </SelectContent>
-              </Select>
-            </Fold>
-            <p className="hint">面向镜头，睁眼、闭嘴，保持自然姿态后校准。平滑越高，跟随越柔和。</p>
+            {toggle('motionMirror', '镜像角色转头方向')}
             <Fold title="麦克风口型">
               <p className="hint">
                 独立开启，仅在本机分析声音；不录音、不上传。关闭应用后需要重新开启。
@@ -1099,6 +935,159 @@ export function App() {
                 </>
               )}
             </Fold>
+            <Fold title="跟踪细调">
+              {range('depthSensitivity', '前后移动幅度', 0, 2, 0.1)}
+              <p className="hint">
+                {s.engine === 'nvidia'
+                  ? '当前 NVIDIA 追踪未提供距离数据，前后移动暂不可用。'
+                  : '靠近变大，远离变小；设为 0 关闭。以校准位置或开始追踪时的位置为基准，共用头部平滑。'}
+              </p>
+              {range('headSmooth', '头部平滑', 0, 0.5, 0.01)}
+
+              <label htmlFor="eye-link">双眼联动</label>
+              <Select
+                value={s.eyeLink}
+                onValueChange={(value) => set('eyeLink', value as Settings['eyeLink'])}
+              >
+                <SelectTrigger id="eye-link">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="off">关闭 · 独立眨眼</SelectItem>
+                  <SelectItem value="side">侧脸时同步 · 保留正脸单眼眨眼</SelectItem>
+                  <SelectItem value="always">始终同步 · 取双眼平均</SelectItem>
+                </SelectContent>
+              </Select>
+              {s.eyeLink === 'side' && range('eyeLinkAngle', '侧脸联动起始角度', 10, 60, 1)}
+              <Button
+                id="calibrate-eyes"
+                variant="outline"
+                disabled={view.tracking !== 'running' || !!view.calibrating || !s.neutral}
+                onClick={() => a?.calibrate('eyes')}
+              >
+                校准双眼闭合
+              </Button>
+              <p className="hint">
+                先校准自然睁眼的中立姿态，再点击此按钮闭眼保持 3 秒。
+                {s.eyeClosedLeft !== null && '已保存双眼闭合位置。'}
+              </p>
+              {range('eyeSensitivity', '眨眼灵敏度', 0.3, 2, 0.1)}
+              {s.eyeClosedLeft === null && range('eyeClosedThreshold', '闭眼阈值', 0, 0.6, 0.01)}
+              <p className="hint">闭眼仍未闭合时重新校准，或在未校准时调高阈值。</p>
+              {range('eyeSmooth', '眼睛平滑', 0, 0.3, 0.01)}
+              {range('mouthSensitivity', '嘴部灵敏度', 0.2, 3, 0.1)}
+              {range('mouthSmooth', '嘴部平滑', 0, 0.4, 0.01)}
+              <p className="hint">调整嘴部平滑会同步已有嘴部映射；仍可在角色参数中单独微调。</p>
+              {range('lostDelay', '丢脸容错时间', 0.1, 2, 0.1)}
+              <label htmlFor="lost-mode">丢失跟踪后</label>
+              <Select
+                value={s.lostMode}
+                onValueChange={(value) => set('lostMode', value as Settings['lostMode'])}
+              >
+                <SelectTrigger id="lost-mode">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="neutral">平滑回到中立姿态</SelectItem>
+                  <SelectItem value="hold">保持最后姿态</SelectItem>
+                </SelectContent>
+              </Select>
+              <p className="hint">
+                面向镜头，睁眼、闭嘴，保持自然姿态后校准。平滑越高，跟随越柔和。
+              </p>
+            </Fold>
+            <Fold title="跟踪引擎与采集">
+              <label htmlFor="engine">跟踪引擎</label>
+              <Select
+                disabled={active || !view.ready}
+                value={s.engine}
+                onValueChange={(value) => set('engine', value as Settings['engine'])}
+              >
+                <SelectTrigger id="engine">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="mediapipe">MediaPipe · 默认</SelectItem>
+                  <SelectItem value="openseeface">OpenSeeFace · 备选</SelectItem>
+                  {(/Win/.test(navigator.platform) || s.engine === 'nvidia') && (
+                    <SelectItem value="nvidia" disabled={!/Win/.test(navigator.platform)}>
+                      NVIDIA RTX · 实验中
+                    </SelectItem>
+                  )}
+                </SelectContent>
+              </Select>
+              <div hidden={s.engine !== 'mediapipe'}>
+                <label htmlFor="camera-resolution">采集分辨率</label>
+                <Select
+                  disabled={active}
+                  value={s.cameraResolution}
+                  onValueChange={(value) =>
+                    set('cameraResolution', value as Settings['cameraResolution'])
+                  }
+                >
+                  <SelectTrigger id="camera-resolution">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="360p">640 × 360 · 省电</SelectItem>
+                    <SelectItem value="720p">1280 × 720 · 推荐</SelectItem>
+                    <SelectItem value="1080p">1920 × 1080 · 高清</SelectItem>
+                  </SelectContent>
+                </Select>
+                <label htmlFor="tracking-fps">面部识别帧率</label>
+                <Select
+                  disabled={active}
+                  value={String(s.trackingFps)}
+                  onValueChange={(value) =>
+                    set('trackingFps', Number(value) as Settings['trackingFps'])
+                  }
+                >
+                  <SelectTrigger id="tracking-fps">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {[15, 24, 30, 60].map((fps) => (
+                      <SelectItem key={fps} value={String(fps)}>
+                        {fps} FPS
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                {(['bodyFps', 'handFps'] as const).map((key) => (
+                  <label key={key}>
+                    {key === 'bodyFps' ? '上半身识别帧率' : '手部识别帧率'}
+                    <Select
+                      disabled={active}
+                      value={String(s[key])}
+                      onValueChange={(value) => set(key, Number(value) as Settings[typeof key])}
+                    >
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {[5, 10, 15, 30].map((fps) => (
+                          <SelectItem key={fps} value={String(fps)}>
+                            {fps} FPS
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </label>
+                ))}
+                <p className="hint">
+                  停止后可调整采集设置。实际分辨率和帧率受摄像头与设备性能限制。
+                </p>
+                {view.cameraSettings && <p className="hint">实际采集 · {view.cameraSettings}</p>}
+                <Toggle
+                  id="show-camera"
+                  label="显示真人画面"
+                  checked={s.previewCamera}
+                  onChange={(value) => set('previewCamera', value)}
+                  note="默认关闭，只显示关键点"
+                />
+                {toggle('previewMirror', '镜像摄像头预览')}
+              </div>
+            </Fold>
           </section>
           <section id="library" className="panel" hidden={tab !== 'library'}>
             <div className="section-title">
@@ -1224,96 +1213,34 @@ export function App() {
             )}
           </section>
           <section id="appearance" className="panel" hidden={tab !== 'appearance'}>
-            <div className="section-title">
-              <h2>{view.model?.name ?? '你的角色'}</h2>
-              <Button variant="ghost" size="sm" onClick={() => setTab('library')}>
-                切换角色
-              </Button>
-            </div>
-            <p id="capabilities" className="hint">
-              {!view.model
-                ? '加载模型后显示可驱动的动作。'
-                : common.length
-                  ? `可驱动：${common.map((p) => parameterNames[p.id]).join('、')}`
-                  : '未发现常见面捕参数，可在「角色」页为模型参数配置映射。'}
-            </p>
-            <div className="divider" />
-            <div className="section-title">
-              <h2>角色构图</h2>
-              <Button
-                id="reset-display"
-                variant="ghost"
-                size="sm"
-                onClick={() => a?.resetDisplay()}
-              >
-                复位
-              </Button>
-            </div>
-            <Toggle
-              id="modelVisible"
-              label="显示主角色"
-              checked={s.modelVisible}
-              onChange={(value) => set('modelVisible', value)}
-            />
-            {range('zoom', '角色缩放', 0.05, 10, 0.05)}
-            {range('x', '水平位置', -0.8, 0.8, 0.01)}
-            {range('y', '垂直位置', -3, 3, 0.01)}
-            {range('rotation', '角色旋转', -180, 180, 1)}
-            <label htmlFor="background">输出背景</label>
-            <div className="color-row">
-              <Input
-                id="background"
-                type="color"
-                value={s.background}
-                onChange={(e) => set('background', e.target.value)}
-              />
-              {[
-                ['#e5ebdd', '浅叶绿'],
-                ['#1c2926', '深松绿'],
-                ['#00ff00', '色键绿'],
-                ['#f3ede5', '暖白'],
-              ].map(([color, label]) => (
-                <Button
-                  key={color}
-                  variant="outline"
-                  className="swatch"
-                  data-color={color}
-                  style={{ background: color }}
-                  aria-label={label}
-                  aria-pressed={s.background === color}
-                  onClick={() => set('background', color)}
+            {a && (
+              <SceneControls view={view} actions={a}>
+                <div className="section-title">
+                  <h2>角色构图</h2>
+                  <Button
+                    id="reset-display"
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => a?.resetDisplay()}
+                  >
+                    复位
+                  </Button>
+                </div>
+                <Toggle
+                  id="modelVisible"
+                  label="显示主角色"
+                  checked={s.modelVisible}
+                  onChange={(value) => set('modelVisible', value)}
                 />
-              ))}
-            </div>
-            <Toggle
-              id="outputTransparent"
-              label="独立窗口透明背景"
-              note="不显示背景色和背景图，切换时会重开窗口"
-              checked={s.outputTransparent}
-              onChange={(value) => set('outputTransparent', value)}
-            />
-            <p className="hint">
-              直播模式显示角色、道具和背景，按 Esc 恢复界面。色键可在 OBS 中配置。
-            </p>
-            <div className="divider" />
-            <div className="section-title">
-              <h2>渲染质量</h2>
-            </div>
-            <label htmlFor="render-fps">角色渲染帧率</label>
-            <Select
-              value={String(s.renderFps)}
-              onValueChange={(value) => set('renderFps', Number(value) as Settings['renderFps'])}
-            >
-              <SelectTrigger id="render-fps">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="30">30 FPS · 省电</SelectItem>
-                <SelectItem value="60">60 FPS · 流畅</SelectItem>
-              </SelectContent>
-            </Select>
-            {toggle('supersample', '高清渲染（2 倍超采样，显卡吃力时关闭）')}
-            {a && <SceneControls view={view} actions={a} />}
+                <p className="hint">在舞台上拖动移动、滚轮缩放。</p>
+                <Fold title="构图数值">
+                  {range('zoom', '角色缩放', 0.05, 10, 0.05)}
+                  {range('x', '水平位置', -0.8, 0.8, 0.01)}
+                  {range('y', '垂直位置', -3, 3, 0.01)}
+                  {range('rotation', '角色旋转', -180, 180, 1)}
+                </Fold>
+              </SceneControls>
+            )}
           </section>
           <section id="model-controls" className="panel" hidden={tab !== 'model-controls'}>
             {a && <ModelControls key={view.model?.path} view={view} actions={a} />}
@@ -1434,13 +1361,15 @@ export function App() {
                   </AlertDialog.Root>
                 </div>
                 {toggle('autoStartVirtualCamera', '开始跟踪时自动输出', !camera.installed)}
-                {toggle('autoStopVirtualCamera', '停止跟踪时自动停止输出', !camera.installed)}
-                {toggle('virtualCameraMirror', '镜像输出', !camera.installed)}
-                <p className="hint">
-                  Windows 安装到当前用户；macOS
-                  首次安装需按系统提示允许摄像头扩展。启动后，在直播或视频软件中选择 VTubeLeaf
-                  Camera。只输出角色、道具和背景；麦克风在所用软件中单独选择。
-                </p>
+                <Fold title="更多输出选项">
+                  {toggle('autoStopVirtualCamera', '停止跟踪时自动停止输出', !camera.installed)}
+                  {toggle('virtualCameraMirror', '镜像输出', !camera.installed)}
+                  <p className="hint">
+                    Windows 安装到当前用户；macOS
+                    首次安装需按系统提示允许摄像头扩展。启动后，在直播或视频软件中选择 VTubeLeaf
+                    Camera。只输出角色、道具和背景；麦克风在所用软件中单独选择。
+                  </p>
+                </Fold>
               </Tabs.Content>
               <Tabs.Content value="obs">
                 <div className="section-title">
@@ -1534,79 +1463,101 @@ export function App() {
                         : '启动透明输出'}
                   </Button>
                 </div>
-                <p className="hint">
-                  {obsNative
-                    ? `${view.obsOutput.native} 直接共享画面，延迟和占用最低；浏览器源无需插件，画质为 720p。`
-                    : '地址仅限本机使用。'}
-                  保留半透明边缘，纯色和背景图自动排除，停止输出后画面清空。
-                </p>
-                <ol className="guide">
-                  {[
-                    ...(view.obsOutput.native === 'Spout2' && obsNative
-                      ? [
-                          [
-                            '为 OBS 安装 Spout2 插件',
-                            '安装 OBS Spout2 插件（obs-spout2-plugin）并重启 OBS。只需安装一次。',
-                          ],
-                        ]
-                      : []),
-                    obsNative
-                      ? ['启动透明输出', '点击「启动透明输出」。保持 VTubeLeaf 运行。']
-                      : [
-                          '启动并复制地址',
-                          '点击「启动透明输出」，复制上方浏览器源地址。保持 VTubeLeaf 运行。',
-                        ],
-                    !obsNative
-                      ? [
-                          '在 OBS 添加浏览器源',
-                          '添加「浏览器」来源，粘贴地址，宽度设为 1280、高度 720，帧率设为 30。无需色键或额外插件。',
-                        ]
-                      : view.obsOutput.native === 'Spout2'
+                <Fold title="OBS 设置步骤">
+                  <p className="hint">
+                    {obsNative
+                      ? `${view.obsOutput.native} 直接共享画面，延迟和占用最低；浏览器源无需插件，画质为 720p。`
+                      : '地址仅限本机使用。'}
+                    保留半透明边缘，纯色和背景图自动排除，停止输出后画面清空。
+                  </p>
+                  <ol className="guide">
+                    {[
+                      ...(view.obsOutput.native === 'Spout2' && obsNative
                         ? [
-                            '在 OBS 添加 Spout2 来源',
-                            '添加「Spout2 Capture」来源，「Spout Senders」选择 VTubeLeaf，「Composite mode」选择 Premultiplied Alpha。',
+                            [
+                              '为 OBS 安装 Spout2 插件',
+                              '安装 OBS Spout2 插件（obs-spout2-plugin）并重启 OBS。只需安装一次。',
+                            ],
                           ]
+                        : []),
+                      obsNative
+                        ? ['启动透明输出', '点击「启动透明输出」。保持 VTubeLeaf 运行。']
                         : [
-                            '在 OBS 添加 Syphon 来源',
-                            '添加「Syphon客户端」来源，「来源」选择 VTubeLeaf，并勾选「允许透明度」。无需色键或额外插件。',
+                            '启动并复制地址',
+                            '点击「启动透明输出」，复制上方浏览器源地址。保持 VTubeLeaf 运行。',
                           ],
-                    [
-                      '在 OBS 合成背景',
-                      '将游戏、视频或背景放在此来源下方。麦克风在 OBS 中单独添加。',
-                    ],
-                    [
-                      '在直播或视频软件中选择摄像头',
-                      '选择 OBS Virtual Camera；麦克风仍使用你原来的设备。',
-                    ],
-                  ].map(([title, text]) => (
-                    <li key={title}>
-                      <b>{title}</b>
-                      <p>{text}</p>
-                    </li>
-                  ))}
-                </ol>
-                <p className="hint">
-                  需要保留 VTubeLeaf 背景时，可使用「独立输出窗口」并在 OBS 捕获 VTubeLeaf Output。
-                  Windows 使用窗口捕获，macOS 使用 macOS 屏幕捕获，Linux Wayland 使用 PipeWire
-                  捕获。视频会议可在 OBS 启动虚拟摄像头后选择 OBS Virtual Camera；Linux 需先安装
-                  v4l2loopback。
-                </p>
+                      !obsNative
+                        ? [
+                            '在 OBS 添加浏览器源',
+                            '添加「浏览器」来源，粘贴地址，宽度设为 1280、高度 720，帧率设为 30。无需色键或额外插件。',
+                          ]
+                        : view.obsOutput.native === 'Spout2'
+                          ? [
+                              '在 OBS 添加 Spout2 来源',
+                              '添加「Spout2 Capture」来源，「Spout Senders」选择 VTubeLeaf，「Composite mode」选择 Premultiplied Alpha。',
+                            ]
+                          : [
+                              '在 OBS 添加 Syphon 来源',
+                              '添加「Syphon客户端」来源，「来源」选择 VTubeLeaf，并勾选「允许透明度」。无需色键或额外插件。',
+                            ],
+                      [
+                        '在 OBS 合成背景',
+                        '将游戏、视频或背景放在此来源下方。麦克风在 OBS 中单独添加。',
+                      ],
+                      [
+                        '在直播或视频软件中选择摄像头',
+                        '选择 OBS Virtual Camera；麦克风仍使用你原来的设备。',
+                      ],
+                    ].map(([title, text]) => (
+                      <li key={title}>
+                        <b>{title}</b>
+                        <p>{text}</p>
+                      </li>
+                    ))}
+                  </ol>
+                  <p className="hint">
+                    需要保留 VTubeLeaf 背景时，可使用「独立输出窗口」并在 OBS 捕获 VTubeLeaf
+                    Output。 Windows 使用窗口捕获，macOS 使用 macOS 屏幕捕获，Linux Wayland 使用
+                    PipeWire 捕获。视频会议可在 OBS 启动虚拟摄像头后选择 OBS Virtual Camera；Linux
+                    需先安装 v4l2loopback。
+                  </p>
+                </Fold>
               </Tabs.Content>
             </Tabs.Root>
-            <div className="privacy-note">
-              <b>你的人脸，留在你的电脑。</b>
-              <p>
-                不上传摄像头画面，仅在手动录制时保存角色参数，不采集声音。运行记录只保留本次会话的错误提示。
+            <Fold title="画质与通用设置">
+              <label htmlFor="render-fps">角色渲染帧率</label>
+              <Select
+                value={String(s.renderFps)}
+                onValueChange={(value) => set('renderFps', Number(value) as Settings['renderFps'])}
+              >
+                <SelectTrigger id="render-fps">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="30">30 FPS · 省电</SelectItem>
+                  <SelectItem value="60">60 FPS · 流畅</SelectItem>
+                </SelectContent>
+              </Select>
+              {toggle('supersample', '高清渲染（2 倍超采样，显卡吃力时关闭）')}
+              <Toggle
+                id="outputTransparent"
+                label="独立窗口透明背景"
+                note="不显示背景色和背景图，切换时会重开窗口"
+                checked={s.outputTransparent}
+                onChange={(value) => set('outputTransparent', value)}
+              />
+              <p className="hint">
+                直播模式显示角色、道具和背景，按 Esc 恢复界面。色键可在 OBS 中配置。
               </p>
-            </div>
-            <Button
-              id="reset-all"
-              variant="outline"
-              className="wide"
-              onClick={() => run(() => a?.resetAll())}
-            >
-              恢复默认设置
-            </Button>
+              <Button
+                id="reset-all"
+                variant="outline"
+                className="wide"
+                onClick={() => run(() => a?.resetAll())}
+              >
+                恢复默认设置
+              </Button>
+            </Fold>
           </section>
           <footer className="panel-footer">
             <Sparkles className="leaf-dot" aria-hidden="true" />
@@ -1697,15 +1648,9 @@ function ModelControls({ view, actions: a }: { view: StudioView; actions: Studio
   const [mode, setMode] = useState<MotionMode | 'default'>('default');
   const parameter = parameters.find((p) => p.id === parameterId) ?? parameters[0];
   const run = a.run;
+  const common = view.parameters.filter((p) => Object.hasOwn(parameterNames, p.id));
   return (
     <>
-      <Toggle
-        id="use-keyboard-hotkeys"
-        label="使用键盘快捷键"
-        checked={view.settings.useKeyboardHotkeys}
-        onChange={(value) => a.setSetting('useKeyboardHotkeys', value)}
-      />
-      <p className="hint">按角色保存。关闭后保留按键绑定，仍可点击表情和动作按钮。</p>
       <div className="section-title">
         <h2>表情</h2>
         <Button
@@ -1718,17 +1663,6 @@ function ModelControls({ view, actions: a }: { view: StudioView; actions: Studio
           <HotkeyHint binding={view.settings.hotkeys['clear-expressions']} />
         </Button>
       </div>
-      {!!view.model?.vtsResources?.warnings.length && (
-        <Fold title={`模型资源提示（${view.model.vtsResources.warnings.length}）`}>
-          <div className="max-h-64 overflow-y-auto" role="status" tabIndex={0}>
-            {view.model.vtsResources.warnings.map((warning, index) => (
-              <p key={index} className="hint">
-                {warning}
-              </p>
-            ))}
-          </div>
-        </Fold>
-      )}
       <div id="expression-buttons" className="button-list">
         {view.expressions.map((e) => (
           <Button
@@ -1746,34 +1680,9 @@ function ModelControls({ view, actions: a }: { view: StudioView; actions: Studio
           <p className="hint">{view.model ? '模型未提供此类资源。' : '加载模型后可用。'}</p>
         )}
       </div>
-      <p className="hint">
-        点击表情按钮切换，再次点击关闭；按钮旁显示已绑定的快捷键，可在「进阶设置 →
-        应用快捷键」修改。
-      </p>
-      <div className="two-fields">
-        <Button
-          id="save-default-appearance"
-          variant="outline"
-          disabled={!view.model}
-          onClick={() => run(a.saveDefaultAppearance)}
-        >
-          保存默认外观
-        </Button>
-        <Button
-          id="restore-default-appearance"
-          variant="outline"
-          disabled={!view.model}
-          onClick={() => run(a.restoreDefaultAppearance)}
-        >
-          恢复默认外观
-        </Button>
-      </div>
-      <p className="hint">
-        保存当前启用的表情、保持动作的姿势和手动参数；请等动作播放结束后再保存。手动参数可在进阶设置中调整。
-      </p>
       <div className="divider" />
       <div className="section-title">
-        <h2>动作与待机</h2>
+        <h2>动作</h2>
         <Button
           id="stop-motion"
           variant="ghost"
@@ -1808,368 +1717,410 @@ function ModelControls({ view, actions: a }: { view: StudioView; actions: Studio
           <p className="hint">{view.model ? '模型未提供此类资源。' : '加载模型后可用。'}</p>
         )}
       </div>
-      <details id="model-advanced" className="fold model-advanced">
-        <summary>进阶设置</summary>
-        <div className="fold-content">
-          <div className="section-title">
-            <h2>角色参数</h2>
-            <AlertDialog.Root>
-              <AlertDialog.Trigger asChild>
-                <Button id="reset-profile" variant="ghost" size="sm" disabled={!view.model}>
-                  重置本模型
-                </Button>
-              </AlertDialog.Trigger>
-              <AlertDialog.Portal>
-                <AlertDialog.Overlay className="fixed inset-0 z-40 bg-black/30" />
-                <AlertDialog.Content className="fixed top-1/2 left-1/2 z-50 w-[calc(100%_-_2rem)] max-w-sm -translate-x-1/2 -translate-y-1/2 rounded-2xl border bg-background p-6 shadow-lg">
-                  <AlertDialog.Title className="text-lg font-medium">
-                    重置「{view.model?.name}」？
-                  </AlertDialog.Title>
-                  <AlertDialog.Description className="mt-2 text-sm text-muted-foreground">
-                    将清除该模型的手动参数、映射、校准、构图、快捷键和待机设置。此操作无法撤销。
-                  </AlertDialog.Description>
-                  <div className="mt-5 flex justify-end gap-2">
-                    <AlertDialog.Cancel asChild>
-                      <Button variant="outline">取消</Button>
-                    </AlertDialog.Cancel>
-                    <AlertDialog.Action asChild>
-                      <Button variant="destructive" onClick={() => run(a.resetProfile)}>
-                        确认重置
-                      </Button>
-                    </AlertDialog.Action>
-                  </div>
-                </AlertDialog.Content>
-              </AlertDialog.Portal>
-            </AlertDialog.Root>
-          </div>
-          <p className="hint">手动参数、映射、校准、构图、快捷键和待机设置按模型自动保存。</p>
-          <div className="button-list">
-            <Button
-              id="import-vts"
-              variant="outline"
-              disabled={!view.model || view.modelLoading || view.sceneBusy}
-              onClick={() => run(a.importVts)}
-            >
-              导入 VTube Studio 配置
-            </Button>
-            <Button
-              id="reapply-vts"
-              variant="outline"
-              disabled={!view.model || view.modelLoading || view.sceneBusy}
-              onClick={() => run(() => a.importVts('model'))}
-            >
-              重新应用随模型配置
-            </Button>
-          </div>
-          <p className="hint">
-            选择当前模型的
-            .vtube.json，或重新应用随模型保存的配置。会覆盖对应的映射、快捷键和待机设置，并更新导入结果。
-          </p>
-          {!!view.settings.vtsImportReport.length && (
-            <Fold title="VTS 导入结果">
-              <div className="max-h-64 overflow-y-auto" tabIndex={0}>
-                {view.settings.vtsImportReport.map((line, index) => (
-                  <p key={index} className="hint">
-                    {line}
-                  </p>
-                ))}
-              </div>
+      <Fold title="动作与待机设置">
+        <label htmlFor="motion-mode">播放方式</label>
+        <Select
+          value={mode}
+          onValueChange={(value) => {
+            const next = value as MotionMode | 'default';
+            a.motionMode = next === 'default' ? 'once' : next;
+            setMode(next);
+          }}
+        >
+          <SelectTrigger id="motion-mode">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="default">跟随动作设置</SelectItem>
+            <SelectItem value="once">单次</SelectItem>
+            <SelectItem value="loop">循环</SelectItem>
+            <SelectItem value="hold">保持末帧</SelectItem>
+          </SelectContent>
+        </Select>
+        <label htmlFor="idle-motion">待机动作</label>
+        <Select
+          value={view.settings.idleMotion || 'no-motion'}
+          onValueChange={(value) => a.setSetting('idleMotion', value === 'no-motion' ? '' : value)}
+        >
+          <SelectTrigger id="idle-motion">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="no-motion">不播放</SelectItem>
+            {view.motions.map((m) => (
+              <SelectItem key={m.id} value={m.id}>
+                {m.name}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        <label htmlFor="lost-idle-motion">跟踪丢失时的待机动作</label>
+        <Select
+          value={view.settings.lostIdleMotion || 'default-motion'}
+          onValueChange={(value) =>
+            a.setSetting('lostIdleMotion', value === 'default-motion' ? '' : value)
+          }
+        >
+          <SelectTrigger id="lost-idle-motion">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="default-motion">跟随普通待机</SelectItem>
+            {view.motions.map((m) => (
+              <SelectItem key={m.id} value={m.id}>
+                {m.name}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        <Toggle
+          id="motion-sound"
+          label="播放动作附带的声音"
+          checked={view.settings.motionSound}
+          onChange={(value) => a.setSetting('motionSound', value)}
+        />
+        <Toggle
+          id="autoBlink"
+          label="未跟踪眼睛时自动眨眼"
+          checked={view.settings.autoBlink}
+          onChange={(value) => a.setSetting('autoBlink', value)}
+        />
+      </Fold>
+      <Fold title="快捷键">
+        <Toggle
+          id="use-keyboard-hotkeys"
+          label="使用键盘快捷键"
+          checked={view.settings.useKeyboardHotkeys}
+          onChange={(value) => a.setSetting('useKeyboardHotkeys', value)}
+        />
+        <p className="hint">按角色保存。关闭后保留按键绑定，仍可点击表情和动作按钮。</p>
+
+        <p className="hint">
+          选择动作后填写按键，如 Space 或
+          Control+Shift+1。仅在应用窗口激活时生效，输入文字时不触发。表情的按住、定时和过渡行为可单独设置。
+        </p>
+        <label htmlFor="hotkey-action">操作</label>
+        <Select value={hotkeyId} onValueChange={(value) => setHotkey(value)}>
+          <SelectTrigger id="hotkey-action">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="toggle-tracking">开始 / 停止跟踪</SelectItem>
+            <SelectItem value="calibrate">校准中立姿态</SelectItem>
+            <SelectItem value="toggle-mic">开启 / 关闭麦克风口型</SelectItem>
+            <SelectItem value="toggle-model">显示 / 隐藏主角色</SelectItem>
+            <SelectItem value="toggle-camera">启动 / 停止虚拟摄像头</SelectItem>
+            <SelectItem value="pause-tracking">暂停 / 恢复跟踪</SelectItem>
+            <SelectItem value="stop-tracking">停止跟踪并释放采集设备</SelectItem>
+            <SelectItem value="reset-display">复位角色构图</SelectItem>
+            <SelectItem value="open-output">打开输出窗口</SelectItem>
+            {view.settings.scenes.map((scene) => (
+              <SelectItem key={scene.id} value={`scene:${scene.id}`}>
+                场景 · {scene.name}
+              </SelectItem>
+            ))}
+            {view.settings.composition.items.map((item) => (
+              <SelectItem key={item.id} value={`item:${item.id}`}>
+                显示 / 隐藏 · {item.name}
+              </SelectItem>
+            ))}
+            <SelectItem value="stop-motion">
+              停止动作
+              {view.settings.hotkeys['stop-motion'] &&
+                ` · ${hotkeyLabel(view.settings.hotkeys['stop-motion'])}`}
+            </SelectItem>
+            <SelectItem value="clear-expressions">
+              关闭全部表情
+              {view.settings.hotkeys['clear-expressions'] &&
+                ` · ${hotkeyLabel(view.settings.hotkeys['clear-expressions'])}`}
+            </SelectItem>
+            {view.expressions.map((e) => (
+              <SelectItem key={e.id} value={`expression:${e.id}`}>
+                表情 · {e.name}
+                {view.settings.hotkeys[`expression:${e.id}`] &&
+                  ` · ${hotkeyLabel(view.settings.hotkeys[`expression:${e.id}`])}`}
+              </SelectItem>
+            ))}
+            {view.motions.map((m) => (
+              <SelectItem key={m.id} value={`motion:${m.id}`}>
+                动作 · {m.name}
+                {view.settings.hotkeys[`motion:${m.id}`] &&
+                  ` · ${hotkeyLabel(view.settings.hotkeys[`motion:${m.id}`])}`}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        <HotkeyEditor
+          key={`${hotkeyId}:${view.profileRevision}`}
+          id={hotkeyId}
+          view={view}
+          actions={a}
+        />
+      </Fold>
+      <Fold title="高级">
+        <p id="capabilities" className="hint">
+          {!view.model
+            ? '加载模型后显示可驱动的动作。'
+            : common.length
+              ? `可驱动：${common.map((p) => parameterNames[p.id]).join('、')}`
+              : '未发现常见面捕参数，可在下方「手动参数与映射」中配置。'}
+        </p>
+        {!!view.model?.vtsResources?.warnings.length && (
+          <Fold title={`模型资源提示（${view.model.vtsResources.warnings.length}）`}>
+            <div className="max-h-64 overflow-y-auto" role="status" tabIndex={0}>
+              {view.model.vtsResources.warnings.map((warning, index) => (
+                <p key={index} className="hint">
+                  {warning}
+                </p>
+              ))}
+            </div>
+          </Fold>
+        )}
+        <div className="section-title">
+          <h2>角色参数</h2>
+          <AlertDialog.Root>
+            <AlertDialog.Trigger asChild>
+              <Button id="reset-profile" variant="ghost" size="sm" disabled={!view.model}>
+                重置本模型
+              </Button>
+            </AlertDialog.Trigger>
+            <AlertDialog.Portal>
+              <AlertDialog.Overlay className="fixed inset-0 z-40 bg-black/30" />
+              <AlertDialog.Content className="fixed top-1/2 left-1/2 z-50 w-[calc(100%_-_2rem)] max-w-sm -translate-x-1/2 -translate-y-1/2 rounded-2xl border bg-background p-6 shadow-lg">
+                <AlertDialog.Title className="text-lg font-medium">
+                  重置「{view.model?.name}」？
+                </AlertDialog.Title>
+                <AlertDialog.Description className="mt-2 text-sm text-muted-foreground">
+                  将清除该模型的手动参数、映射、校准、构图、快捷键和待机设置。此操作无法撤销。
+                </AlertDialog.Description>
+                <div className="mt-5 flex justify-end gap-2">
+                  <AlertDialog.Cancel asChild>
+                    <Button variant="outline">取消</Button>
+                  </AlertDialog.Cancel>
+                  <AlertDialog.Action asChild>
+                    <Button variant="destructive" onClick={() => run(a.resetProfile)}>
+                      确认重置
+                    </Button>
+                  </AlertDialog.Action>
+                </div>
+              </AlertDialog.Content>
+            </AlertDialog.Portal>
+          </AlertDialog.Root>
+        </div>
+        <p className="hint">手动参数、映射、校准、构图、快捷键和待机设置按模型自动保存。</p>
+        <div className="button-list">
+          <Button
+            id="import-vts"
+            variant="outline"
+            disabled={!view.model || view.modelLoading || view.sceneBusy}
+            onClick={() => run(a.importVts)}
+          >
+            导入 VTube Studio 配置
+          </Button>
+          <Button
+            id="reapply-vts"
+            variant="outline"
+            disabled={!view.model || view.modelLoading || view.sceneBusy}
+            onClick={() => run(() => a.importVts('model'))}
+          >
+            重新应用随模型配置
+          </Button>
+        </div>
+        <p className="hint">
+          选择当前模型的
+          .vtube.json，或重新应用随模型保存的配置。会覆盖对应的映射、快捷键和待机设置，并更新导入结果。
+        </p>
+        {!!view.settings.vtsImportReport.length && (
+          <Fold title="VTS 导入结果">
+            <div className="max-h-64 overflow-y-auto" tabIndex={0}>
+              {view.settings.vtsImportReport.map((line, index) => (
+                <p key={index} className="hint">
+                  {line}
+                </p>
+              ))}
+            </div>
+          </Fold>
+        )}
+        <div className="divider" />
+        <div className="section-title">
+          <h2>手动参数与映射</h2>
+        </div>
+        <p className="hint">
+          可按名称、参数 ID
+          或分组搜索。手动固定值优先于跟踪、表情和动作；关闭后恢复模型原有驱动。吐舌等当前引擎没有信号的参数也可手动调整。
+        </p>
+        <label htmlFor="parameter-search">搜索参数</label>
+        <Input
+          id="parameter-search"
+          type="search"
+          placeholder="名称、ID 或分组"
+          value={parameterSearch}
+          onChange={(e) => setParameterSearch(e.target.value)}
+        />
+        <label htmlFor="parameter-group">参数分组</label>
+        <Select
+          value={parameterGroup || 'all-groups'}
+          onValueChange={(value) => setParameterGroup(value === 'all-groups' ? '' : value)}
+          disabled={!view.parameters.length}
+        >
+          <SelectTrigger id="parameter-group">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all-groups">全部分组</SelectItem>
+            {groups.map((group) => (
+              <SelectItem key={group} value={group}>
+                {group}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        <label htmlFor="mapping-parameter">输出参数（{parameters.length}）</label>
+        <Select
+          disabled={!parameters.length}
+          value={(parameter?.id ?? '') || 'no-parameter'}
+          onValueChange={(value) => setParameter(value === 'no-parameter' ? '' : value)}
+        >
+          <SelectTrigger id="mapping-parameter">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            {!parameters.length && (
+              <SelectItem value="no-parameter">
+                {view.parameters.length ? '没有匹配的参数' : '加载模型后可用'}
+              </SelectItem>
+            )}
+            {parameters.map((p) => (
+              <SelectItem key={p.id} value={p.id}>
+                {p.name || parameterNames[p.id] || p.id}
+                {p.name || parameterNames[p.id] ? ` (${p.id})` : ''}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        {parameter && (
+          <>
+            <ParameterOverride parameter={parameter} view={view} actions={a} />
+            <Fold title="跟踪映射">
+              <MappingEditor
+                key={`${parameter.id}:${view.profileRevision}`}
+                parameter={parameter}
+                view={view}
+                actions={a}
+              />
             </Fold>
-          )}
-          <div className="divider" />
-          <div className="section-title">
-            <h2>手动参数与映射</h2>
-          </div>
-          <p className="hint">
-            可按名称、参数 ID
-            或分组搜索。手动固定值优先于跟踪、表情和动作；关闭后恢复模型原有驱动。吐舌等当前引擎没有信号的参数也可手动调整。
-          </p>
-          <label htmlFor="parameter-search">搜索参数</label>
-          <Input
-            id="parameter-search"
-            type="search"
-            placeholder="名称、ID 或分组"
-            value={parameterSearch}
-            onChange={(e) => setParameterSearch(e.target.value)}
-          />
-          <label htmlFor="parameter-group">参数分组</label>
-          <Select
-            value={parameterGroup || 'all-groups'}
-            onValueChange={(value) => setParameterGroup(value === 'all-groups' ? '' : value)}
-            disabled={!view.parameters.length}
-          >
-            <SelectTrigger id="parameter-group">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all-groups">全部分组</SelectItem>
-              {groups.map((group) => (
-                <SelectItem key={group} value={group}>
-                  {group}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-          <label htmlFor="mapping-parameter">输出参数（{parameters.length}）</label>
-          <Select
-            disabled={!parameters.length}
-            value={(parameter?.id ?? '') || 'no-parameter'}
-            onValueChange={(value) => setParameter(value === 'no-parameter' ? '' : value)}
-          >
-            <SelectTrigger id="mapping-parameter">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {!parameters.length && (
-                <SelectItem value="no-parameter">
-                  {view.parameters.length ? '没有匹配的参数' : '加载模型后可用'}
-                </SelectItem>
-              )}
-              {parameters.map((p) => (
-                <SelectItem key={p.id} value={p.id}>
-                  {p.name || parameterNames[p.id] || p.id}
-                  {p.name || parameterNames[p.id] ? ` (${p.id})` : ''}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-          {parameter && (
+          </>
+        )}
+        <Fold title="物理效果">
+          {!view.physicsGroups.length ? (
+            <p className="hint">当前模型没有可调节的物理组。</p>
+          ) : (
             <>
-              <ParameterOverride parameter={parameter} view={view} actions={a} />
-              <Fold title="跟踪映射">
-                <MappingEditor
-                  key={`${parameter.id}:${view.profileRevision}`}
-                  parameter={parameter}
-                  view={view}
-                  actions={a}
-                />
-              </Fold>
-            </>
-          )}
-          <Fold title="物理效果">
-            {!view.physicsGroups.length ? (
-              <p className="hint">当前模型没有可调节的物理组。</p>
-            ) : (
-              <>
+              <Range
+                id="physicsStrength"
+                label="整体强度"
+                value={view.settings.physicsStrength}
+                min={0}
+                max={2}
+                step={0.05}
+                onChange={(value) => a.setSetting('physicsStrength', value)}
+              />
+              <Range
+                id="physicsWind"
+                label="横向风力"
+                value={view.settings.physicsWind}
+                min={-2}
+                max={2}
+                step={0.05}
+                onChange={(value) => a.setSetting('physicsWind', value)}
+              />
+              <label htmlFor="physics-fps">物理计算帧率</label>
+              <Select
+                value={String(view.settings.physicsFps)}
+                onValueChange={(value) => a.setSetting('physicsFps', Number(value) as 0 | 30 | 60)}
+              >
+                <SelectTrigger id="physics-fps">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="0">跟随画面帧率</SelectItem>
+                  <SelectItem value="30">30 FPS</SelectItem>
+                  <SelectItem value="60">60 FPS</SelectItem>
+                </SelectContent>
+              </Select>
+              {view.physicsGroups.map((group) => (
                 <Range
-                  id="physicsStrength"
-                  label="整体强度"
-                  value={view.settings.physicsStrength}
+                  key={group.id}
+                  id={`physics-group-${group.id}`}
+                  label={group.name}
+                  value={view.settings.physicsGroups[group.id] ?? 1}
                   min={0}
                   max={2}
                   step={0.05}
-                  onChange={(value) => a.setSetting('physicsStrength', value)}
-                />
-                <Range
-                  id="physicsWind"
-                  label="横向风力"
-                  value={view.settings.physicsWind}
-                  min={-2}
-                  max={2}
-                  step={0.05}
-                  onChange={(value) => a.setSetting('physicsWind', value)}
-                />
-                <label htmlFor="physics-fps">物理计算帧率</label>
-                <Select
-                  value={String(view.settings.physicsFps)}
-                  onValueChange={(value) =>
-                    a.setSetting('physicsFps', Number(value) as 0 | 30 | 60)
+                  onChange={(value) =>
+                    a.setSetting('physicsGroups', {
+                      ...view.settings.physicsGroups,
+                      [group.id]: value,
+                    })
                   }
-                >
-                  <SelectTrigger id="physics-fps">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="0">跟随画面帧率</SelectItem>
-                    <SelectItem value="30">30 FPS</SelectItem>
-                    <SelectItem value="60">60 FPS</SelectItem>
-                  </SelectContent>
-                </Select>
-                {view.physicsGroups.map((group) => (
-                  <Range
-                    key={group.id}
-                    id={`physics-group-${group.id}`}
-                    label={group.name}
-                    value={view.settings.physicsGroups[group.id] ?? 1}
-                    min={0}
-                    max={2}
-                    step={0.05}
-                    onChange={(value) =>
-                      a.setSetting('physicsGroups', {
-                        ...view.settings.physicsGroups,
-                        [group.id]: value,
-                      })
-                    }
-                  />
-                ))}
-              </>
-            )}
-          </Fold>
-          <div className="divider" />
-          <div className="section-title">
-            <h2>动作设置</h2>
-          </div>
-          <label htmlFor="motion-mode">播放方式</label>
-          <Select
-            value={mode}
-            onValueChange={(value) => {
-              const next = value as MotionMode | 'default';
-              a.motionMode = next === 'default' ? 'once' : next;
-              setMode(next);
-            }}
-          >
-            <SelectTrigger id="motion-mode">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="default">跟随动作设置</SelectItem>
-              <SelectItem value="once">单次</SelectItem>
-              <SelectItem value="loop">循环</SelectItem>
-              <SelectItem value="hold">保持末帧</SelectItem>
-            </SelectContent>
-          </Select>
-          <label htmlFor="idle-motion">待机动作</label>
-          <Select
-            value={view.settings.idleMotion || 'no-motion'}
-            onValueChange={(value) =>
-              a.setSetting('idleMotion', value === 'no-motion' ? '' : value)
-            }
-          >
-            <SelectTrigger id="idle-motion">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="no-motion">不播放</SelectItem>
-              {view.motions.map((m) => (
-                <SelectItem key={m.id} value={m.id}>
-                  {m.name}
-                </SelectItem>
+                />
               ))}
-            </SelectContent>
-          </Select>
-          <label htmlFor="lost-idle-motion">跟踪丢失时的待机动作</label>
-          <Select
-            value={view.settings.lostIdleMotion || 'default-motion'}
-            onValueChange={(value) =>
-              a.setSetting('lostIdleMotion', value === 'default-motion' ? '' : value)
-            }
-          >
-            <SelectTrigger id="lost-idle-motion">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="default-motion">跟随普通待机</SelectItem>
-              {view.motions.map((m) => (
-                <SelectItem key={m.id} value={m.id}>
-                  {m.name}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-          <Toggle
-            id="motion-sound"
-            label="播放动作附带的声音"
-            checked={view.settings.motionSound}
-            onChange={(value) => a.setSetting('motionSound', value)}
-          />
-          <Toggle
-            id="autoBlink"
-            label="未跟踪眼睛时自动眨眼"
-            checked={view.settings.autoBlink}
-            onChange={(value) => a.setSetting('autoBlink', value)}
-          />
-          <Fold title="应用快捷键">
-            <p className="hint">
-              选择动作后填写按键，如 Space 或
-              Control+Shift+1。仅在应用窗口激活时生效，输入文字时不触发。表情的按住、定时和过渡行为可单独设置。
-            </p>
-            <label htmlFor="hotkey-action">操作</label>
-            <Select value={hotkeyId} onValueChange={(value) => setHotkey(value)}>
-              <SelectTrigger id="hotkey-action">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="toggle-tracking">开始 / 停止跟踪</SelectItem>
-                <SelectItem value="calibrate">校准中立姿态</SelectItem>
-                <SelectItem value="toggle-mic">开启 / 关闭麦克风口型</SelectItem>
-                <SelectItem value="toggle-model">显示 / 隐藏主角色</SelectItem>
-                <SelectItem value="toggle-camera">启动 / 停止虚拟摄像头</SelectItem>
-                <SelectItem value="pause-tracking">暂停 / 恢复跟踪</SelectItem>
-                <SelectItem value="stop-tracking">停止跟踪并释放采集设备</SelectItem>
-                <SelectItem value="reset-display">复位角色构图</SelectItem>
-                <SelectItem value="open-output">打开输出窗口</SelectItem>
-                {view.settings.scenes.map((scene) => (
-                  <SelectItem key={scene.id} value={`scene:${scene.id}`}>
-                    场景 · {scene.name}
-                  </SelectItem>
-                ))}
-                {view.settings.composition.items.map((item) => (
-                  <SelectItem key={item.id} value={`item:${item.id}`}>
-                    显示 / 隐藏 · {item.name}
-                  </SelectItem>
-                ))}
-                <SelectItem value="stop-motion">
-                  停止动作
-                  {view.settings.hotkeys['stop-motion'] &&
-                    ` · ${hotkeyLabel(view.settings.hotkeys['stop-motion'])}`}
-                </SelectItem>
-                <SelectItem value="clear-expressions">
-                  关闭全部表情
-                  {view.settings.hotkeys['clear-expressions'] &&
-                    ` · ${hotkeyLabel(view.settings.hotkeys['clear-expressions'])}`}
-                </SelectItem>
-                {view.expressions.map((e) => (
-                  <SelectItem key={e.id} value={`expression:${e.id}`}>
-                    表情 · {e.name}
-                    {view.settings.hotkeys[`expression:${e.id}`] &&
-                      ` · ${hotkeyLabel(view.settings.hotkeys[`expression:${e.id}`])}`}
-                  </SelectItem>
-                ))}
-                {view.motions.map((m) => (
-                  <SelectItem key={m.id} value={`motion:${m.id}`}>
-                    动作 · {m.name}
-                    {view.settings.hotkeys[`motion:${m.id}`] &&
-                      ` · ${hotkeyLabel(view.settings.hotkeys[`motion:${m.id}`])}`}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            <HotkeyEditor
-              key={`${hotkeyId}:${view.profileRevision}`}
-              id={hotkeyId}
-              view={view}
-              actions={a}
-            />
-          </Fold>
+            </>
+          )}
+        </Fold>
+        <div className="divider" />
+        <div className="section-title">
+          <h2>默认外观</h2>
         </div>
-      </details>
-      <div className="divider" />
-      <div className="section-title">
-        <h2>动作录制</h2>
-        <output id="record-status">{view.duration.toFixed(1)} s</output>
-      </div>
-      <div className="two-fields">
-        <Button
-          id="record-toggle"
-          variant="outline"
-          disabled={!view.model}
-          onClick={a.toggleRecording}
-        >
-          {view.recording ? '停止录制' : '开始录制'}
-        </Button>
-        <Button
-          id="record-save"
-          variant="outline"
-          disabled={!view.canSaveRecording}
-          onClick={() => run(a.saveRecording)}
-        >
-          保存动作
-        </Button>
-      </div>
-      <p className="hint">
-        手动录制角色的最终参数，最长 60 秒，保存为
-        .motion3.json；不会录制摄像头画面或声音。开始新录制会替换未保存的上一段。
-      </p>
+        <div className="two-fields">
+          <Button
+            id="save-default-appearance"
+            variant="outline"
+            disabled={!view.model}
+            onClick={() => run(a.saveDefaultAppearance)}
+          >
+            保存默认外观
+          </Button>
+          <Button
+            id="restore-default-appearance"
+            variant="outline"
+            disabled={!view.model}
+            onClick={() => run(a.restoreDefaultAppearance)}
+          >
+            恢复默认外观
+          </Button>
+        </div>
+        <p className="hint">
+          保存当前启用的表情、保持动作的姿势和手动参数；请等动作播放结束后再保存。手动参数在上方「手动参数与映射」中调整。
+        </p>
+        <div className="divider" />
+        <div className="section-title">
+          <h2>动作录制</h2>
+          <output id="record-status">{view.duration.toFixed(1)} s</output>
+        </div>
+        <div className="two-fields">
+          <Button
+            id="record-toggle"
+            variant="outline"
+            disabled={!view.model}
+            onClick={a.toggleRecording}
+          >
+            {view.recording ? '停止录制' : '开始录制'}
+          </Button>
+          <Button
+            id="record-save"
+            variant="outline"
+            disabled={!view.canSaveRecording}
+            onClick={() => run(a.saveRecording)}
+          >
+            保存动作
+          </Button>
+        </div>
+        <p className="hint">
+          手动录制角色的最终参数，最长 60 秒，保存为
+          .motion3.json；不会录制摄像头画面或声音。开始新录制会替换未保存的上一段。
+        </p>
+      </Fold>
     </>
   );
 }

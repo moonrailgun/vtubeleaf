@@ -69,6 +69,10 @@ export function About() {
           <ChevronDown aria-hidden="true" />
         </summary>
         <div className="space-y-3 px-1 pb-4 text-xs leading-7 text-muted-foreground">
+          <p>
+            <b className="font-semibold text-foreground">你的人脸，留在你的电脑。</b>
+            不上传摄像头画面，仅在手动录制时保存角色参数，不采集声音。运行记录只保留本次会话的错误提示。
+          </p>
           <p>黑屏：检查模型是否成功加载，以及 OBS 捕获的窗口。</p>
           <p>无表情：检查跟踪状态并重新校准。</p>
           <p>摄像头不可用：检查系统权限、设备连接与其他应用占用。</p>

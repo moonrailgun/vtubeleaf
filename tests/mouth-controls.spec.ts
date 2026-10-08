@@ -1,4 +1,5 @@
 import { test, expect } from '@playwright/test';
+import { openFold } from './panel';
 import { readdirSync } from 'node:fs';
 import { resolve } from 'node:path';
 
@@ -153,7 +154,7 @@ for (const load of ['startup', 'scene'] as const) {
     expect(neutral).toBe(0);
     if (load === 'startup') {
       await page.getByRole('button', { name: '角色', exact: true }).click();
-      await page.locator('#model-advanced > summary').click();
+      await openFold(page, '高级');
       await page.locator('#parameter-search').fill('ParamMouthOpenY');
       await page.getByRole('button', { name: '跟踪映射', exact: true }).click();
       await expect(page.locator('#mapping-outputMax')).toHaveValue('2.1');
@@ -195,7 +196,7 @@ test('mouth smoothing slider and reset keep saved mappings and response consiste
   });
   await page.goto('/');
   await page.getByRole('button', { name: '面捕', exact: true }).click();
-  await page.getByText('眼睛、嘴部与丢脸恢复', { exact: true }).click();
+  await openFold(page, '跟踪细调');
   const slider = page.locator('#mouthSmooth').getByRole('slider');
   await slider.focus();
   await slider.press('End');
@@ -225,7 +226,7 @@ test('mouth smoothing slider and reset keep saved mappings and response consiste
   expect(smoothed.Open).toBeLessThan(0.3);
   expect(smoothed.Form).toBeCloseTo(smoothed.Open);
   await page.getByRole('button', { name: '面捕', exact: true }).click();
-  await page.getByText('眼睛、嘴部与丢脸恢复', { exact: true }).click();
+  await openFold(page, '跟踪细调');
   await page.locator('#reset-tracking').click();
   await expect(slider).toHaveAttribute('aria-valuenow', '0.06');
   await expect.poll(async () => (await saved()).mouthSmooth).toBe(0.06);
@@ -241,7 +242,7 @@ test('mouth smoothing slider and reset keep saved mappings and response consiste
   expect(restored.Open).toBeCloseTo(0.8111, 4);
   expect(restored.Form).toBeCloseTo(restored.Open);
   await page.getByRole('button', { name: '面捕', exact: true }).click();
-  await page.getByText('眼睛、嘴部与丢脸恢复', { exact: true }).click();
+  await openFold(page, '跟踪细调');
   await expect(slider).toHaveAttribute('aria-valuenow', '0.06');
   await slider.focus();
   await slider.press('Home');

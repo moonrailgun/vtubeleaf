@@ -1,4 +1,5 @@
 import { test, expect, type Page } from '@playwright/test';
+import { openFold } from './panel';
 
 async function openCameraSettings(page: Page, deviceId = '', permissionRequired = false) {
   await page.addInitScript(
@@ -141,7 +142,8 @@ test('custom settings menus preserve numeric values and the default microphone',
   page,
 }) => {
   await openCameraSettings(page);
-  await page.getByRole('button', { name: '画面', exact: true }).click();
+  await page.getByRole('button', { name: '接入', exact: true }).click();
+  await openFold(page, '画质与通用设置');
   const renderFps = page.getByRole('combobox', { name: '角色渲染帧率', exact: true });
   await renderFps.click();
   await page.getByRole('option', { name: '60 FPS · 流畅', exact: true }).click();

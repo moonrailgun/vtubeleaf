@@ -1,4 +1,5 @@
 import { test, expect, type Page, type Locator } from '@playwright/test';
+import { openFold } from './panel';
 import { readFileSync, readdirSync, writeFileSync } from 'node:fs';
 import { basename, dirname, resolve } from 'node:path';
 
@@ -19,6 +20,7 @@ test('keyboard hotkey switch persists and restores existing application bindings
   });
   await page.goto('/');
   await page.getByRole('button', { name: '角色', exact: true }).click();
+  await openFold(page, '快捷键');
   const toggle = page.getByRole('switch', { name: '使用键盘快捷键', exact: true });
   await expect(toggle).toBeChecked();
   await toggle.click();
@@ -26,6 +28,7 @@ test('keyboard hotkey switch persists and restores existing application bindings
   await expect.poll(async () => (await saved()).useKeyboardHotkeys).toBe(false);
   await page.reload();
   await page.getByRole('button', { name: '角色', exact: true }).click();
+  await openFold(page, '快捷键');
   await expect(toggle).not.toBeChecked();
   await page.keyboard.press('k');
   expect((await saved()).modelVisible).toBe(true);
@@ -162,8 +165,7 @@ async function serveProduction(page: Page, entry: string) {
 // Pause has no button; bind it to a local hotkey, return to the capture tab, and return a press helper.
 async function bindPauseHotkey(page: Page) {
   await page.getByRole('button', { name: '角色', exact: true }).click();
-  await page.locator('#model-advanced > summary').click();
-  await page.getByRole('button', { name: '应用快捷键', exact: true }).click();
+  await openFold(page, '快捷键');
   await chooseOption(page, page.locator('#hotkey-action'), '暂停 / 恢复跟踪');
   await page.locator('#hotkey-binding').fill('Control+Shift+P');
   await page.locator('#save-hotkey').click();
@@ -286,10 +288,12 @@ test('bundled Haru, Hiyori and Mao render previews, and imported models can be s
   await expect(page.locator('#model-name')).toHaveText('Imported Mao');
   await page.getByRole('button', { name: '画面', exact: true }).click();
   await page.getByRole('button', { name: '海滩', exact: true }).click();
+  await openFold(page, '道具');
   await chooseOption(page, page.locator('#item-model'), 'Imported Mao');
   await page.getByRole('button', { name: '添加 Live2D', exact: true }).click();
   await chooseOption(page, page.locator('#item-model'), 'Haru');
   await page.getByRole('button', { name: '添加 Live2D', exact: true }).click();
+  await openFold(page, '管理场景');
   await page.locator('#scene-name').fill('双人场景');
   await page.getByRole('button', { name: '保存为新场景', exact: true }).click();
   await expect
@@ -999,6 +1003,7 @@ test('built-in backgrounds switch, persist, recall, and clear under production C
     await expect(page.locator('#notice')).not.toHaveClass(/error/);
   }
   await page.screenshot({ path: testInfo.outputPath('built-in-backgrounds.png') });
+  await openFold(page, '管理场景');
   await page.locator('#scene-name').fill('游戏直播');
   await page.getByRole('button', { name: '保存为新场景', exact: true }).click();
   await page.getByRole('button', { name: '海滩', exact: true }).click();
@@ -1672,6 +1677,7 @@ test('face preview hides the camera by default, toggles it independently and cle
     (window as any).faceDrawing = setInterval(() => ctx.drawImage(picture, 0, 0), 1000 / 24);
     navigator.mediaDevices.getUserMedia = async () => stream;
   });
+  await openFold(page, '跟踪引擎与采集');
   const showCamera = page.getByRole('switch', { name: /^显示真人画面/ });
   await expect(showCamera).not.toBeChecked();
   await page.getByRole('switch', { name: /^显示面捕预览/ }).click();
@@ -1822,6 +1828,7 @@ test('NVIDIA experimental settings are visible on Windows and survive reload', a
 }, testInfo) => {
   await page.addInitScript(() => Object.defineProperty(navigator, 'platform', { value: 'Win32' }));
   await page.goto('/');
+  await openFold(page, '跟踪引擎与采集');
   await chooseOption(page, page.locator('#engine'), 'NVIDIA RTX · 实验中');
   await expect(page.locator('#engine')).toHaveText('NVIDIA RTX · 实验中');
   const options = page.locator('#nvidia-options');
@@ -1842,6 +1849,7 @@ test('NVIDIA experimental settings are visible on Windows and survive reload', a
     )
     .toEqual(['nvidia', 24, '720p']);
   await page.reload();
+  await openFold(page, '跟踪引擎与采集');
   await expect(page.locator('#engine')).toHaveText('NVIDIA RTX · 实验中');
   await expect(page.locator('#nvidia-path')).toHaveValue('C:\\ARSDK\\bin\\VTubeLeafNvidia.exe');
   await expect(page.locator('#nvidia-model-dir')).toHaveValue('C:\\ARSDK\\bin\\models');
@@ -1859,6 +1867,7 @@ test('NVIDIA is hidden on macOS but a restored setting explains the unsupported 
     Object.defineProperty(navigator, 'platform', { value: 'MacIntel' }),
   );
   await page.goto('/');
+  await openFold(page, '跟踪引擎与采集');
   await expect(page.locator('#engine')).toHaveText('MediaPipe · 默认');
   await page.locator('#engine').click();
   await expect(page.getByRole('option', { name: 'NVIDIA RTX · 实验中' })).toHaveCount(0);
@@ -1867,6 +1876,7 @@ test('NVIDIA is hidden on macOS but a restored setting explains the unsupported 
     localStorage.setItem('vtubeleaf-preview', JSON.stringify({ engine: 'nvidia' })),
   );
   await page.reload();
+  await openFold(page, '跟踪引擎与采集');
   await page.locator('#engine').click();
   await expect(page.getByRole('option', { name: 'NVIDIA RTX · 实验中' })).toBeDisabled();
   await page.keyboard.press('Escape');
@@ -2136,15 +2146,14 @@ test('model controls save profiles, expressions, shortcuts and a manual motion r
   await expect(page.locator('#render-status')).toContainText('FPS');
   await page.screenshot({ path: testInfo.outputPath('studio-stage.png') });
   await page.getByRole('button', { name: '角色', exact: true }).click();
-  await expect(page.locator('#model-advanced')).not.toHaveAttribute('open', '');
   await expect(page.locator('#expression-buttons button').first()).toBeVisible();
   await expect(page.locator('#motion-buttons button').first()).toBeVisible();
-  await expect(page.locator('#save-default-appearance')).toBeVisible();
+  await expect(page.locator('#save-default-appearance')).toBeHidden();
   await expect(page.locator('#parameter-search')).toBeHidden();
   await expect(page.locator('#motion-mode')).toBeHidden();
   await expect(page.locator('#hotkey-binding')).toBeHidden();
   await page.screenshot({ path: testInfo.outputPath('studio-model-simple.png') });
-  await page.locator('#model-advanced > summary').click();
+  await openFold(page, '高级');
   await page.locator('#reset-profile').click();
   const resetDialog = page.getByRole('alertdialog');
   await expect(resetDialog).toContainText('此操作无法撤销');
@@ -2202,6 +2211,7 @@ test('model controls save profiles, expressions, shortcuts and a manual motion r
   await expect(page.locator('#motion-buttons button').first().locator('kbd')).toHaveText(
     'Control+2',
   );
+  await openFold(page, '动作与待机设置');
   await expect(page.locator('#motion-mode')).toHaveText('跟随动作设置');
   await page.locator('#motion-buttons button').first().click();
   await expect
@@ -2259,7 +2269,7 @@ test('model controls save profiles, expressions, shortcuts and a manual motion r
   await expect(expression).toHaveAttribute('aria-pressed', 'true');
   await page.locator('#clear-expressions').click();
   await expect(expression).toHaveAttribute('aria-pressed', 'false');
-  await page.getByRole('button', { name: '应用快捷键' }).click();
+  await openFold(page, '快捷键');
   await expect(page.locator('#hotkey-action')).toHaveText('表情 · F01 · F');
   await expect(page.locator('#hotkey-binding')).toHaveValue('KeyF');
   await expect(page.locator('#hotkey-release')).toBeChecked();
@@ -2426,8 +2436,8 @@ test('model controls save profiles, expressions, shortcuts and a manual motion r
   });
   await page.getByRole('button', { name: '角色', exact: true }).click();
   await expect(expression).toHaveAttribute('aria-pressed', 'true');
-  await expect(page.locator('#model-advanced')).not.toHaveAttribute('open', '');
-  await page.locator('#model-advanced > summary').click();
+  await expect(page.locator('#import-vts')).toBeHidden();
+  await openFold(page, '高级');
   await page.locator('#import-vts').click();
   await expect
     .poll(() => page.evaluate(() => (window as any).savedSettings?.mappings.ParamAngleY?.inputMin))
@@ -2645,7 +2655,7 @@ test('character library generates avatars before selection, imports drops and re
     expect(pixels.top, `${models[index].name} avatar top margin`).toBeLessThan(52);
   }
   await page.getByRole('button', { name: '角色', exact: true }).click();
-  await page.locator('#model-advanced > summary').click();
+  await openFold(page, '高级');
   await chooseOption(page, page.locator('#mapping-parameter'), /PARAM_ANGLE_X/);
   await page.getByRole('button', { name: '跟踪映射', exact: true }).click();
   await page.locator('#mapping-inputMin').fill('-0.4');
@@ -2697,7 +2707,8 @@ test('quality settings preserve privacy and calibration samples cancel on stop',
     await route.fulfill({ response, body: bootstrap + (await response.text()) });
   });
   await page.goto('/');
-  await page.getByRole('button', { name: '画面', exact: true }).click();
+  await page.getByRole('button', { name: '接入', exact: true }).click();
+  await openFold(page, '画质与通用设置');
   await expect(page.locator('#render-fps')).toBeVisible();
   await chooseOption(page, page.locator('#render-fps'), '60 FPS · 流畅');
   await page.getByRole('button', { name: '面捕', exact: true }).click();
@@ -2737,7 +2748,7 @@ test('quality settings preserve privacy and calibration samples cancel on stop',
   await page.locator('#start').click();
   await expect(page.locator('#tracking-status')).toHaveText('尚未开始');
   await page.evaluate(() => clearInterval((window as any).qualityTimer));
-  await page.getByText('眼睛、嘴部与丢脸恢复', { exact: true }).click();
+  await openFold(page, '跟踪细调');
   await chooseOption(page, page.locator('#eye-link'), '始终同步 · 取双眼平均');
   await chooseOption(page, page.locator('#lost-mode'), '保持最后姿态');
   await expect
@@ -2752,8 +2763,8 @@ test('quality settings preserve privacy and calibration samples cancel on stop',
   expect(saved.lipSyncMode).toBe('off');
   expect(saved.handTracking).toBe(false);
   await page.screenshot({ path: testInfo.outputPath('quality-controls.png') });
+  await openFold(page, '跟踪引擎与采集');
   await chooseOption(page, page.locator('#engine'), 'MediaPipe · 默认');
-  await page.getByText('采集质量与帧率', { exact: true }).click();
   await chooseOption(page, page.locator('#camera-resolution'), '1920 × 1080 · 高清');
   await chooseOption(page, page.locator('#tracking-fps'), '24 FPS');
   await page.locator('#hand-tracking').click();
@@ -3150,6 +3161,7 @@ test('props-only scenes support dragging, saving, recall, visibility shortcuts a
   });
   await page.goto('/');
   await page.getByRole('button', { name: '画面', exact: true }).click();
+  await openFold(page, '道具');
   const layers = page.getByRole('group', { name: '编辑图层', exact: true });
   const mainLayer = layers.getByRole('button', { name: '主角色', exact: true });
   const propLayer = layers.getByRole('button', { name: '1 · Color flag', exact: true });
@@ -3173,6 +3185,7 @@ test('props-only scenes support dragging, saving, recall, visibility shortcuts a
   await expect
     .poll(() => page.evaluate(() => (window as any).savedSettings?.composition.items[0].x))
     .toBeCloseTo(0.1, 2);
+  await openFold(page, '管理场景');
   const saveScene = page.getByRole('button', { name: '保存为新场景', exact: true });
   await page.locator('#scene-name').fill('  ');
   await expect(saveScene).toBeDisabled();
@@ -3195,8 +3208,7 @@ test('props-only scenes support dragging, saving, recall, visibility shortcuts a
     layers.getByRole('button', { name: '1 · Color flag（隐藏）', exact: true }),
   ).toHaveAttribute('aria-pressed', 'true');
   await page.getByRole('button', { name: '角色', exact: true }).click();
-  await page.locator('#model-advanced > summary').click();
-  await page.getByRole('button', { name: '应用快捷键', exact: true }).click();
+  await openFold(page, '快捷键');
   await chooseOption(page, page.locator('#hotkey-action'), '显示 / 隐藏 · Color flag');
   await page.locator('#hotkey-binding').fill('Control+Shift+9');
   await page.locator('#save-hotkey').click();
@@ -3235,7 +3247,7 @@ test('props-only scenes support dragging, saving, recall, visibility shortcuts a
   }
   await page.getByRole('button', { name: '画面', exact: true }).click();
   const overflow = await page
-    .locator('.scene-controls')
+    .locator('#appearance')
     .evaluate((panel) => panel.scrollWidth > panel.clientWidth + 1);
   expect(overflow).toBe(false);
   await expect(
@@ -3249,6 +3261,7 @@ test('props-only scenes support dragging, saving, recall, visibility shortcuts a
   await page.locator('#saved-scene').click();
   await expect(page.getByRole('option')).toHaveCount(2);
   await page.keyboard.press('Escape');
+  await openFold(page, '道具');
   await expect(layers.getByRole('button')).toHaveCount(2);
   await expect(mainLayer).toHaveAttribute('aria-pressed', 'true');
   expect(await page.evaluate(() => (window as any).savedSettings?.modelPath ?? '')).toBe('');
@@ -3599,6 +3612,7 @@ test('meeting tabs show only the selected integration method', async ({ page }, 
   await obs.click();
   await expect(obs).toHaveAttribute('aria-selected', 'true');
   await expect(camera).toHaveAttribute('aria-selected', 'false');
+  await openFold(page, 'OBS 设置步骤');
   await expect(obsSteps).toBeVisible();
   await expect(cameraControls).toBeHidden();
   await page.locator('#controls').screenshot({
@@ -3637,6 +3651,7 @@ test('standalone about window groups FAQs and licenses under desktop CSP', async
   await about.getByText('更新记录', { exact: true }).click();
   await about.getByText('常见问题与运行记录', { exact: true }).click();
   await expect(about.getByText('黑屏：检查模型是否成功加载', { exact: false })).toBeVisible();
+  await expect(about.getByText('你的人脸，留在你的电脑。', { exact: true })).toBeVisible();
   await about.screenshot({ path: testInfo.outputPath('about.png') });
   await about.getByText('常见问题与运行记录', { exact: true }).click();
   const text = about.getByLabel('许可正文');
