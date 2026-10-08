@@ -451,6 +451,17 @@ export function App() {
               </Button>
               <span className="file-note">支持 .model3.json 与完整资源目录</span>
             </div>
+            <div
+              id="notice"
+              className={`notice studio-overlay${view.notice.error ? ' error' : view.calibrating ? ' calibrating' : ''}`}
+              hidden={!view.notice.message}
+              inert={live}
+              role="status"
+              aria-live="polite"
+            >
+              {view.calibrating && !view.notice.error && <strong>正在校准，请保持姿势</strong>}
+              {view.notice.message}
+            </div>
           </div>
           <div className="session-dock studio-overlay" inert={live}>
             <div className="stage-caption">
@@ -483,15 +494,6 @@ export function App() {
                   {active ? '停止跟踪' : '开始跟踪'}
                 </Button>
               </div>
-            </div>
-            <div
-              id="notice"
-              className={`notice${view.notice.error ? ' error' : ''}`}
-              hidden={!view.notice.message}
-              role="status"
-              aria-live="polite"
-            >
-              {view.notice.message}
             </div>
           </div>
         </section>

@@ -2734,6 +2734,11 @@ test('quality settings preserve privacy and calibration samples cancel on stop',
   await page.locator('#calibrate').click();
   await expect(page.locator('#calibrate')).toBeDisabled();
   await expect(page.locator('#notice')).toContainText('请正视镜头');
+  const notice = (await page.locator('#notice').boundingBox())!;
+  const stageHeading = (await page.locator('.workspace-heading').boundingBox())!;
+  expect(notice.y + notice.height / 2).toBeCloseTo(page.viewportSize()!.height / 2, 0);
+  expect(notice.x + notice.width / 2).toBeCloseTo(stageHeading.x + stageHeading.width / 2, 0);
+  await page.screenshot({ path: testInfo.outputPath('calibration-in-progress.png') });
   await expect
     .poll(() =>
       page.evaluate(
@@ -2746,9 +2751,18 @@ test('quality settings preserve privacy and calibration samples cancel on stop',
   );
   expect(neutral.yaw).toBeLessThan(8.6);
   await expect(page.locator('#notice')).toBeHidden();
+  await page.setViewportSize({ width: 900, height: 650 });
   await openFold(page, '跟踪细调');
   await page.locator('#calibrate-eyes').click();
   await expect(page.locator('#notice')).toContainText('请闭合双眼');
+  const compactNotice = (await page.locator('#notice').boundingBox())!;
+  const controls = (await page.locator('#controls').boundingBox())!;
+  expect(compactNotice.y + compactNotice.height / 2).toBeCloseTo(
+    page.viewportSize()!.height / 2,
+    0,
+  );
+  expect(compactNotice.x + compactNotice.width).toBeLessThan(controls.x);
+  await page.screenshot({ path: testInfo.outputPath('calibration-compact.png') });
   await expect(page.locator('#notice.error')).toContainText('请双眼闭合并保持到采样结束');
   await page.locator('#calibrate').click();
   await page.locator('#start').click();

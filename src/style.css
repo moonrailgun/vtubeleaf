@@ -684,7 +684,10 @@ h1 span {
   padding-inline: 17px;
 }
 .notice {
-  align-self: start;
+  position: absolute;
+  top: 156px;
+  left: var(--tools-left);
+  max-width: calc(100% - var(--tools-left) - var(--overlay-right));
   padding: 6px 10px;
   background: #ffffffe6;
   border-radius: 8px;
@@ -700,6 +703,29 @@ h1 span {
 }
 .notice.error {
   color: #b04057;
+}
+.notice.calibrating {
+  top: 50%;
+  left: calc((100% + var(--tools-left) - var(--overlay-right)) / 2);
+  transform: translate(-50%, -50%);
+  width: max-content;
+  padding: 14px 18px;
+  border: 1px solid var(--primary);
+  border-radius: 12px;
+  background: #fff4f8;
+  color: #79304e;
+  box-shadow: 0 6px 24px #79304e26;
+  font-size: 14px;
+  text-align: center;
+}
+.notice.calibrating::before {
+  content: none;
+}
+.notice.calibrating strong {
+  display: block;
+  margin-bottom: 4px;
+  color: #a93362;
+  font-size: 16px;
 }
 .controls {
   position: absolute;
