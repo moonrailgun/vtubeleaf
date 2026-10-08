@@ -4,6 +4,7 @@ export function startFrameLoop(
   background: () => boolean = () => true,
   // Pace frames by display refreshes. Only for loops that paint; inference must not block them.
   vsync = false,
+  active: () => boolean = () => true,
 ): () => void {
   let worker: Worker | undefined;
   let timer = 0;
@@ -19,7 +20,7 @@ export function startFrameLoop(
   function arm(delay: number) {
     const id = ++armed;
     window.clearTimeout(timer);
-    if (background()) {
+    if (active() && background()) {
       // WKWebView throttles hidden-page DOM timers even with backgroundThrottling disabled.
       // Only keep a worker alive while tracking or output needs uninterrupted frames.
       if (!worker) {
@@ -48,6 +49,20 @@ export function startFrameLoop(
   }
   function run(now: number, refresh = false) {
     if (stopped) return;
+    if (!active()) {
+      cancelAnimationFrame(raf);
+      raf = 0;
+      painting = false;
+      period = Infinity;
+      due = now + 1000 / fps();
+      // Check for new output demand without rendering or keeping a worker alive.
+      arm(250);
+      return;
+    }
+    if (vsync && !raf) {
+      refreshed = now;
+      raf = requestAnimationFrame(refreshFrame);
+    }
     try {
       frame();
     } finally {
@@ -64,8 +79,8 @@ export function startFrameLoop(
       }
     }
   }
-  function refresh(time: number) {
-    raf = requestAnimationFrame(refresh);
+  function refreshFrame(time: number) {
+    raf = requestAnimationFrame(refreshFrame);
     period = time - refreshed;
     refreshed = time;
     painting = true;
@@ -73,10 +88,20 @@ export function startFrameLoop(
     // The rate then rounds to a whole number of refreshes, e.g. 60 FPS becomes 72 at 144 Hz.
     if (steady() && time + period * 0.45 >= due) run(time, true);
   }
-  if (vsync) raf = requestAnimationFrame(refresh);
+  function wake() {
+    due = performance.now();
+    period = Infinity;
+    painting = false;
+    run(due);
+  }
+  if (vsync) {
+    raf = requestAnimationFrame(refreshFrame);
+    document.addEventListener('visibilitychange', wake);
+  }
   arm(due - performance.now());
   return () => {
     stopped = true;
+    document.removeEventListener('visibilitychange', wake);
     cancelAnimationFrame(raf);
     window.clearTimeout(timer);
     worker?.terminate();

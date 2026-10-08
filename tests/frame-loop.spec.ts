@@ -1,6 +1,57 @@
 import { test, expect } from '@playwright/test';
 
-test('render workers follow tracking start and stop in both windows', async ({ page }) => {
+test('inactive rendering pauses frames and resumes for work or visibility', async ({ page }) => {
+  await page.goto('/?output=1');
+  const result = await page.evaluate(async () => {
+    const module = '/src/frame-loop.ts';
+    const { startFrameLoop } = await import(module);
+    const wait = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
+    let active = true;
+    let frames = 0;
+    const stop = startFrameLoop(
+      () => frames++,
+      () => 30,
+      () => active,
+      true,
+      () => active,
+    );
+    try {
+      await wait(400);
+      const running = frames;
+      active = false;
+      await wait(100);
+      frames = 0;
+      await wait(400);
+      const idle = frames;
+      active = true;
+      await wait(500);
+      const working = frames;
+      active = false;
+      await wait(100);
+      frames = 0;
+      active = true;
+      document.dispatchEvent(new Event('visibilitychange'));
+      await wait(100);
+      const visible = frames;
+      stop();
+      frames = 0;
+      document.dispatchEvent(new Event('visibilitychange'));
+      await wait(300);
+      return { running, idle, working, visible, stopped: frames };
+    } finally {
+      stop();
+    }
+  });
+  expect(result.running).toBeGreaterThanOrEqual(5);
+  expect(result.idle).toBe(0);
+  expect(result.working).toBeGreaterThanOrEqual(4);
+  expect(result.visible).toBeGreaterThanOrEqual(1);
+  expect(result.stopped).toBe(0);
+});
+
+test('hidden studio pauses while idle and keeps tracking and output windows running', async ({
+  page,
+}) => {
   await page.route('**/src/main.tsx*', async (route) => {
     const response = await route.fetch();
     const bootstrap = `import { mockIPC, mockWindows } from '/node_modules/@tauri-apps/api/mocks.js';
@@ -16,7 +67,10 @@ test('render workers follow tracking start and stop in both windows', async ({ p
       AvatarStage.prototype.draw = function (...args) {
         draw.apply(this, args);
         if (this.passive) window.outputDepth = this.depthScale;
-        else window.mainDepth = this.depthScale;
+        else {
+          window.mainDepth = this.depthScale;
+          window.mainFrames = (window.mainFrames || 0) + 1;
+        }
       };
       window.isTauri = true; mockWindows('output');
       mockIPC(cmd => {
@@ -42,12 +96,23 @@ test('render workers follow tracking start and stop in both windows', async ({ p
     );
   });
   await expect.poll(() => page.evaluate(() => (window as any).frameTest.view?.ready)).toBe(true);
+  await expect.poll(() => page.evaluate(() => (window as any).mainFrames)).toBeGreaterThan(0);
+  await page.evaluate(() => {
+    Object.defineProperty(document, 'hidden', { configurable: true, value: true });
+    document.dispatchEvent(new Event('visibilitychange'));
+  });
+  await page.waitForTimeout(100);
+  const idle = await page.evaluate(() => (window as any).mainFrames);
+  await page.waitForTimeout(400);
+  expect(await page.evaluate(() => (window as any).mainFrames)).toBe(idle);
+  await expect.poll(() => page.workers().length).toBe(0);
   await page.evaluate(async () => {
     const module = '/node_modules/@tauri-apps/api/event.js';
     const { emit } = await import(module);
     await emit('output-ready');
   });
-  await expect.poll(() => page.workers().length).toBe(0);
+  await expect.poll(() => page.workers().length).toBe(1);
+  await expect.poll(() => page.evaluate(() => (window as any).mainFrames)).toBeGreaterThan(idle);
   await expect
     .poll(() => page.evaluate(() => (window as any).frameTest.view.renderStatus))
     .toContain('FPS');
@@ -63,9 +128,23 @@ test('render workers follow tracking start and stop in both windows', async ({ p
     await expect.poll(() => page.evaluate(() => (window as any).mainDepth)).toBe(1.075);
     await expect.poll(() => page.evaluate(() => (window as any).outputDepth)).toBe(1.075);
     await page.evaluate(() => (window as any).frameTest.studio.actions.stop());
-    await expect.poll(() => page.workers().length).toBe(0);
+    await expect.poll(() => page.workers().length).toBe(1);
     await expect.poll(() => page.evaluate(() => (window as any).outputDepth)).toBeLessThan(1.01);
   }
+  await page.evaluate(async () => {
+    const module = '/node_modules/@tauri-apps/api/event.js';
+    const { emit } = await import(module);
+    await emit('output-closed');
+  });
+  await expect.poll(() => page.workers().length).toBe(0);
+  const closed = await page.evaluate(() => (window as any).mainFrames);
+  await page.waitForTimeout(400);
+  expect(await page.evaluate(() => (window as any).mainFrames)).toBe(closed);
+  await page.evaluate(() => {
+    Object.defineProperty(document, 'hidden', { configurable: true, value: false });
+    document.dispatchEvent(new Event('visibilitychange'));
+  });
+  await expect.poll(() => page.evaluate(() => (window as any).mainFrames)).toBeGreaterThan(closed);
   await page.evaluate(() => (window as any).frameTest.studio.destroy());
 });
 

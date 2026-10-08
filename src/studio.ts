@@ -1631,11 +1631,19 @@ export function createStudio(
       publish();
     }
   }
+  const needsFrames = () =>
+    tracking !== 'stopped' ||
+    audio.active ||
+    recording.active ||
+    obsOutput.state.active ||
+    outputOpen ||
+    (cameraStatus.active && cameraStatus.consumers !== false);
   const stopRendering = startFrameLoop(
     tick,
     () => settings.renderFps,
-    () => tracking === 'running' || tracking === 'paused' || obsOutput.state.active,
+    needsFrames,
     true,
+    () => !document.hidden || needsFrames(),
   );
   return {
     actions,
