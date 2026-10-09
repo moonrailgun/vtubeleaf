@@ -173,9 +173,10 @@ async function bindPauseHotkey(page: Page) {
   return () => page.keyboard.press('Control+Shift+P');
 }
 
-test('bundled Haru, Hiyori and Mao render previews, and imported models can be selected and removed', async ({
+test('bundled Haru, Hiyori and Mao render previews, and models can be pinned, selected and removed', async ({
   page,
 }, testInfo) => {
+  test.setTimeout(60_000);
   const resources = new Map<string, string>();
   const models = ['Haru', 'Hiyori', 'Mao'].map((name) => {
     const root = resolve('vendor/models', name);
@@ -255,7 +256,47 @@ test('bundled Haru, Hiyori and Mao render previews, and imported models can be s
   await expect(page.locator('#model-name')).toHaveText('Haru');
   await page.getByRole('button', { name: '角色库', exact: true }).click();
   await expect(page.locator('.model-card-name')).toHaveText(order);
+  for (const name of ['Hiyori', 'Mao']) {
+    await page
+      .getByRole('button', { name: `切换到 ${name}`, exact: true })
+      .click({ button: 'right' });
+    await page.getByRole('menuitem', { name: '置顶', exact: true }).click();
+  }
+  await expect(page.locator('.model-card-name')).toHaveText([
+    'Hiyori',
+    'Mao',
+    'Imported Mao',
+    'Haru',
+  ]);
+  await expect(page.locator('#model-name')).toHaveText('Haru');
+  await page.getByRole('button', { name: '切换到 Hiyori', exact: true }).click({ button: 'right' });
+  await page.getByRole('menuitem', { name: '取消置顶', exact: true }).click();
+  await expect
+    .poll(() =>
+      page.evaluate(() => JSON.parse(localStorage.getItem('test-settings') ?? '{}').pinnedModels),
+    )
+    .toEqual([models[2].path]);
+  await page.reload();
+  await expect(page.locator('#model-name')).toHaveText('Haru');
+  await page.getByRole('button', { name: '角色库', exact: true }).click();
+  await expect(page.locator('.model-card-name')).toHaveText([
+    'Mao',
+    'Imported Mao',
+    'Haru',
+    'Hiyori',
+  ]);
+  const maoCard = page.getByRole('button', { name: '切换到 Mao', exact: true });
+  await expect(maoCard).toContainText('已置顶');
+  await maoCard.click({ button: 'right' });
+  await page.keyboard.press('Home');
+  await expect(page.getByRole('menuitem', { name: '取消置顶', exact: true })).toBeFocused();
+  await page.screenshot({ path: testInfo.outputPath('pinned-model-menu.png') });
+  await page.keyboard.press('Enter');
+  await expect(page.locator('.model-card-name')).toHaveText(order);
   const importedCard = page.getByRole('button', { name: '切换到 Imported Mao', exact: true });
+  await importedCard.click({ button: 'right' });
+  await page.getByRole('menuitem', { name: '置顶', exact: true }).click();
+  await expect(importedCard).toContainText('已置顶');
   await importedCard.click({ button: 'right' });
   await expect(page.locator('#model-name')).toHaveText('Haru');
   await page.getByRole('menuitem', { name: '移除角色', exact: true }).click();
@@ -267,6 +308,7 @@ test('bundled Haru, Hiyori and Mao render previews, and imported models can be s
   await page.getByRole('button', { name: '确认移除', exact: true }).click();
   await expect(page.locator('#notice')).toContainText('无法移除角色文件夹');
   await expect(importedCard).toBeVisible();
+  await expect(importedCard).toContainText('已置顶');
   await expect(page.locator('#model-name')).toHaveText('Haru');
   await page.evaluate(() => localStorage.removeItem('test-remove-fails'));
   await importedCard.click({ button: 'right' });
@@ -274,6 +316,11 @@ test('bundled Haru, Hiyori and Mao render previews, and imported models can be s
   await page.getByRole('button', { name: '确认移除', exact: true }).click();
   await expect(importedCard).toHaveCount(0);
   await expect(page.locator('#model-name')).toHaveText('Haru');
+  await expect
+    .poll(() =>
+      page.evaluate(() => JSON.parse(localStorage.getItem('test-settings') ?? '{}').pinnedModels),
+    )
+    .toEqual([]);
   await page.reload();
   await expect(page.locator('#model-name')).toHaveText('Haru');
   await page.getByRole('button', { name: '角色库', exact: true }).click();

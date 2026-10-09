@@ -169,6 +169,7 @@ export type Settings = ModelProfile & {
   outputTransparent: boolean;
   modelPath: string;
   recentModels: { name: string; path: string }[];
+  pinnedModels: string[];
   port: number;
   camera: number;
   pythonPath: string;
@@ -248,6 +249,7 @@ export const defaults: Settings = {
   outputTransparent: false,
   modelPath: '',
   recentModels: [],
+  pinnedModels: [],
   port: 11573,
   camera: 0,
   pythonPath: '',
@@ -571,6 +573,16 @@ export function readSettings(value: unknown): Settings {
   if (typeof v.background === 'string' && /^#[0-9a-f]{6}$/i.test(v.background))
     s.background = v.background;
   if (typeof v.outputTransparent === 'boolean') s.outputTransparent = v.outputTransparent;
+
+  if (Array.isArray(v.pinnedModels))
+    s.pinnedModels = [
+      ...new Set(
+        v.pinnedModels.filter(
+          (path): path is string =>
+            typeof path === 'string' && path.length > 0 && path.length < 4096,
+        ),
+      ),
+    ];
 
   if (Array.isArray(v.recentModels))
     s.recentModels = v.recentModels

@@ -3,6 +3,18 @@ import assert from 'node:assert/strict';
 import { defaults, readSettings, FaceMapper, NEUTRAL, fromMediaPipe } from '../src/state.ts';
 import * as state from '../src/state.ts';
 
+test('pinned models are validated and stay global across model changes and reloads', () => {
+  for (const value of [undefined, null, '/a', 1])
+    assert.deepEqual(readSettings({ pinnedModels: value }).pinnedModels, []);
+  const settings = readSettings({
+    modelPath: '/a',
+    pinnedModels: ['/b', null, '', '/a', '/b', 1, 'x'.repeat(4096)],
+  });
+  assert.deepEqual(settings.pinnedModels, ['/b', '/a']);
+  const restored = readSettings(JSON.parse(JSON.stringify(state.switchProfile(settings, '/c'))));
+  assert.deepEqual(restored.pinnedModels, ['/b', '/a']);
+});
+
 test('OpenSeeFace migrates bundled settings to external and preserves custom sources', () => {
   assert.equal(readSettings({}).openseefaceMode, 'external');
   assert.equal(readSettings({ pythonPath: '', scriptPath: '' }).openseefaceMode, 'external');

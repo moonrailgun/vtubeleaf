@@ -1065,6 +1065,7 @@ export function createStudio(
         if (settings.modelPath === entry.path) settings = switchProfile(settings, '');
         delete settings.profiles[entry.path];
         settings.recentModels = settings.recentModels.filter((item) => item.path !== entry.path);
+        settings.pinnedModels = settings.pinnedModels.filter((path) => path !== entry.path);
         const withoutModel = (composition: Composition): Composition => ({
           ...composition,
           items: composition.items.filter((item) => {

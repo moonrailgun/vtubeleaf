@@ -17,6 +17,8 @@ import {
   Video,
   Sparkles,
   Trash2,
+  Pin,
+  PinOff,
 } from 'lucide-react';
 import { Button } from './components/ui/button';
 import { Input } from './components/ui/input';
@@ -253,6 +255,13 @@ export function App() {
     }
   };
   const s = view.settings;
+  const library = useMemo(
+    () =>
+      [...view.library].sort(
+        (a, b) => Number(s.pinnedModels.includes(b.path)) - Number(s.pinnedModels.includes(a.path)),
+      ),
+    [view.library, s.pinnedModels],
+  );
   const obsNative = !!view.obsOutput.native && s.obsOutput === 'native';
   const obsSource = view.obsOutput.native === 'Spout2' ? 'Spout2 Capture' : 'Syphon客户端';
   const active = view.tracking !== 'stopped';
@@ -1111,7 +1120,7 @@ export function App() {
               <span>{view.library.length} 个角色</span>
             </div>
             <p className="library-drop-hint">
-              把模型文件夹、.model3.json 或 ZIP 拖到窗口中，自动复制到角色库。右键角色可移除。
+              把模型文件夹、.model3.json 或 ZIP 拖到窗口中，自动复制到角色库。右键角色可置顶或移除。
             </p>
             <div className="library-actions">
               <DropdownMenu.Root>
@@ -1136,43 +1145,68 @@ export function App() {
               {openLibraryButton}
             </div>
             <div className="model-library" aria-label="已保存的角色" aria-busy={busy}>
-              {view.library.map((entry) => (
-                <ContextMenu.Root key={entry.path}>
-                  <ContextMenu.Trigger asChild disabled={busy}>
-                    <Button
-                      variant="outline"
-                      className="model-card"
-                      disabled={busy}
-                      aria-label={`切换到 ${entry.name}`}
-                      aria-pressed={view.model?.path === entry.path}
-                      title={entry.path}
-                      onClick={() => run(() => a?.recentModel(entry.path))}
-                    >
-                      <span className="model-thumbnail">
-                        {view.previews[entry.path] ? (
-                          <img src={view.previews[entry.path]} alt={`${entry.name} 角色预览`} />
-                        ) : (
-                          <UserRound aria-hidden="true" />
-                        )}
-                      </span>
-                      <span className="model-card-name">{entry.name}</span>
-                      <small>{view.model?.path === entry.path ? '使用中' : '点击切换'}</small>
-                    </Button>
-                  </ContextMenu.Trigger>
-                  <ContextMenu.Portal>
-                    <ContextMenu.Content className="model-import-menu">
-                      <ContextMenu.Item
-                        className="flex items-center gap-2 text-destructive data-[disabled]:opacity-50"
-                        disabled={busy || entry.builtin}
-                        onSelect={() => setModelToRemove(entry)}
+              {library.map((entry) => {
+                const pinned = s.pinnedModels.includes(entry.path);
+                return (
+                  <ContextMenu.Root key={entry.path}>
+                    <ContextMenu.Trigger asChild disabled={busy}>
+                      <Button
+                        variant="outline"
+                        className="model-card"
+                        disabled={busy}
+                        aria-label={`切换到 ${entry.name}`}
+                        aria-pressed={view.model?.path === entry.path}
+                        title={entry.path}
+                        onClick={() => run(() => a?.recentModel(entry.path))}
                       >
-                        <Trash2 aria-hidden="true" size={14} />
-                        {entry.builtin ? '内置角色不可移除' : '移除角色'}
-                      </ContextMenu.Item>
-                    </ContextMenu.Content>
-                  </ContextMenu.Portal>
-                </ContextMenu.Root>
-              ))}
+                        <span className="model-thumbnail">
+                          {view.previews[entry.path] ? (
+                            <img src={view.previews[entry.path]} alt={`${entry.name} 角色预览`} />
+                          ) : (
+                            <UserRound aria-hidden="true" />
+                          )}
+                        </span>
+                        <span className="model-card-name">{entry.name}</span>
+                        <small>
+                          {pinned && '已置顶 · '}
+                          {view.model?.path === entry.path ? '使用中' : '点击切换'}
+                        </small>
+                      </Button>
+                    </ContextMenu.Trigger>
+                    <ContextMenu.Portal>
+                      <ContextMenu.Content className="model-import-menu">
+                        <ContextMenu.Item
+                          className="flex items-center gap-2 data-[disabled]:opacity-50"
+                          disabled={busy}
+                          onSelect={() =>
+                            set(
+                              'pinnedModels',
+                              pinned
+                                ? s.pinnedModels.filter((path) => path !== entry.path)
+                                : [...s.pinnedModels, entry.path],
+                            )
+                          }
+                        >
+                          {pinned ? (
+                            <PinOff aria-hidden="true" size={14} />
+                          ) : (
+                            <Pin aria-hidden="true" size={14} />
+                          )}
+                          {pinned ? '取消置顶' : '置顶'}
+                        </ContextMenu.Item>
+                        <ContextMenu.Item
+                          className="flex items-center gap-2 text-destructive data-[disabled]:opacity-50"
+                          disabled={busy || entry.builtin}
+                          onSelect={() => setModelToRemove(entry)}
+                        >
+                          <Trash2 aria-hidden="true" size={14} />
+                          {entry.builtin ? '内置角色不可移除' : '移除角色'}
+                        </ContextMenu.Item>
+                      </ContextMenu.Content>
+                    </ContextMenu.Portal>
+                  </ContextMenu.Root>
+                );
+              })}
             </div>
             <AlertDialog.Root
               open={!!modelToRemove}
