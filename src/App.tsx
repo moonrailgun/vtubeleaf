@@ -177,6 +177,7 @@ export function App() {
   const liveButton = useRef<HTMLButtonElement>(null);
   const cameraMoreButton = useRef<HTMLButtonElement>(null);
   const [view, setView] = useState(initialView);
+  const [dismissedNotice, setDismissedNotice] = useState<StudioView['notice'] | null>(null);
   const [tab, setTab] = useState('capture');
   const [collapsed, setCollapsed] = useState(false);
   const [live, setLive] = useState(false);
@@ -210,6 +211,19 @@ export function App() {
       studio.destroy();
     };
   }, []);
+  useEffect(() => {
+    if (
+      !view.notice.message ||
+      view.notice.error ||
+      view.calibrating ||
+      view.voiceCalibration ||
+      view.modelLoading ||
+      view.sceneBusy
+    )
+      return;
+    const timer = window.setTimeout(() => setDismissedNotice(view.notice), 5000);
+    return () => window.clearTimeout(timer);
+  }, [view.notice, view.calibrating, view.voiceCalibration, view.modelLoading, view.sceneBusy]);
   useEffect(() => {
     if (!live) return;
     container.current?.focus();
@@ -451,7 +465,7 @@ export function App() {
             <div
               id="notice"
               className={`notice studio-overlay${view.notice.error ? ' error' : view.calibrating ? ' calibrating' : ''}`}
-              hidden={!view.notice.message}
+              hidden={!view.notice.message || view.notice === dismissedNotice}
               inert={live}
               role="status"
               aria-live="polite"

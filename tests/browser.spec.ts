@@ -856,6 +856,37 @@ test('alternate model renders with missing standard parameters and accepts a cus
   await page.evaluate(() => (window as any).alternateStage.destroy());
 });
 
+test('stage notices expire, restart for repeated actions, and keep errors visible', async ({
+  page,
+}) => {
+  await page.clock.install();
+  await page.addInitScript(() => {
+    navigator.mediaDevices.getUserMedia = async () => {
+      throw new DOMException('denied', 'NotAllowedError');
+    };
+  });
+  await page.goto('/');
+  const notice = page.locator('#notice');
+  await expect(notice).toBeVisible();
+  await page.clock.fastForward(5100);
+  await expect(notice).toBeHidden();
+  await expect(page.getByRole('heading', { name: '角色舞台 LIVE2D' })).toHaveCount(0);
+  await expect(page.locator('#tracking-status')).toBeVisible();
+  await page.locator('#import-empty').click();
+  await expect(notice).toBeVisible();
+  await expect(notice).toContainText('模型导入需要桌面应用');
+  await page.clock.fastForward(4000);
+  await page.locator('#import-empty').click();
+  await page.clock.fastForward(1100);
+  await expect(notice).toBeVisible();
+  await page.clock.fastForward(4100);
+  await expect(notice).toBeHidden();
+  await page.locator('#start').click();
+  await expect(notice).toContainText('摄像头权限被拒绝');
+  await page.clock.fastForward(6000);
+  await expect(notice).toBeVisible();
+});
+
 test('studio panels reopen with the keyboard and fit the minimum desktop window', async ({
   page,
 }, testInfo) => {
@@ -868,6 +899,13 @@ test('studio panels reopen with the keyboard and fit the minimum desktop window'
   await page.setViewportSize({ width, height });
   const expanded = { x: 0, y: 0, width, height };
   await expect.poll(() => page.locator('#stage').boundingBox()).toEqual(expanded);
+  for (const selector of ['#stage', '#controls', '.session-bar', '#start', '#notice']) {
+    const box = (await page.locator(selector).boundingBox())!;
+    expect(box.x).toBeGreaterThanOrEqual(0);
+    expect(box.y).toBeGreaterThanOrEqual(0);
+    expect(box.x + box.width).toBeLessThanOrEqual(width);
+    expect(box.y + box.height).toBeLessThanOrEqual(height);
+  }
   await page.getByRole('button', { name: '收起设置面板' }).click();
   await expect(page.locator('#controls')).toBeHidden();
   const capture = page.getByRole('button', { name: '面捕', exact: true });
@@ -886,13 +924,6 @@ test('studio panels reopen with the keyboard and fit the minimum desktop window'
     await page.getByRole('button', { name, exact: true }).click();
     await expect(page.locator('#panel-title')).toHaveText(title);
     await expect(page.locator('.panel:visible')).toHaveCount(1);
-  }
-  for (const selector of ['#stage', '#controls', '.session-bar', '#start', '#notice']) {
-    const box = (await page.locator(selector).boundingBox())!;
-    expect(box.x).toBeGreaterThanOrEqual(0);
-    expect(box.y).toBeGreaterThanOrEqual(0);
-    expect(box.x + box.width).toBeLessThanOrEqual(width);
-    expect(box.y + box.height).toBeLessThanOrEqual(height);
   }
   expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBe(width);
   await page.screenshot({ path: testInfo.outputPath('studio-compact.png') });
