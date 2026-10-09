@@ -411,9 +411,6 @@ export function App() {
               }}
             />
             <div className="workspace-heading studio-overlay" inert={live}>
-              <h1>
-                角色舞台 <span>LIVE2D</span>
-              </h1>
               <span
                 id="tracking-status"
                 className={`status${view.tracking === 'running' ? ' live' : ''}`}

@@ -491,7 +491,7 @@ body.about {
   right: var(--overlay-right);
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  justify-content: flex-end;
   gap: 12px;
   pointer-events: none;
 }
@@ -505,11 +505,6 @@ h1 {
   background: #ffffffc9;
   padding: 7px 10px;
   border-radius: 8px;
-}
-h1 span {
-  font-size: 8px;
-  letter-spacing: 0.8px;
-  color: #7e8e76;
 }
 .status {
   white-space: nowrap;
