@@ -1,4 +1,4 @@
-import test from 'node:test';
+import test, { mock } from 'node:test';
 import assert from 'node:assert/strict';
 import { mockIPC, clearMocks } from '@tauri-apps/api/mocks';
 import { AppUpdater } from '../src/updater.ts';
@@ -66,6 +66,54 @@ test('updates deduplicate checks, retain retryable downloads, and require succes
     assert.equal(ignored.state.status, 'current');
     ignored.dispose();
   } finally {
+    clearMocks();
+    delete (globalThis as any).window;
+  }
+});
+
+test('download progress reaches the UI at most every 250 ms and ends with the exact size', async () => {
+  Object.assign(globalThis, { window: { crypto: globalThis.crypto } });
+  mock.timers.enable({ apis: ['setTimeout'] });
+  const chunk = 16 * 1024;
+  mockIPC(async (cmd, args: any) => {
+    if (cmd === 'plugin:updater|check')
+      return { rid: 1, currentVersion: '0.1.14', version: '0.1.15', body: '' };
+    if (cmd === 'plugin:updater|download') {
+      let index = 0;
+      const send = (message: unknown) =>
+        (globalThis as any).window.__TAURI_INTERNALS__.runCallback(args.onEvent.id, {
+          index: index++,
+          message,
+        });
+      send({ event: 'Started', data: { contentLength: 3050 * chunk } });
+      for (let i = 0; i < 3050; i++) {
+        send({ event: 'Progress', data: { chunkLength: chunk } });
+        if (i % 100 === 99) mock.timers.tick(25);
+      }
+      send({ event: 'Finished' });
+      return 2;
+    }
+  });
+  try {
+    const shown: number[] = [];
+    const updater = new AppUpdater(
+      () => shown.push(updater.state.received),
+      async () => {},
+    );
+    await updater.check();
+    shown.length = 0;
+    await updater.download();
+    assert.equal(updater.state.status, 'ready');
+    // Downloading, Started, one update per elapsed 250 ms, then the exact total when ready.
+    assert.deepEqual(
+      shown,
+      [0, 0, 1000, 2000, 3000, 3050].map((count) => count * chunk),
+    );
+    mock.timers.tick(1000);
+    assert.equal(shown.length, 6);
+    updater.dispose();
+  } finally {
+    mock.timers.reset();
     clearMocks();
     delete (globalThis as any).window;
   }

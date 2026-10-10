@@ -83,12 +83,20 @@ export class AppUpdater {
     if (this.disposed || this.state.status !== 'available' || !this.update) return;
     const update = this.update;
     this.set({ status: 'downloading', error: '', received: 0, total: undefined });
+    // Show progress at most every 250 ms: each update re-renders the studio and messages About,
+    // and a download delivers thousands of chunks.
+    let received = 0;
+    let timer: ReturnType<typeof setTimeout> | undefined;
     try {
       await update.download(
         (event) => {
           if (event.event === 'Started') this.set({ total: event.data.contentLength });
-          if (event.event === 'Progress')
-            this.set({ received: this.state.received + event.data.chunkLength });
+          if (event.event !== 'Progress') return;
+          received += event.data.chunkLength;
+          timer ??= setTimeout(() => {
+            timer = undefined;
+            this.set({ received });
+          }, 250);
         },
         { timeout: 900000 },
       );
@@ -96,9 +104,11 @@ export class AppUpdater {
         await update.close().catch(() => {});
         return;
       }
-      this.set({ status: 'ready' });
+      this.set({ status: 'ready', received });
     } catch (error) {
       this.set({ status: 'available', error: `下载或签名校验失败，请重试：${String(error)}` });
+    } finally {
+      clearTimeout(timer);
     }
   }
 
