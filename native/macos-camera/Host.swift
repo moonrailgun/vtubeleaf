@@ -249,7 +249,8 @@ class CameraHost: NSObject, OSSystemExtensionRequestDelegate {
             }
             return // One native frame in flight; drop newer frames while CMIO consumes it.
         }
-        guard lastEnqueue == 0 || now - lastEnqueue >= 33_333_333 else { return }
+        // No time gate: the extension takes one frame per 30 FPS tick, so the check above already caps
+        // the rate. A second 33.3 ms gate dropped about every other frame paced by the app's jittery loop.
         let image = try frames.pixelBuffer(rgba: bytes, count: count)
         let sample = try frames.sample(image, at: CMClockGetTime(CMClockGetHostTimeClock()))
         let retained = Unmanaged.passRetained(sample)

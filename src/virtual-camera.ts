@@ -8,6 +8,16 @@ export type CameraStatus = {
   message: string;
 };
 
+export type CameraFrameSource = {
+  /** Opaque top-down RGBA, reused by the next call; undefined while no frame can be rendered. */
+  cameraPixels(
+    width: number,
+    height: number,
+    background: string,
+    mirror: boolean,
+  ): Uint8Array | undefined;
+};
+
 const WIDTH = 1280;
 const HEIGHT = 720;
 
@@ -18,8 +28,6 @@ export class VirtualCamera {
     active: false,
     message: '原生虚拟摄像头需要 Windows 或 macOS 桌面应用',
   };
-  private composite?: HTMLCanvasElement;
-  private context?: CanvasRenderingContext2D;
   private lastFrame = -Infinity;
   private pending?: Promise<void>;
   private control: Promise<void> = Promise.resolve();
@@ -59,8 +67,18 @@ export class VirtualCamera {
     ) {
       throw new Error('无法读取摄像头状态');
     }
+    const previous = this.current;
     this.current = status;
-    if (!this.destroyed) this.onStatus(status);
+    // Polls repeat the same status every 0.5–2 s; only a change needs the UI to re-render.
+    if (
+      !this.destroyed &&
+      (status.supported !== previous.supported ||
+        status.installed !== previous.installed ||
+        status.active !== previous.active ||
+        status.consumers !== previous.consumers ||
+        status.message !== previous.message)
+    )
+      this.onStatus(status);
   }
 
   private fail(error: unknown) {
@@ -107,7 +125,7 @@ export class VirtualCamera {
     return this.command('stop', requireSuccess);
   }
 
-  submit(canvas: HTMLCanvasElement, background: string, mirror = false): void {
+  submit(source: CameraFrameSource, background: string, mirror = false): void {
     const now = performance.now();
     if (
       this.destroyed ||
@@ -116,34 +134,17 @@ export class VirtualCamera {
       this.current.consumers === false ||
       this.pending ||
       // Slack for a render loop whose ticks land slightly early.
-      now - this.lastFrame < 1000 / 30 - 4 ||
-      canvas.width <= 0 ||
-      canvas.height <= 0
+      now - this.lastFrame < 1000 / 30 - 4
     )
       return;
     try {
-      if (!this.composite) {
-        this.composite = document.createElement('canvas');
-        this.composite.width = WIDTH;
-        this.composite.height = HEIGHT;
-        this.context =
-          this.composite.getContext('2d', { alpha: false, willReadFrequently: true }) ?? undefined;
-      }
-      const context = this.context;
-      if (!context) throw new Error('无法创建摄像头画布');
-      context.setTransform(mirror ? -1 : 1, 0, 0, 1, mirror ? WIDTH : 0, 0);
-      // Reset to opaque black before applying a possibly transparent scene background.
-      context.fillStyle = '#000000';
-      context.fillRect(0, 0, WIDTH, HEIGHT);
-      context.fillStyle = background;
-      context.fillRect(0, 0, WIDTH, HEIGHT);
-      const scale = Math.min(WIDTH / canvas.width, HEIGHT / canvas.height);
-      const width = canvas.width * scale;
-      const height = canvas.height * scale;
-      context.drawImage(canvas, (WIDTH - width) / 2, (HEIGHT - height) / 2, width, height);
-      const frame = context.getImageData(0, 0, WIDTH, HEIGHT).data;
+      const frame = source.cameraPixels(WIDTH, HEIGHT, background, mirror);
+      // A zero-size stage or a lost WebGL context has no frame; retry on the next tick.
+      if (!frame) return;
       this.lastFrame = now;
-      this.pending = invoke<void>('plugin:virtual-camera|submit', frame.buffer)
+      // The source reuses this buffer, but fetch copies the IPC body when the request is created,
+      // and `pending` keeps the next frame from being rendered until this one is answered.
+      this.pending = invoke<void>('plugin:virtual-camera|submit', frame)
         .catch((error) => {
           this.fail(error);
           // A failed producer must stop the native sink; the extension then blanks its source.
@@ -168,7 +169,5 @@ export class VirtualCamera {
         .then(() => invoke('plugin:virtual-camera|stop'))
         .catch(() => {});
     }
-    this.composite = undefined;
-    this.context = undefined;
   }
 }

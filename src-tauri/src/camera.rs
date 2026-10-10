@@ -102,7 +102,8 @@ fn frame_body(body: &InvokeBody) -> Result<&[u8], String> {
     }
 }
 
-#[tauri::command]
+// Async keeps the per-frame conversion and its wait for the host queue off the main thread.
+#[tauri::command(async)]
 fn submit<R: Runtime>(
     window: WebviewWindow<R>,
     request: tauri::ipc::Request<'_>,

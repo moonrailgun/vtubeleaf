@@ -88,8 +88,9 @@ async function imageAsset(id: string): Promise<Visual> {
       saved = frame.disposalType === 3 ? context.getImageData(0, 0, width, height) : undefined;
       patch.width = frame.dims.width;
       patch.height = frame.dims.height;
+      // gifuct-js builds each patch as its own Uint8ClampedArray and never touches it again.
       patchContext.putImageData(
-        new ImageData(new Uint8ClampedArray(frame.patch), patch.width, patch.height),
+        new ImageData(frame.patch as Uint8ClampedArray<ArrayBuffer>, patch.width, patch.height),
         0,
         0,
       );
@@ -234,8 +235,10 @@ export class SceneLayers {
         node.visible = false;
         continue;
       }
+      // Assigning zIndex, even unchanged, makes PIXI re-sort the root on the next render.
+      const zIndex = item ? (item.behind ? -500 : 1) + s.composition.items.indexOf(item) : -1000;
+      if (node.zIndex !== zIndex) node.zIndex = zIndex;
       if (!item) {
-        node.zIndex = -1000;
         node.scale.set(Math.max(width / visual.width, height / visual.height));
         node.position.set(width / 2, height / 2);
       } else {
@@ -244,7 +247,6 @@ export class SceneLayers {
           visual.fade[0].alpha = item.opacity;
           node.filters = item.opacity < 1 ? visual.fade : null;
         } else node.alpha = item.opacity;
-        node.zIndex = (item.behind ? -500 : 1) + s.composition.items.indexOf(item);
         const attached = item.attach === 'model';
         const angle = attached ? (s.rotation * Math.PI) / 180 : 0;
         const zoom = attached ? s.zoom * depthScale : 1;

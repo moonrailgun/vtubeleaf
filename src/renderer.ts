@@ -10,6 +10,10 @@ import { layoutMasks, maskBufferSize } from './masks';
 install(PIXI);
 // Deformed meshes minify unevenly; without this the mip level follows the blurrier axis.
 PIXI.settings.ANISOTROPIC_LEVEL = 16;
+// Nothing on the stage is hit-tested (a parent element handles drags) or exposed to screen
+// readers, yet these plugins hit-test every pointer move on the page, keep a ticker waking every
+// display frame and walk the scene after each render. Remove them before any renderer exists.
+PIXI.extensions.remove(PIXI.InteractionManager, PIXI.AccessibilityManager);
 
 export type ModelInfo = {
   id: string;
@@ -56,6 +60,21 @@ type ExpressionLayer = {
 };
 
 export type Expression = { id: string; name: string; data: ExpressionData; file: string };
+
+// Render targets of one off-screen output (OBS or the virtual camera).
+type OutputTarget = {
+  texture?: PIXI.RenderTexture;
+  stage?: PIXI.RenderTexture;
+  output?: PIXI.RenderTexture;
+  sprite?: PIXI.Sprite;
+  pixels?: Uint8Array;
+};
+
+// Values copied at every model update; the records are built only when someone reads them.
+type Snapshot = { ids: string[]; values: Float32Array };
+
+const record = (snapshot?: Snapshot): Record<string, number> =>
+  snapshot ? Object.fromEntries(snapshot.ids.map((id, i) => [id, snapshot.values[i]])) : {};
 
 let coreReady: Promise<void> | undefined;
 
@@ -106,11 +125,10 @@ export class AvatarStage {
   private app: PIXI.Application;
   readonly content = new PIXI.Container();
   private layers?: SceneLayers;
-  private transparentTexture?: PIXI.RenderTexture;
-  private transparentStage?: PIXI.RenderTexture;
-  private transparentOutput?: PIXI.RenderTexture;
-  private transparentSprite?: PIXI.Sprite;
-  private transparentPixelBuffer?: Uint8Array;
+  // Separate targets, so OBS and the camera never reallocate each other's textures.
+  private transparent: OutputTarget = {};
+  private camera: OutputTarget = {};
+  private cameraBackground?: { color: string; rgba: number[] };
   private model?: Live2DModel;
   private urls: string[] = [];
   private generation = 0;
@@ -131,8 +149,9 @@ export class AvatarStage {
   trackingLost = false;
   onWarning?: (message: string) => void;
   private heldMotion = '';
-  frame: Record<string, number> = {};
-  parts: Record<string, number> = {};
+  private snapshot?: { parameters: Snapshot; parts: Snapshot };
+  private frameRecord?: Record<string, number>;
+  private partsRecord?: Record<string, number>;
   private incomingParts: Record<string, number> = {};
   private playing?: {
     id: string;
@@ -150,6 +169,21 @@ export class AvatarStage {
 
   get currentMotion() {
     return this.playing?.id ?? '';
+  }
+
+  /** Parameter values of the last model update; a new object after each update. */
+  get frame(): Record<string, number> {
+    return (this.frameRecord ??= record(this.snapshot?.parameters));
+  }
+
+  /** Part opacities of the last model update; a new object after each update. */
+  get parts(): Record<string, number> {
+    return (this.partsRecord ??= record(this.snapshot?.parts));
+  }
+
+  private resetSnapshot(snapshot?: AvatarStage['snapshot']) {
+    this.snapshot = snapshot;
+    this.frameRecord = this.partsRecord = undefined;
   }
 
   constructor(
@@ -317,8 +351,7 @@ export class AvatarStage {
       this.expressionLayers.clear();
       this.trackingLost = false;
       this.expressionIds.clear();
-      this.frame = {};
-      this.parts = {};
+      this.resetSnapshot();
       this.physicsGroups = this.passive ? [] : physicsGroupsFromJson(physicsDocument);
       this.motions = motionDefinitions
         .filter((def) => documents.has(def.file))
@@ -349,6 +382,7 @@ export class AvatarStage {
         expressionManager.update = (_core, now) => {
           const dt = expressionTime === undefined ? 0 : clamp(now - expressionTime, 0, 0.1);
           expressionTime = now;
+          let removed = false;
           for (const [id, layer] of this.expressionLayers) {
             layer.elapsed += dt;
             const progress = layer.duration <= 0 ? 1 : clamp(layer.elapsed / layer.duration, 0, 1);
@@ -356,17 +390,21 @@ export class AvatarStage {
               layer.from + (layer.target - layer.from) * (0.5 - 0.5 * Math.cos(progress * Math.PI));
             if (layer.target === 0 && progress === 1) {
               this.expressionLayers.delete(id);
+              removed = true;
               continue;
             }
             // Cubism handles Add/Multiply/Overwrite; expression motions do not use the queue entry.
             layer.motion.doUpdateParameters(internal.coreModel, now, layer.weight, null!);
           }
-          this.expressionIds = new Set(
-            [...this.expressionLayers.keys()].flatMap(
-              (id) =>
-                this.expressions.find((e) => e.id === id)?.data.Parameters?.map((p) => p.Id) ?? [],
-            ),
-          );
+          // setExpression adds a new layer's IDs itself; only a finished fade-out shrinks the set.
+          if (removed)
+            this.expressionIds = new Set(
+              [...this.expressionLayers.keys()].flatMap(
+                (id) =>
+                  this.expressions.find((e) => e.id === id)?.data.Parameters?.map((p) => p.Id) ??
+                  [],
+              ),
+            );
           return this.expressionLayers.size > 0;
         };
       // Cubism 4 shares one shader singleton across WebGL contexts (including thumbnails).
@@ -394,33 +432,47 @@ export class AvatarStage {
           () => this.settings,
         );
       }
+      // Every *ById call (ours and Cubism's motions, expressions, breath, blink and focus) scans
+      // all IDs to find the index. Remember each answer for this model; an unknown ID keeps the
+      // placeholder index Cubism registers for it on first sight.
+      const coreModel = internal.coreModel;
+      for (const method of ['getParameterIndex', 'getPartIndex'] as const) {
+        const lookup = coreModel[method].bind(coreModel);
+        const indices = new Map<string, number>();
+        coreModel[method] = (id) => {
+          let index = indices.get(id);
+          if (index === undefined) indices.set(id, (index = lookup(id)));
+          return index;
+        };
+      }
+      const blinking: string[] = [];
       internal.on('beforeMotionUpdate', () => {
         for (const p of this.parameters) internal.coreModel.setParameterValueById(p.id, p.default);
         if (!this.passive) {
           internal.eyeBlink = this.settings?.autoBlink ? blink : undefined;
-          blink?.setParameterIds(
-            blinkIds.filter(
-              (id) =>
-                !Object.hasOwn(this.values, id) &&
-                !this.playing?.ids.has(id) &&
-                !this.expressionIds.has(id) &&
-                !Object.hasOwn(this.held, id),
-            ),
-          );
+          blinking.length = 0;
+          for (const id of blinkIds)
+            if (
+              !Object.hasOwn(this.values, id) &&
+              !this.playing?.ids.has(id) &&
+              !this.expressionIds.has(id) &&
+              !Object.hasOwn(this.held, id)
+            )
+              blinking.push(id);
+          blink?.setParameterIds(blinking);
         }
       });
       internal.on('afterMotionUpdate', () => {
         if (this.passive) return;
-        for (const [id, value] of Object.entries(this.held))
-          internal.coreModel.setParameterValueById(id, value);
-        for (const [id, value] of Object.entries(this.values)) {
+        for (const id in this.held) internal.coreModel.setParameterValueById(id, this.held[id]);
+        for (const id in this.values) {
           if (
             (!this.playing ||
               (this.playing.idle && !this.trackingLost) ||
               !this.playing.ids.has(id)) &&
             !Object.hasOwn(this.held, id)
           )
-            internal.coreModel.setParameterValueById(id, value);
+            internal.coreModel.setParameterValueById(id, this.values[id]);
         }
         if (this.playing?.finished) {
           this.stopMotionAudio();
@@ -432,26 +484,35 @@ export class AvatarStage {
         }
       });
       const natural = internal.updateNaturalMovements.bind(internal);
+      // Flat [index, value] pairs; restoring a repeated ID twice writes the same value.
+      const saved: number[] = [];
+      let count = 0;
+      const save = (id: string) => {
+        const index = coreModel.getParameterIndex(id);
+        saved[count++] = index;
+        saved[count++] = coreModel.getParameterValueByIndex(index);
+      };
       internal.updateNaturalMovements = (dt, now) => {
         if (this.passive) return;
-        const ids = new Set([
-          ...Object.keys(this.values),
-          ...Object.keys(this.held),
-          ...this.expressionIds,
-          ...(this.playing?.ids ?? []),
-        ]);
-        const saved = [...ids].map(
-          (id) => [id, internal.coreModel.getParameterValueById(id)] as const,
-        );
+        count = 0;
+        for (const id in this.values) save(id);
+        for (const id in this.held) save(id);
+        for (const id of this.expressionIds) save(id);
+        if (this.playing) for (const id of this.playing.ids) save(id);
         natural(dt, now);
-        for (const [id, value] of saved) internal.coreModel.setParameterValueById(id, value);
+        for (let i = 0; i < count; i += 2)
+          coreModel.setParameterValueByIndex(saved[i], saved[i + 1]);
+      };
+      const snapshot = {
+        parameters: { ids: raw.ids, values: new Float32Array(raw.values.length) },
+        parts: { ids: core.parts.ids, values: new Float32Array(core.parts.opacities.length) },
       };
       internal.on('beforeModelUpdate', () => {
         if (this.passive) {
-          for (const [id, value] of Object.entries(this.values))
-            internal.coreModel.setParameterValueById(id, value);
-          for (const [id, value] of Object.entries(this.incomingParts))
-            internal.coreModel.setPartOpacityById(id, value);
+          for (const id in this.values)
+            internal.coreModel.setParameterValueById(id, this.values[id]);
+          for (const id in this.incomingParts)
+            internal.coreModel.setPartOpacityById(id, this.incomingParts[id]);
         }
         if (!this.passive)
           for (const p of this.parameters) {
@@ -459,10 +520,10 @@ export class AvatarStage {
             if (Number.isFinite(value))
               internal.coreModel.setParameterValueById(p.id, clamp(value!, p.min, p.max));
           }
-        this.frame = Object.fromEntries(Array.from(raw.ids, (id, i) => [id, raw.values[i]]));
-        this.parts = Object.fromEntries(
-          Array.from(core.parts.ids, (id, i) => [id, core.parts.opacities[i]]),
-        );
+        // Cubism restores its saved parameters right after this update, so copy them now.
+        snapshot.parameters.values.set(raw.values);
+        snapshot.parts.values.set(core.parts.opacities);
+        this.resetSnapshot(snapshot);
       });
       this.content.addChild(candidate);
       this.layout();
@@ -529,24 +590,37 @@ export class AvatarStage {
     return this.app.view;
   }
 
-  private renderTransparent(width: number, height: number): PIXI.RenderTexture {
+  /**
+   * Renders the stage letterboxed into a width×height texture, at 2x and box-downsampled when
+   * `supersampled`. Without a background the scene's background layer is hidden and the frame
+   * stays transparent; with one (premultiplied RGBA), the whole frame is filled with it first and
+   * optionally mirrored.
+   */
+  private renderOutput(
+    target: OutputTarget,
+    width: number,
+    height: number,
+    supersampled: boolean,
+    background?: number[],
+    mirror = false,
+  ): PIXI.RenderTexture {
     const renderer = this.app.renderer as PIXI.Renderer;
     // A lost context renders and reads nothing, which would republish the previous frame.
     if (renderer.gl.isContextLost()) throw new Error('显卡上下文已丢失');
-    const resolution = this.settings?.supersample ? 2 : 1;
+    const resolution = supersampled ? 2 : 1;
     if (
-      this.transparentTexture?.width !== width ||
-      this.transparentTexture.height !== height ||
-      this.transparentTexture.resolution !== resolution
+      target.texture?.width !== width ||
+      target.texture.height !== height ||
+      target.texture.resolution !== resolution
     ) {
-      this.transparentStage?.destroy();
-      this.transparentStage = undefined;
-      this.transparentSprite?.destroy();
-      this.transparentSprite = undefined;
-      this.transparentOutput?.destroy(true);
-      this.transparentOutput = undefined;
-      this.transparentTexture?.destroy(true);
-      this.transparentTexture = PIXI.RenderTexture.create({ width, height, resolution });
+      target.stage?.destroy();
+      target.stage = undefined;
+      target.sprite?.destroy();
+      target.sprite = undefined;
+      target.output?.destroy(true);
+      target.output = undefined;
+      target.texture?.destroy(true);
+      target.texture = PIXI.RenderTexture.create({ width, height, resolution });
     }
     // Render into the letterboxed area only, so its viewport crops overflow like the preview does.
     const screen = this.app.screen;
@@ -559,7 +633,7 @@ export class AvatarStage {
     );
     frame.x = Math.round((width - frame.width) / 2);
     frame.y = Math.round((height - frame.height) / 2);
-    const previous = this.transparentStage?.frame;
+    const previous = target.stage?.frame;
     if (
       previous?.x !== frame.x ||
       previous.y !== frame.y ||
@@ -567,11 +641,11 @@ export class AvatarStage {
       previous.height !== frame.height
     ) {
       // The previous letterbox may have covered pixels outside the new one.
-      renderer.renderTexture.bind(this.transparentTexture);
+      renderer.renderTexture.bind(target.texture);
       renderer.renderTexture.clear();
-      this.transparentStage?.destroy();
-      this.transparentStage = new PIXI.RenderTexture(
-        this.transparentTexture.baseTexture as PIXI.BaseRenderTexture,
+      target.stage?.destroy();
+      target.stage = new PIXI.RenderTexture(
+        target.texture.baseTexture as PIXI.BaseRenderTexture,
         frame,
       );
     }
@@ -581,43 +655,88 @@ export class AvatarStage {
       0,
       frame.height / screen.height,
     );
-    const background = this.layers?.background;
-    const visible = background?.visible;
+    const layer = background ? undefined : this.layers?.background;
+    const visible = layer?.visible;
     try {
-      if (background) background.visible = false;
-      renderer.render(this.app.stage, {
-        renderTexture: this.transparentStage,
-        transform,
-        clear: true,
-      });
-      if (resolution === 1) return this.transparentTexture;
-      // ponytail: linear sampling at exactly half size is a 2x2 box filter; use a Lanczos
-      // shader if sharper output is ever needed.
-      this.transparentOutput ??= PIXI.RenderTexture.create({ width, height });
-      this.transparentSprite ??= new PIXI.Sprite(this.transparentTexture);
-      renderer.render(this.transparentSprite, {
-        renderTexture: this.transparentOutput,
-        clear: true,
-      });
-      return this.transparentOutput;
+      if (layer) layer.visible = false;
+      renderer.render(this.app.stage, { renderTexture: target.stage, transform, clear: true });
     } finally {
-      if (background) background.visible = visible!;
+      if (layer) layer.visible = visible!;
     }
+    if (resolution === 1 && !background) return target.texture;
+    // ponytail: linear sampling at exactly half size is a 2x2 box filter; use a Lanczos
+    // shader if sharper output is ever needed.
+    target.output ??= PIXI.RenderTexture.create({ width, height });
+    target.sprite ??= new PIXI.Sprite(target.texture);
+    // Compositing over the cleared fill matches drawing the transparent preview over it.
+    if (background) (target.output.baseTexture as PIXI.BaseRenderTexture).clearColor = background;
+    target.sprite.scale.x = mirror ? -1 : 1;
+    target.sprite.x = mirror ? width : 0;
+    renderer.render(target.sprite, { renderTexture: target.output, clear: true });
+    return target.output;
+  }
+
+  private readOutput(target: OutputTarget, texture: PIXI.RenderTexture) {
+    const renderer = this.app.renderer as PIXI.Renderer;
+    const { width, height } = texture;
+    renderer.renderTexture.bind(texture);
+    if (target.pixels?.length !== width * height * 4)
+      target.pixels = new Uint8Array(width * height * 4);
+    const gl = renderer.gl;
+    gl.readPixels(0, 0, width, height, gl.RGBA, gl.UNSIGNED_BYTE, target.pixels);
+    return target.pixels;
   }
 
   transparentCanvas(): HTMLCanvasElement {
-    return this.app.renderer.plugins.extract.canvas(this.renderTransparent(1280, 720));
+    return this.app.renderer.plugins.extract.canvas(
+      this.renderOutput(this.transparent, 1280, 720, !!this.settings?.supersample),
+    );
   }
 
   /** Top-down premultiplied RGBA. The buffer is reused by the next call. */
   transparentPixels(width: number, height: number): Uint8Array {
+    return this.readOutput(
+      this.transparent,
+      this.renderOutput(this.transparent, width, height, !!this.settings?.supersample),
+    );
+  }
+
+  /**
+   * Top-down opaque RGBA of the preview, scene background included, letterboxed over `background`
+   * (any CSS color, over black). The buffer is reused by the next call. Undefined while the stage
+   * has no size or the WebGL context is lost, so the camera skips those frames.
+   */
+  cameraPixels(
+    width: number,
+    height: number,
+    background: string,
+    mirror: boolean,
+  ): Uint8Array | undefined {
     const renderer = this.app.renderer as PIXI.Renderer;
-    renderer.renderTexture.bind(this.renderTransparent(width, height));
-    if (this.transparentPixelBuffer?.length !== width * height * 4)
-      this.transparentPixelBuffer = new Uint8Array(width * height * 4);
-    const gl = renderer.gl;
-    gl.readPixels(0, 0, width, height, gl.RGBA, gl.UNSIGNED_BYTE, this.transparentPixelBuffer);
-    return this.transparentPixelBuffer;
+    if (renderer.gl.isContextLost() || !this.app.screen.width || !this.app.screen.height) return;
+    if (this.cameraBackground?.color !== background) {
+      // The 2D canvas parses any CSS color exactly as the camera used to fill its frame.
+      const context = document.createElement('canvas').getContext('2d')!;
+      context.fillStyle = '#000000';
+      context.fillRect(0, 0, 1, 1);
+      context.fillStyle = background;
+      context.fillRect(0, 0, 1, 1);
+      const [r, g, b] = context.getImageData(0, 0, 1, 1).data;
+      this.cameraBackground = { color: background, rgba: [r / 255, g / 255, b / 255, 1] };
+    }
+    return this.readOutput(
+      this.camera,
+      // The camera used to scale down the preview canvas, so match its sharpness on HiDPI screens
+      // even without supersampling.
+      this.renderOutput(
+        this.camera,
+        width,
+        height,
+        !!this.settings?.supersample || renderer.resolution > 1,
+        this.cameraBackground.rgba,
+        mirror,
+      ),
+    );
   }
 
   centeredItem() {
@@ -712,10 +831,20 @@ export class AvatarStage {
     const native = Math.min(devicePixelRatio, 2);
     // Extra samples keep line art and edges sharp where trilinear mipmapping alone blurs them.
     // Cap them at a 4K drawing buffer so a large window cannot exhaust the GPU.
-    this.app.renderer.resolution = this.settings?.supersample
+    const resolution = this.settings?.supersample
       ? Math.max(native, Math.min(2, Math.sqrt((3840 * 2160) / (width * height))))
       : native;
-    this.app.renderer.resize(width, height);
+    const renderer = this.app.renderer;
+    // Layout runs on every settings change, and a resize reallocates the drawing buffer even
+    // when nothing changed. Unchanged buffer size and resolution also mean an unchanged screen.
+    if (
+      renderer.resolution !== resolution ||
+      renderer.view.width !== Math.round(width * resolution) ||
+      renderer.view.height !== Math.round(height * resolution)
+    ) {
+      renderer.resolution = resolution;
+      renderer.resize(width, height);
+    }
     if (!this.model || !this.settings) return;
     const model = this.model,
       s = this.settings;
@@ -928,8 +1057,7 @@ export class AvatarStage {
     this.playing = undefined;
     this.held = {};
     this.heldMotion = '';
-    this.frame = {};
-    this.parts = {};
+    this.resetSnapshot();
     this.app.render();
   }
 
@@ -939,10 +1067,12 @@ export class AvatarStage {
     this.clear();
     this.observer?.disconnect();
     this.layers?.destroy();
-    this.transparentStage?.destroy();
-    this.transparentSprite?.destroy();
-    this.transparentOutput?.destroy(true);
-    this.transparentTexture?.destroy(true);
+    for (const target of [this.transparent, this.camera]) {
+      target.stage?.destroy();
+      target.sprite?.destroy();
+      target.output?.destroy(true);
+      target.texture?.destroy(true);
+    }
     if (this.sharedApp) this.content.destroy();
     else this.app.destroy(true);
   }

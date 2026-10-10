@@ -246,6 +246,37 @@ private final class EnabledCameraProperties: OSSystemExtensionProperties {
         assert(host.installed && host.message == "摄像头已安装，可以启动输出")
         print("PASS: approval, device arrival, startup failure and disable/re-enable status transitions")
 
+        // A local queue stands in for the CMIO sink; CMIO dequeues one frame per extension tick.
+        let pacing = CameraHost()
+        var sinkQueue: CMSimpleQueue?
+        assert(CMSimpleQueueCreate(allocator: kCFAllocatorDefault, capacity: 1, queueOut: &sinkQueue) == noErr)
+        pacing.stream = 2
+        pacing.queue = sinkQueue
+        pacing.frames = try CameraFrames()
+        func consume() -> Bool {
+            guard let frame = CMSimpleQueueDequeue(sinkQueue!) else { return false }
+            Unmanaged<CMSampleBuffer>.fromOpaque(frame).release()
+            return true
+        }
+        try [UInt8](repeating: 0, count: cameraBytes).withUnsafeBytes { pixels in
+            let frame = pixels.baseAddress!
+            try pacing.submit(frame, count: cameraBytes)
+            try pacing.submit(frame, count: cameraBytes)
+            assert(consume() && !consume(), "A frame in flight must drop newer frames")
+            try pacing.submit(frame, count: cameraBytes)
+            assert(consume(), "Once CMIO takes a frame, the next one must not wait for a 30 FPS time slot")
+            try pacing.submit(frame, count: cameraBytes)
+            pacing.lastEnqueue -= 3_000_000_000
+            do {
+                try pacing.submit(frame, count: cameraBytes)
+                assertionFailure("A sink stalled for 2 s must stop output")
+            } catch {
+                assert(pacing.stream == 0 && error.localizedDescription.contains("超时"), "A sink stalled for 2 s must stop output")
+            }
+        }
+        _ = consume()
+        print("PASS: frames drop only while one is in flight, and a stalled sink stops output")
+
         let devices = objectIDs(CMIOObjectID(kCMIOObjectSystemObject), CMIOObjectPropertySelector(kCMIOHardwarePropertyDevices))
         guard let device = devices.first(where: { deviceUID($0) == cameraDeviceUID }) else {
             guard !CommandLine.arguments.contains("--require-device") else {

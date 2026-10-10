@@ -154,6 +154,135 @@ test('physics wrapper reapplies output between fixed simulation steps', () => {
   assert.deepEqual(particle.position, { x: 11, y: 22 });
 });
 
+test('default physics controls evaluate directly and a previous wind does not linger', () => {
+  const calls: { dt: number; wind: number; weights: number[] }[] = [];
+  const options = { wind: { x: 0, y: 0 } };
+  let writes = 0;
+  // Counts every write the wrapper makes to an output, so the direct path can prove it makes none.
+  const output = (weight: number) => {
+    const scale = { x: 2, y: 3 };
+    const state = { weight, angleScale: 4 };
+    return {
+      get weight() {
+        return state.weight;
+      },
+      set weight(value) {
+        writes++;
+        state.weight = value;
+      },
+      get angleScale() {
+        return state.angleScale;
+      },
+      set angleScale(value) {
+        writes++;
+        state.angleScale = value;
+      },
+      translationScale: {
+        get x() {
+          return scale.x;
+        },
+        set x(value) {
+          writes++;
+          scale.x = value;
+        },
+        get y() {
+          return scale.y;
+        },
+        set y(value) {
+          writes++;
+          scale.y = value;
+        },
+      },
+    };
+  };
+  const physics = {
+    _physicsRig: {
+      settings: [
+        { baseOutputIndex: 0, outputCount: 1 },
+        { baseOutputIndex: 1, outputCount: 1 },
+      ],
+      outputs: [output(80), output(100)],
+      particles: [],
+    },
+    getOption: () => options,
+    evaluate(_model: unknown, dt: number) {
+      calls.push({
+        dt,
+        wind: options.wind.x,
+        weights: this._physicsRig.outputs.map((item) => item.weight),
+      });
+    },
+  };
+  let controls:
+    | {
+        physicsStrength: number;
+        physicsWind: number;
+        physicsFps: number;
+        physicsGroups: Record<string, number>;
+      }
+    | undefined = { physicsStrength: 1, physicsWind: 0, physicsFps: 0, physicsGroups: { hair: 1 } };
+  wrapPhysics(physics, ['hair', 'scarf'], () => controls);
+
+  for (const dt of [1 / 60, 10, -1, Number.NaN]) physics.evaluate({}, dt);
+  controls = undefined;
+  physics.evaluate({}, 1 / 30);
+  assert.equal(writes, 0, 'default controls leave every output untouched');
+  assert.deepEqual(
+    calls.map((call) => call.dt),
+    [1 / 60, 0.1, 0, 0, 1 / 30],
+  );
+
+  calls.length = 0;
+  controls = { physicsStrength: 1, physicsWind: 2, physicsFps: 0, physicsGroups: {} };
+  physics.evaluate({}, 1 / 60);
+  controls = { ...controls, physicsWind: 0 };
+  physics.evaluate({}, 1 / 60);
+  assert.deepEqual(
+    calls.map((call) => call.wind),
+    [2, 0],
+  );
+  assert.equal(options.wind.x, 0);
+
+  // Any custom group strength still goes through scaling.
+  calls.length = 0;
+  controls = { ...controls, physicsGroups: { scarf: 0.5 } };
+  physics.evaluate({}, 1 / 60);
+  assert.deepEqual(calls[0].weights, [80, 50]);
+  assert.deepEqual(
+    physics._physicsRig.outputs.map((item) => item.weight),
+    [80, 100],
+  );
+});
+
+test('physics outputs authored above the weight ceiling keep their scaling at default strength', () => {
+  const calls: { weight: number; x: number; angle: number }[] = [];
+  const physics = {
+    _physicsRig: {
+      settings: [{ baseOutputIndex: 0, outputCount: 1 }],
+      outputs: [{ weight: 150, translationScale: { x: 2, y: 3 }, angleScale: 4 }],
+      particles: [],
+    },
+    getOption: () => ({ wind: { x: 0, y: 0 } }),
+    evaluate() {
+      const [output] = this._physicsRig.outputs;
+      calls.push({ weight: output.weight, x: output.translationScale.x, angle: output.angleScale });
+    },
+  };
+  wrapPhysics(physics, ['hair'], () => ({
+    physicsStrength: 1,
+    physicsWind: 0,
+    physicsFps: 0,
+    physicsGroups: {},
+  }));
+  physics.evaluate({}, 1 / 60);
+  assert.deepEqual(calls, [{ weight: 100, x: 3, angle: 6 }]);
+  assert.deepEqual(physics._physicsRig.outputs[0], {
+    weight: 150,
+    translationScale: { x: 2, y: 3 },
+    angleScale: 4,
+  });
+});
+
 test('physics metadata exposes stable setting ids with dictionary names', () => {
   assert.deepEqual(
     physicsGroupsFromJson({

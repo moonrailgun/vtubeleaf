@@ -6,29 +6,31 @@ test('camera mirror flips output horizontally, switches live, and persists after
 }, testInfo) => {
   await page.route('**/src/main.tsx*', async (route) => {
     const response = await route.fetch();
+    // The real stage renders a quadrant scene background; a square stage letterboxes to
+    // x 280..1000 of the 1280×720 camera frame, leaving the scene color in the side bars.
     const bootstrap = `import { mockIPC, mockWindows } from '/node_modules/@tauri-apps/api/mocks.js';
-      import { VirtualCamera } from '/src/virtual-camera.ts';
       window.isTauri = true; mockWindows('main');
-      const source = document.createElement('canvas');
-      source.width = source.height = 400;
-      const context = source.getContext('2d');
+      const style = document.createElement('style');
+      style.textContent = '#stage { right: auto !important; bottom: auto !important; width: 400px !important; height: 400px !important; }';
+      document.head.append(style);
+      const quadrants = document.createElement('canvas');
+      quadrants.width = quadrants.height = 400;
+      const context = quadrants.getContext('2d');
       ['#ff0000', '#00ff00', '#0000ff', '#ffff00'].forEach((color, i) => {
         context.fillStyle = color;
         context.fillRect((i % 2) * 200, Math.floor(i / 2) * 200, 200, 200);
       });
-      const original = source.toDataURL();
-      const submit = VirtualCamera.prototype.submit;
-      VirtualCamera.prototype.submit = function(canvas, background, mirror) {
-        submit.call(this, source, background, mirror);
-      };
+      const backgroundImage = '0123456789abcdef0123456789abcdef.png';
       const camera = window.cameraTest = {
         status: { supported: true, installed: true, active: false, message: '已安装' },
-        pixels: [], sourceUnchanged: true
+        pixels: [], opaque: false, preview: []
       };
       mockIPC((cmd, args) => {
-        if (cmd === 'load_settings') return JSON.parse(localStorage.getItem('camera-test-settings') || '{"autoCheckUpdates":false,"background":"#123456"}');
+        if (cmd === 'load_settings') return JSON.parse(localStorage.getItem('camera-test-settings') || JSON.stringify({ autoCheckUpdates: false, background: '#123456', composition: { backgroundImage, items: [] } }));
         if (cmd === 'save_settings') { localStorage.setItem('camera-test-settings', JSON.stringify(args.settings)); return; }
         if (cmd === 'list_models') return { models: [], directory: '/test/models', errors: [] };
+        if (cmd === 'read_asset' && args.id === backgroundImage)
+          return new Promise((resolve) => quadrants.toBlob(resolve)).then((blob) => blob.arrayBuffer());
         if (!cmd.startsWith('plugin:virtual-camera|')) return;
         const action = cmd.split('|')[1];
         if (action === 'start') camera.status.active = true;
@@ -37,7 +39,12 @@ test('camera mirror flips output horizontally, switches live, and persists after
           const bytes = new Uint8Array(args);
           camera.pixels = [[400, 180], [880, 180], [400, 540], [880, 540], [0, 0]].map(([x, y]) =>
             Array.from(bytes.slice((y * 1280 + x) * 4, (y * 1280 + x) * 4 + 4)));
-          camera.sourceUnchanged = source.toDataURL() === original;
+          camera.opaque = bytes.length === 1280 * 720 * 4 && bytes.every((value, i) => i % 4 !== 3 || value === 255);
+          // The preview canvas still holds this frame: mirroring the output must not flip it.
+          const preview = document.querySelector('#stage canvas');
+          const probe = document.createElement('canvas').getContext('2d');
+          probe.drawImage(preview, preview.width / 4, preview.height / 4, 1, 1, 0, 0, 1, 1);
+          camera.preview = Array.from(probe.getImageData(0, 0, 1, 1).data);
           return;
         }
         return { ...camera.status };
@@ -50,6 +57,11 @@ test('camera mirror flips output horizontally, switches live, and persists after
   const yellow = [255, 255, 0, 255];
   const border = [18, 52, 86, 255];
   const pixels = () => page.evaluate(() => (window as any).cameraTest.pixels);
+  const output = () =>
+    page.evaluate(() => {
+      const { opaque, preview } = (window as any).cameraTest;
+      return { opaque, preview };
+    });
   await page.goto('/');
   await page.getByRole('button', { name: '接入', exact: true }).click();
   await openFold(page, '更多输出选项');
@@ -57,8 +69,10 @@ test('camera mirror flips output horizontally, switches live, and persists after
   await expect(mirror).not.toBeChecked();
   await page.getByRole('button', { name: '启动虚拟摄像头', exact: true }).click();
   await expect.poll(pixels).toEqual([red, green, blue, yellow, border]);
+  expect(await output()).toEqual({ opaque: true, preview: red });
   await mirror.check();
   await expect.poll(pixels).toEqual([green, red, yellow, blue, border]);
+  expect(await output()).toEqual({ opaque: true, preview: red });
   await expect
     .poll(() =>
       page.evaluate(
@@ -75,7 +89,47 @@ test('camera mirror flips output horizontally, switches live, and persists after
   await expect.poll(pixels).toEqual([green, red, yellow, blue, border]);
   await mirror.uncheck();
   await expect.poll(pixels).toEqual([red, green, blue, yellow, border]);
-  expect(await page.evaluate(() => (window as any).cameraTest.sourceUnchanged)).toBe(true);
+});
+
+test('a failed model render keeps the camera output running', async ({ page }) => {
+  await page.route('**/src/main.tsx*', async (route) => {
+    const response = await route.fetch();
+    const bootstrap = `import { mockIPC, mockWindows } from '/node_modules/@tauri-apps/api/mocks.js';
+      import { AvatarStage } from '/src/renderer.ts';
+      const draw = AvatarStage.prototype.draw;
+      // A broken model throws whenever the stage renders, in the preview and in camera frames.
+      AvatarStage.prototype.draw = function (...args) {
+        if (window.breakModel) this.app.stage.render = () => { throw new Error('boom'); };
+        return draw.apply(this, args);
+      };
+      window.isTauri = true; mockWindows('main');
+      const camera = window.cameraTest = { active: false, submits: 0, stops: 0 };
+      mockIPC((cmd) => {
+        if (cmd === 'load_settings') return { autoCheckUpdates: false };
+        if (cmd === 'list_models') return { models: [], directory: '/test/models', errors: [] };
+        if (!cmd.startsWith('plugin:virtual-camera|')) return;
+        const action = cmd.split('|')[1];
+        if (action === 'start') camera.active = true;
+        if (action === 'stop') { camera.active = false; camera.stops++; }
+        if (action === 'submit') { camera.submits++; return; }
+        return { supported: true, installed: true, active: camera.active, message: '已安装' };
+      }, { shouldMockEvents: true });\n`;
+    await route.fulfill({ response, body: bootstrap + (await response.text()) });
+  });
+  const camera = () => page.evaluate(() => ({ ...(window as any).cameraTest }));
+  await page.goto('/');
+  await page.getByRole('button', { name: '接入', exact: true }).click();
+  await page.getByRole('button', { name: '启动虚拟摄像头', exact: true }).click();
+  await expect.poll(async () => (await camera()).submits).toBeGreaterThan(0);
+  // Startup already stops any stale session; only stops after the failure count.
+  await page.evaluate(() => {
+    (window as any).cameraTest.stops = 0;
+    (window as any).breakModel = true;
+  });
+  await expect(page.locator('#notice')).toContainText('模型渲染失败：boom');
+  await page.waitForTimeout(300);
+  expect(await camera()).toMatchObject({ active: true, stops: 0 });
+  await expect(page.getByRole('button', { name: '停止虚拟摄像头', exact: true })).toBeVisible();
 });
 
 test('tracking auto-starts camera output only when enabled and tracking starts successfully', async ({

@@ -1577,10 +1577,12 @@ export function createStudio(
         report(error instanceof Error ? `模型渲染失败：${error.message}` : error);
       }
     }
-    if (stage)
-      virtualCamera.submit(stage.canvas, settings.background, settings.virtualCameraMirror);
-    if (stage && failedRevision !== modelRevision) obsOutput.submit(stage);
-    recording.capture(stage?.frame ?? {}, now);
+    // Camera frames re-render the stage, so a failed model would also fail and stop the camera.
+    if (stage && failedRevision !== modelRevision) {
+      virtualCamera.submit(stage, settings.background, settings.virtualCameraMirror);
+      obsOutput.submit(stage);
+    }
+    if (recording.active) recording.capture(stage?.frame ?? {}, now);
     if (native && outputOpen && !frameSending) {
       frameSending = true;
       void emitTo('output', 'output-frame', {

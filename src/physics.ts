@@ -66,6 +66,23 @@ export function wrapPhysics<Model>(
     const strength = clamp(controls?.physicsStrength ?? 1, 0, 2, 1);
     const fps =
       controls?.physicsFps === 30 || controls?.physicsFps === 60 ? controls.physicsFps : 0;
+    // Default controls change nothing (the evaluator's wind is restored after every custom frame),
+    // so skip copying, scaling and restoring every output on each frame.
+    if (
+      strength === 1 &&
+      !fps &&
+      clamp(controls?.physicsWind ?? 0, -2, 2, 0) === physics.getOption().wind.x &&
+      physics._physicsRig.settings.every(
+        (_, index) => clamp(controls?.physicsGroups[groupIds[index]] ?? 1, 0, 2, 1) === 1,
+      ) &&
+      // Above 100 the custom path caps the weight and scales the output instead.
+      physics._physicsRig.outputs.every((output) => output.weight <= 100)
+    ) {
+      accumulator = 0;
+      previousFps = 0;
+      evaluate(model, clamp(deltaTimeSeconds, 0, 0.1, 0));
+      return;
+    }
     const outputs = physics._physicsRig.outputs.map((output) => ({
       weight: output.weight,
       translationX: output.translationScale.x,

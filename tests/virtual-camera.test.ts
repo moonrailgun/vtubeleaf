@@ -12,7 +12,7 @@ test('browser construction remains unsupported without native API', async () => 
 
 test('idle camera skips pixel readback and resumes when a source client connects', async (t) => {
   t.mock.timers.enable({ apis: ['setTimeout'] });
-  const originals = ['window', 'document', 'isTauri'].map(
+  const originals = ['window', 'isTauri'].map(
     (key) => [key, Object.getOwnPropertyDescriptor(globalThis, key)] as const,
   );
   const state = {
@@ -22,7 +22,6 @@ test('idle camera skips pixel readback and resumes when a source client connects
     consumers: false,
     message: 'test',
   };
-  let draws = 0;
   let reads = 0;
   let submissions = 0;
   Object.defineProperty(globalThis, 'isTauri', { configurable: true, value: true });
@@ -40,24 +39,6 @@ test('idle camera skips pixel readback and resumes when a source client connects
       },
     },
   });
-  Object.defineProperty(globalThis, 'document', {
-    configurable: true,
-    value: {
-      createElement: () => ({
-        getContext: () => ({
-          setTransform() {},
-          fillRect() {},
-          drawImage() {
-            draws++;
-          },
-          getImageData() {
-            reads++;
-            return { data: new Uint8ClampedArray(1280 * 720 * 4) };
-          },
-        }),
-      }),
-    },
-  });
   const camera = new VirtualCamera(() => {});
   t.after(async () => {
     camera.destroy();
@@ -68,27 +49,172 @@ test('idle camera skips pixel readback and resumes when a source client connects
       else Reflect.deleteProperty(globalThis, key);
     }
   });
-  const canvas = { width: 1280, height: 720 } as HTMLCanvasElement;
+  const source = {
+    cameraPixels() {
+      reads++;
+      return new Uint8Array(1280 * 720 * 4);
+    },
+  };
   await camera.refresh();
-  camera.submit(canvas, '#000000');
-  assert.deepEqual([draws, reads, submissions], [0, 0, 0]);
+  camera.submit(source, '#000000');
+  assert.deepEqual([reads, submissions], [0, 0]);
   assert.equal(camera.status.active, true, 'idle output remains enabled');
   state.consumers = true;
   t.mock.timers.tick(500);
   await nextTurn();
   assert.equal(camera.status.consumers, true, 'polling resumes demand without rendered frames');
-  camera.submit(canvas, '#000000');
-  assert.deepEqual([draws, reads, submissions], [1, 1, 1]);
+  camera.submit(source, '#000000');
+  assert.deepEqual([reads, submissions], [1, 1]);
   state.consumers = false;
   await camera.refresh();
   await delay(40);
-  camera.submit(canvas, '#000000');
-  assert.deepEqual([draws, reads, submissions], [1, 1, 1]);
+  camera.submit(source, '#000000');
+  assert.deepEqual([reads, submissions], [1, 1]);
 });
 
-test('serializes status and controls, letterboxes frames, and waits for transport before stopping', async () => {
+test('status polls notify only when the status changes', async (t) => {
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  const originals = ['window', 'isTauri'].map(
+    (key) => [key, Object.getOwnPropertyDescriptor(globalThis, key)] as const,
+  );
+  const state: Record<string, unknown> = {
+    supported: true,
+    installed: true,
+    active: true,
+    consumers: false,
+    message: 'test',
+  };
+  let fail = false;
+  Object.defineProperty(globalThis, 'isTauri', { configurable: true, value: true });
+  Object.defineProperty(globalThis, 'window', {
+    configurable: true,
+    value: {
+      __TAURI_INTERNALS__: {
+        invoke: () => (fail ? Promise.reject(new Error('gone')) : Promise.resolve({ ...state })),
+      },
+    },
+  });
+  const seen: unknown[] = [];
+  const camera = new VirtualCamera((status) => seen.push({ ...status }));
+  t.after(async () => {
+    camera.destroy();
+    t.mock.timers.reset();
+    await nextTurn();
+    for (const [key, descriptor] of originals) {
+      if (descriptor) Object.defineProperty(globalThis, key, descriptor);
+      else Reflect.deleteProperty(globalThis, key);
+    }
+  });
+  await camera.refresh();
+  assert.equal(seen.length, 2, 'initial placeholder, then the first real status');
+  for (let i = 0; i < 5; i++) {
+    t.mock.timers.tick(2000);
+    await nextTurn();
+    await camera.refresh();
+  }
+  assert.equal(seen.length, 2, 'repeated identical polls do not notify');
+  for (const [key, value] of [
+    ['consumers', true],
+    ['consumers', undefined],
+    ['message', 'changed'],
+    ['installed', false],
+    ['active', false],
+    ['supported', false],
+  ] as const) {
+    // The native side omits `consumers` when it cannot tell.
+    if (value === undefined) delete state[key];
+    else state[key] = value;
+    await camera.refresh();
+    await camera.refresh();
+  }
+  assert.equal(seen.length, 8, 'each changed field notifies exactly once');
+  assert.deepEqual(seen.at(-1), {
+    supported: false,
+    installed: false,
+    active: false,
+    message: 'changed',
+  });
+  fail = true;
+  await camera.refresh();
+  await camera.refresh();
+  assert.equal(seen.length, 9, 'a failure still notifies once');
+  assert.match(camera.status.message, /gone/);
+});
+
+test('submits the source frame without copying and skips frames the source cannot render', async () => {
+  const originals = ['window', 'isTauri'].map(
+    (key) => [key, Object.getOwnPropertyDescriptor(globalThis, key)] as const,
+  );
+  const state = { supported: true, installed: true, active: true, message: 'test' };
+  const submitted: unknown[] = [];
+  const stops: string[] = [];
+  Object.defineProperty(globalThis, 'isTauri', { configurable: true, value: true });
+  Object.defineProperty(globalThis, 'window', {
+    configurable: true,
+    value: {
+      __TAURI_INTERNALS__: {
+        invoke(command: string, data: unknown) {
+          if (command.endsWith('|submit')) {
+            submitted.push(data);
+            return Promise.resolve();
+          }
+          if (command.endsWith('|stop')) {
+            stops.push(command);
+            state.active = false;
+          }
+          return Promise.resolve({ ...state });
+        },
+      },
+    },
+  });
+  const camera = new VirtualCamera(() => {});
+  try {
+    await camera.refresh();
+    const frame = new Uint8Array(1280 * 720 * 4);
+    const requests: unknown[][] = [];
+    let available = false;
+    const source = {
+      cameraPixels(...args: unknown[]) {
+        requests.push(args);
+        return available ? frame : undefined;
+      },
+    };
+    // A lost context or a zero-size stage has no frame: keep the output running and retry.
+    camera.submit(source, '#123456', true);
+    assert.deepEqual(submitted, []);
+    assert.equal(camera.status.active, true);
+    available = true;
+    camera.submit(source, '#123456', true);
+    assert.deepEqual(requests, [
+      [1280, 720, '#123456', true],
+      [1280, 720, '#123456', true],
+    ]);
+    assert.equal(submitted[0], frame, 'the reused buffer is handed to the IPC body as is');
+    await new Promise((resolve) => setTimeout(resolve, 40));
+    // A source that throws still fails and stops the output.
+    camera.submit(
+      {
+        cameraPixels() {
+          throw new Error('render failed');
+        },
+      },
+      '#123456',
+    );
+    await camera.refresh();
+    assert.equal(camera.status.active, false);
+    assert.equal(stops.length, 1);
+  } finally {
+    camera.destroy();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    for (const [key, descriptor] of originals) {
+      if (descriptor) Object.defineProperty(globalThis, key, descriptor);
+      else Reflect.deleteProperty(globalThis, key);
+    }
+  }
+});
+
+test('serializes status and controls and waits for transport before stopping', async () => {
   const originalWindow = Object.getOwnPropertyDescriptor(globalThis, 'window');
-  const originalDocument = Object.getOwnPropertyDescriptor(globalThis, 'document');
   const originalTauri = Object.getOwnPropertyDescriptor(globalThis, 'isTauri');
   const calls: string[] = [];
   const draws: unknown[][] = [];
@@ -98,17 +224,6 @@ test('serializes status and controls, letterboxes frames, and waits for transpor
   let invalidStatus = false;
   let failStop = false;
   const state = { supported: true, installed: true, active: false, message: 'test' };
-  const context = {
-    fillStyle: '',
-    fillRect() {},
-    setTransform() {},
-    drawImage(...args: unknown[]) {
-      draws.push(args);
-    },
-    getImageData() {
-      return { data: new Uint8ClampedArray(1280 * 720 * 4) };
-    },
-  };
   Object.defineProperty(globalThis, 'isTauri', { configurable: true, value: true });
   Object.defineProperty(globalThis, 'window', {
     configurable: true,
@@ -126,7 +241,7 @@ test('serializes status and controls, letterboxes frames, and waits for transpor
             });
           }
           if (command.endsWith('|submit')) {
-            assert.ok(data instanceof ArrayBuffer);
+            assert.ok(data instanceof Uint8Array);
             assert.equal(data.byteLength, 1280 * 720 * 4);
             return new Promise<void>((resolve) => {
               finish = resolve;
@@ -136,15 +251,6 @@ test('serializes status and controls, letterboxes frames, and waits for transpor
           if (command.endsWith('|stop')) state.active = false;
           return Promise.resolve({ ...state });
         },
-      },
-    },
-  });
-  Object.defineProperty(globalThis, 'document', {
-    configurable: true,
-    value: {
-      createElement(tag: string) {
-        assert.equal(tag, 'canvas');
-        return { getContext: () => context };
       },
     },
   });
@@ -165,11 +271,17 @@ test('serializes status and controls, letterboxes frames, and waits for transpor
     finishStatus!();
     await Promise.all([refresh, start]);
     assert.equal(camera.status.active, true, 'a stale refresh must not overwrite a later start');
-    const stage = { width: 500, height: 1000 } as HTMLCanvasElement;
+    const frame = new Uint8Array(1280 * 720 * 4);
+    const stage = {
+      cameraPixels(...args: unknown[]) {
+        draws.push(args);
+        return frame;
+      },
+    };
     camera.submit(stage, '#123456');
     camera.submit(stage, '#123456');
     assert.equal(calls.filter((x) => x.endsWith('|submit')).length, 1);
-    assert.deepEqual(draws[0], [stage, 460, 0, 360, 720]);
+    assert.deepEqual(draws, [[1280, 720, '#123456', false]], 'one frame while one is in flight');
     const stop = camera.stop();
     await Promise.resolve();
     assert.equal(calls.filter((x) => x.endsWith('|stop')).length, 0);
@@ -187,8 +299,6 @@ test('serializes status and controls, letterboxes frames, and waits for transpor
     await new Promise((resolve) => setTimeout(resolve, 0));
     if (originalWindow) Object.defineProperty(globalThis, 'window', originalWindow);
     else Reflect.deleteProperty(globalThis, 'window');
-    if (originalDocument) Object.defineProperty(globalThis, 'document', originalDocument);
-    else Reflect.deleteProperty(globalThis, 'document');
     if (originalTauri) Object.defineProperty(globalThis, 'isTauri', originalTauri);
     else Reflect.deleteProperty(globalThis, 'isTauri');
   }
