@@ -167,6 +167,120 @@ test('personal vowel calibration overrides defaults one vowel at a time and can 
   assert.notEqual(defaults.voiceA, customized.voiceA);
 });
 
+test('mfcc and frame analysis keep the reference outputs', () => {
+  // mulberry32 and exact arithmetic only, so every platform builds the same inputs.
+  let seed = 1;
+  const random = () => {
+    seed = (seed + 0x6d2b79f5) | 0;
+    let t = Math.imul(seed ^ (seed >>> 15), seed | 1);
+    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+    return ((t ^ (t >>> 14)) >>> 0) / 2 ** 32;
+  };
+  const odd = [NaN, Infinity, -Infinity];
+  const noise = (bins: number) =>
+    Float32Array.from({ length: bins }, () =>
+      random() < 0.03 ? odd[Math.floor(random() * 3)] : random() * 200 - 170,
+    );
+  const voice = (rate: number, bins: number) => {
+    const pitch = 80 + random() * 240;
+    const formants = [250 + random() * 650, 600 + random() * 1900, 2000 + random() * 1500];
+    return Float32Array.from({ length: bins }, (_, bin) => {
+      const hz = (bin * rate) / (2 * bins);
+      const harmonic = Math.abs(hz - Math.round(hz / pitch) * pitch) / pitch;
+      const envelope = Math.max(
+        ...formants.map((formant, index) => -20 - 8 * index - Math.abs(hz - formant) / 40),
+      );
+      return Math.max(-110, envelope - 40 * harmonic) + random();
+    });
+  };
+  // Expected values are the original implementation's (13fe4df) exact output on arm64. V8's
+  // pow/log/cos/sin differ by an ulp between arm64 and x64, so bit equality can't hold in CI.
+  const matches = (actual: number[], expected: number[]) => {
+    assert.equal(actual.length, expected.length);
+    actual.forEach((value, index) =>
+      assert.ok(Math.abs(value - expected[index]) <= 1e-12, `${index}: ${value}`),
+    );
+  };
+
+  for (const rate of [0, -1, NaN, Infinity])
+    assert.deepEqual(mfcc(voice(sampleRate, 64), rate), []);
+  assert.deepEqual(mfcc([], sampleRate), []);
+  assert.deepEqual(mfcc(silence(), sampleRate), []);
+  const coefficients = [
+    mfcc(voice(48_000, 1024), 48_000),
+    mfcc(voice(44_100, 1024), 44_100),
+    mfcc(voice(48_000, 2048), 48_000),
+    mfcc(noise(256), 16_000),
+    mfcc(noise(17), 22_050),
+    mfcc(noise(1), 8_000),
+  ].flat();
+  matches(
+    coefficients,
+    [
+      -0.8726183242727432, 0.4542915140057759, 0.06752440125289978, -0.06416931876470446,
+      0.055344648932814364, 0.07363352966750271, 0.006837967992854822, 0.007620560674438192,
+      0.05717146844361277, 0.06332963990572825, 0.05129126649921282, 0.05147830865190358,
+      0.04826433701070438, -0.8642670184094539, 0.4706825614813686, 0.009456426764249957,
+      -0.019302286864897718, 0.11307368704417756, 0.020383007988107528, -0.030841584948392876,
+      0.05688489391992139, 0.08205586723082842, 0.03329399054222234, 0.02940703958088449,
+      0.045973373590996396, 0.05320004207998788, -0.8597825932005891, 0.4753203937005183,
+      0.016288226777819367, -0.06813856693705805, 0.09805350159922394, 0.07981330673372253,
+      -0.010467127626583892, 0.007664732507235683, 0.0541744230907421, 0.05016090284049094,
+      0.05355605482703877, 0.059512254189516965, 0.04384449149792249, -0.8937098511216337,
+      -0.16618868934712333, 0.0829190214203105, 0.2150737627089099, 0.21530689044368315,
+      0.14010646868418553, 0.07891333804317918, 0.09618538184289853, 0.010947517538333394,
+      -0.03609956922854948, -0.0015755612445629732, 0.08254665741526594, 0.1755746328451031,
+      -0.887199355745826, -0.056107405257126486, 0.12591821762345895, -0.15376404330941038,
+      0.09119712054154575, 0.23985563952222796, -0.03348855421340165, 0.09123186477205629,
+      0.06367311391377917, 0.20346970726821825, 0.20944319570775505, 0.049438077647136265,
+      0.05633242152958648, -0.9607689228305228, 0.08006407690254352, 0.08006407690254368,
+      0.08006407690254357, 0.08006407690254369, 0.08006407690254365, 0.0800640769025438,
+      0.08006407690254355, 0.08006407690254372, 0.08006407690254334, 0.08006407690254357,
+      0.0800640769025432, 0.08006407690254355,
+    ],
+  );
+
+  // Six values per frame: volume, then A I U E O.
+  const frames: number[] = [];
+  const analyze = (...args: Parameters<typeof analyzeAudioFrame>) =>
+    frames.push(...Object.values(analyzeAudioFrame(...args)));
+  for (const [rate, bins] of [
+    [48_000, 1024],
+    [16_000, 256],
+  ]) {
+    const personal = Object.fromEntries(
+      vowels.map((vowel) => [vowel, mfcc(voice(rate, bins), rate)]),
+    ) as VoiceTemplates;
+    const input = voice(rate, bins);
+    const samples = Float32Array.from({ length: 2 * bins }, () => (random() - 0.5) * 0.6);
+    analyze(samples, input, rate, 1, 0.01, {});
+    analyze(samples, noise(bins), rate, 1, NaN, {});
+    // The second size only re-checks the built-ins after the per-size caches switch.
+    if (bins === 256) continue;
+    analyze(samples, input, rate, 1, 0.01, personal);
+    analyze(samples, input, rate, 1, 0.01, { I: personal.I, O: [NaN] });
+    analyze(samples, input, rate, 1, 0.01, { A: mfcc(input, rate) });
+    analyze(samples, new Float32Array(bins).fill(-Infinity), rate, 4, 0, personal);
+    analyze(samples, input, rate, 1, 0.5, personal);
+  }
+  matches(
+    frames,
+    [
+      0.1719275441699392, 0.201125044389088, 0.1959755619379062, 0.18124482322299254,
+      0.21445481399102248, 0.2071997564589907, 0.1719275441699392, 0.19045158621635547,
+      0.21791108780463125, 0.20558677707218315, 0.1944300620156475, 0.19162048689118252,
+      0.1719275441699392, 0.1687314588557648, 0.23775774486539547, 0.18688603266167628,
+      0.2181045985487226, 0.18852016506844074, 0.1719275441699392, 0.1529205572532313,
+      0.3886794879914903, 0.1378051124896465, 0.1630555247893558, 0.15753931747627614,
+      0.1719275441699392, 0.9999788332160976, 5.19251772830973e-6, 4.8022158908157116e-6,
+      5.6821392042880095e-6, 5.489911079094939e-6, 0.6877101766797568, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+      0, 0.17535107842179898, 0.20713030874609725, 0.18966019078735935, 0.1816536126391291,
+      0.20063562874019844, 0.2209202590872158, 0.17535107842179898, 0.20879358609616408,
+      0.1945667499484529, 0.19809512131672755, 0.20287873940469875, 0.19566580323395666,
+    ],
+  );
+});
+
 test('pausing cancels calibration and starting again resumes audio reads', async () => {
   class FakeTrack extends EventTarget {
     label = 'Test microphone';

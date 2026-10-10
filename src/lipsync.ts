@@ -43,6 +43,19 @@ const vowelFormants: Record<Vowel, number[][]> = {
 };
 let builtinCache:
   { sampleRate: number; bins: number; templates: Record<Vowel, number[][]> } | undefined;
+let melCache:
+  | {
+      sampleRate: number;
+      bins: number;
+      filters: { indices: number[]; weights: number[] }[];
+      power: Float64Array;
+    }
+  | undefined;
+const cosines = Array.from({ length: coefficientCount }, (_, coefficient) =>
+  Array.from({ length: filterCount }, (_, filter) =>
+    Math.cos((Math.PI * coefficient * (filter + 0.5)) / filterCount),
+  ),
+);
 const silentFrame = (): VoiceFrame => ({
   voiceVolume: 0,
   voiceA: 0,
@@ -66,43 +79,59 @@ export function rms(samples: ArrayLike<number>) {
   return count ? Math.sqrt(sum / count) : 0;
 }
 
-export function mfcc(spectrum: ArrayLike<number>, sampleRate: number): number[] {
-  if (!spectrum.length || !Number.isFinite(sampleRate) || sampleRate <= 0) return [];
-  const power = Array.from({ length: spectrum.length }, (_, bin) => {
-    const decibels = spectrum[bin];
-    return Number.isFinite(decibels) ? 10 ** (Math.min(20, Math.max(-160, decibels)) / 10) : 0;
-  });
-  const total = power.reduce((sum, value) => sum + value, 0);
-  if (!total) return [];
+function melFilters(sampleRate: number, bins: number) {
+  if (melCache?.sampleRate === sampleRate && melCache.bins === bins) return melCache;
   const toMel = (frequency: number) => 2595 * Math.log10(1 + frequency / 700);
   const fromMel = (mel: number) => 700 * (10 ** (mel / 2595) - 1);
   const maxMel = toMel(sampleRate / 2);
   const edges = Array.from({ length: filterCount + 2 }, (_, index) =>
     fromMel((index * maxMel) / (filterCount + 1)),
   );
-  const energies = Array.from({ length: filterCount }, (_, filter) => {
+  // Neighbouring triangles overlap, so each bin has at most two non-zero weights; keep only those.
+  const filters = Array.from({ length: filterCount }, (_, filter) => {
     const low = edges[filter],
       center = edges[filter + 1],
       high = edges[filter + 2];
-    let energy = 0;
-    for (let bin = 0; bin < power.length; bin++) {
-      const frequency = (bin * sampleRate) / (2 * power.length);
+    const indices: number[] = [],
+      weights: number[] = [];
+    for (let bin = 0; bin < bins; bin++) {
+      const frequency = (bin * sampleRate) / (2 * bins);
       const weight =
         frequency <= low || frequency >= high
           ? 0
           : frequency < center
             ? (frequency - low) / (center - low)
             : (high - frequency) / (high - center);
-      energy += (power[bin] / total) * weight;
+      if (weight === 0) continue;
+      indices.push(bin);
+      weights.push(weight);
     }
+    return { indices, weights };
+  });
+  melCache = { sampleRate, bins, filters, power: new Float64Array(bins) };
+  return melCache;
+}
+
+export function mfcc(spectrum: ArrayLike<number>, sampleRate: number): number[] {
+  if (!spectrum.length || !Number.isFinite(sampleRate) || sampleRate <= 0) return [];
+  const { filters, power } = melFilters(sampleRate, spectrum.length);
+  let total = 0;
+  for (let bin = 0; bin < power.length; bin++) {
+    const decibels = spectrum[bin];
+    power[bin] = Number.isFinite(decibels)
+      ? 10 ** (Math.min(20, Math.max(-160, decibels)) / 10)
+      : 0;
+    total += power[bin];
+  }
+  if (!total) return [];
+  // Zero-weight bins only ever added +0, so skipping them keeps every sum bit-identical.
+  const energies = filters.map(({ indices, weights }) => {
+    let energy = 0;
+    for (let i = 0; i < indices.length; i++) energy += (power[indices[i]] / total) * weights[i];
     return Math.log(Math.max(energy, 1e-12));
   });
-  const coefficients = Array.from({ length: coefficientCount }, (_, coefficient) =>
-    energies.reduce(
-      (sum, energy, filter) =>
-        sum + energy * Math.cos((Math.PI * coefficient * (filter + 0.5)) / filterCount),
-      0,
-    ),
+  const coefficients = cosines.map((row) =>
+    energies.reduce((sum, energy, filter) => sum + energy * row[filter], 0),
   );
   const mean = coefficients.reduce((sum, value) => sum + value, 0) / coefficients.length;
   const scale = Math.hypot(...coefficients.map((value) => value - mean)) || 1;
@@ -155,16 +184,19 @@ function builtinTemplates(sampleRate: number, bins: number): Record<Vowel, numbe
   return templates;
 }
 
+// Fills the frame's vowels; they stay at the silent frame's zeros when the MFCC is unusable.
 function vowelWeights(
   coefficients: number[],
   templates: VoiceTemplates,
   sampleRate: number,
   bins: number,
+  frame: VoiceFrame,
 ) {
-  const zero = Object.fromEntries(vowels.map((vowel) => [vowel, 0])) as Record<Vowel, number>;
-  if (coefficients.length !== coefficientCount || !coefficients.every(Number.isFinite)) return zero;
+  if (coefficients.length !== coefficientCount || !coefficients.every(Number.isFinite)) return;
   const defaults = builtinTemplates(sampleRate, bins);
-  const scores = vowels.map((vowel) => {
+  const difference: number[] = [];
+  let total = 0;
+  for (const vowel of vowels) {
     const personal = templates[vowel];
     const candidates =
       Array.isArray(personal) &&
@@ -172,17 +204,18 @@ function vowelWeights(
       personal.every(Number.isFinite)
         ? [personal]
         : defaults[vowel];
-    const distance = Math.min(
-      ...candidates.map((template) =>
-        Math.hypot(...coefficients.map((value, index) => value - template[index])),
-      ),
-    );
-    return 1 / (distance + 1e-6);
-  });
-  const total = scores.reduce((sum, score) => sum + score, 0);
-  return Object.fromEntries(
-    vowels.map((vowel, index) => [vowel, clamp(scores[index] / total)]),
-  ) as Record<Vowel, number>;
+    let distance = Infinity;
+    for (const template of candidates) {
+      for (let index = 0; index < coefficientCount; index++)
+        difference[index] = coefficients[index] - template[index];
+      // Math.hypot, not sqrt(sum): engines round it their own way and outputs must stay identical.
+      distance = Math.min(distance, Math.hypot(...difference));
+    }
+    const score = 1 / (distance + 1e-6);
+    frame[`voice${vowel}`] = score;
+    total += score;
+  }
+  for (const vowel of vowels) frame[`voice${vowel}`] = clamp(frame[`voice${vowel}`] / total);
 }
 
 export function analyzeAudioFrame(
@@ -196,8 +229,7 @@ export function analyzeAudioFrame(
   const frame = silentFrame();
   frame.voiceVolume = clamp(rms(samples) * (Number.isFinite(gain) ? Math.max(0, gain) : 0));
   if (frame.voiceVolume <= clamp(noiseGate)) return silentFrame();
-  const weights = vowelWeights(mfcc(spectrum, sampleRate), templates, sampleRate, spectrum.length);
-  for (const vowel of vowels) frame[`voice${vowel}`] = weights[vowel];
+  vowelWeights(mfcc(spectrum, sampleRate), templates, sampleRate, spectrum.length, frame);
   return frame;
 }
 
