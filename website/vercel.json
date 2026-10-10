@@ -1,0 +1,8 @@
+{
+  "headers": [
+    {
+      "source": "/assets/([^/]+-[\\w-]{8}\\.(?:js|css))",
+      "headers": [{ "key": "Cache-Control", "value": "public, max-age=31536000, immutable" }]
+    }
+  ]
+}

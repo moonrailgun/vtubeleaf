@@ -198,7 +198,7 @@ export default function App() {
                 aria-label="查看 VTubeLeaf 软件截图原图（在新标签页打开）"
               >
                 <img
-                  src="assets/screenshots/vtubeleaf-hutao-studio.png"
+                  src="assets/screenshots/vtubeleaf-hutao-studio.webp"
                   alt="VTubeLeaf 软件截图：胡桃 Live2D 角色搭配内置办公室背景，右侧为画面设置面板"
                   width="1600"
                   height="1000"
@@ -820,7 +820,7 @@ export default function App() {
             <div className="cta">
               <div>
                 <div className="brand-dark">
-                  <img src="assets/brand/lockup-rose-dark.svg" alt="VTubeLeaf" />
+                  <img src="assets/brand/lockup-rose-dark.svg" alt="VTubeLeaf" loading="lazy" />
                 </div>
                 <p className="eyebrow">现在就试试</p>
                 <h2>

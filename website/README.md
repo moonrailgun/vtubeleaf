@@ -45,7 +45,7 @@ npx playwright install chromium
 npm test
 ```
 
-浏览器测试构建后启动独立的 `5198` 预览端口，覆盖原始 HTML 与爬取元信息、无 JavaScript 阅读和下载、hydration、系统标签的键盘操作和记忆、FAQ、手机布局、锚点、图片及禁用存储。用 `WEBSITE_URL=https://vtubeleaf.vercel.app npm test` 可复用这些检查验证线上部署。
+浏览器测试构建后启动独立的 `5198` 预览端口，覆盖原始 HTML 与爬取元信息、无 JavaScript 阅读和下载、hydration、系统标签的键盘操作和记忆、FAQ、手机布局、锚点、图片及禁用存储。用 `WEBSITE_URL=https://vtubeleaf.vercel.app npm test` 可复用这些检查验证线上部署，并额外核对 Vercel 缓存头。
 
 ## 修改页面
 
@@ -54,8 +54,9 @@ npm test
 - `public/assets/brand/`：当前叶芽精灵 Logo；在仓库根目录运行 `node scripts/brand.mjs` 同步 SVG，分享图 `logo.png` 取自 `public/brand/png/512x512.png`。
 - `index.html`：页面标题、简介、分享元信息和图标。
 - `vite.config.ts`：Release 构建快照与首页预渲染。
+- `vercel.json`：Vercel 缓存头；带哈希的 JS/CSS 缓存一年，`public/` 下的文件每次重新验证。
 - `src/release.ts`：官网与桌面端共用的版本文件校验和更新。
 - `public/release.json`：由 Release 工作流自动维护的版本和下载地址。
 - `public/robots.txt`、`public/sitemap.xml`：爬虫规则与站点地图。
 
-首屏展示真实软件截图（胡桃模型与内置办公室背景），点击可在新标签页查看原图。图片位于 `public/assets/screenshots/`，页面不会请求摄像头或加载 Live2D。下载区直接指向 GitHub Release 安装包，并按两端内置虚拟摄像头的安装和激活流程提供说明。
+首屏展示真实软件截图（胡桃模型与内置办公室背景），点击可在新标签页查看原图。图片位于 `public/assets/screenshots/`：页面显示 WebP，点击打开同名 PNG 原图；更换截图后在该目录运行 `cwebp -m 6 -q 85 -sharp_yuv vtubeleaf-hutao-studio.png -o vtubeleaf-hutao-studio.webp` 重新生成（q85 之下界面小字会发糊）。页面不会请求摄像头或加载 Live2D。下载区直接指向 GitHub Release 安装包，并按两端内置虚拟摄像头的安装和激活流程提供说明。

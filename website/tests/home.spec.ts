@@ -178,6 +178,8 @@ test('small screens, anchors and local assets remain usable without storage', as
   await expect(page.locator('main')).toBeFocused();
   await page.getByRole('tab', { name: 'Windows' }).click();
   await expect(page.getByRole('tabpanel')).toContainText('Windows 10');
+  // The footer logo loads lazily, so bring it into view before checking every image.
+  await page.locator('.cta img').scrollIntoViewIfNeeded();
   await page.waitForFunction(() => [...document.images].every((image) => image.complete));
   const layout = await page.evaluate(() => ({
     width: document.documentElement.clientWidth,
@@ -208,6 +210,14 @@ test('the built response contains indexable content and crawl metadata', async (
   expect(html).toContain('rel="canonical" href="https://vtubeleaf.vercel.app/"');
   expect(html).not.toContain('noindex');
   expect(html).not.toContain('macOS ZIP 下载');
+  // The WebP hero is the LCP image: preload it first and keep the footer logo out of the way.
+  expect(html).toContain(
+    '<link rel="preload" as="image" href="assets/screenshots/vtubeleaf-hutao-studio.webp" fetchPriority="high"/>',
+  );
+  expect(html).not.toContain(
+    '<link rel="preload" as="image" href="assets/brand/lockup-rose-dark.svg"',
+  );
+  expect((await request.get('/assets/screenshots/vtubeleaf-hutao-studio.png')).status()).toBe(200);
   const manifest = await request.get('/release.json');
   expect(manifest.status()).toBe(200);
   const release = await manifest.json();
@@ -232,6 +242,20 @@ test('the built response contains indexable content and crawl metadata', async (
   const sitemap = await request.get('/sitemap.xml');
   expect(sitemap.status()).toBe(200);
   expect(await sitemap.text()).toContain('<loc>https://vtubeleaf.vercel.app/</loc>');
+});
+
+test('hashed build assets are cached immutably while public files revalidate', async ({
+  request,
+}) => {
+  const home = await request.get('/');
+  test.skip(home.headers().server !== 'Vercel', 'Only the Vercel deployment applies vercel.json');
+  const built = (await home.text()).match(/\/assets\/[^"/]+\.(?:js|css)/g);
+  expect(built).not.toBeNull();
+  const cacheControl = async (path: string) => (await request.get(path)).headers()['cache-control'];
+  for (const path of built!)
+    expect(await cacheControl(path)).toBe('public, max-age=31536000, immutable');
+  for (const path of ['/', '/assets/screenshots/vtubeleaf-hutao-studio.webp'])
+    expect(await cacheControl(path)).not.toContain('immutable');
 });
 
 test('content, default download and all-packages link work without JavaScript', async ({
