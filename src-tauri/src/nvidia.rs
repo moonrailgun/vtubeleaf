@@ -1,3 +1,4 @@
+use crate::locale;
 use serde_json::Value;
 use std::{
     io::{BufRead, BufReader, Read},
@@ -36,7 +37,13 @@ fn validate(value: &Value) -> Result<(), String> {
     {
         Ok(())
     } else {
-        Err("NVIDIA 扩展数据格式不兼容，请检查扩展版本".into())
+        Err(locale::text([
+            "The NVIDIA extension data format is incompatible. Check the extension version",
+            "NVIDIA 扩展数据格式不兼容，请检查扩展版本",
+            "NVIDIA 拡張機能のデータ形式に互換性がありません。拡張機能のバージョンを確認してください",
+            "El formato de datos de la extensión de NVIDIA no es compatible. Comprueba la versión de la extensión",
+            "Le format de données de l’extension NVIDIA est incompatible. Vérifiez la version de l’extension",
+        ]).into())
     }
 }
 
@@ -62,23 +69,59 @@ impl Tracker {
                 .and_then(|s| s.to_str())
                 .is_none_or(|s| !s.eq_ignore_ascii_case("exe"))
         {
-            return Err("请选择已安装的 VTubeLeafNvidia.exe 完整路径".into());
+            return Err(locale::text([
+                "Choose the full path of the installed VTubeLeafNvidia.exe",
+                "请选择已安装的 VTubeLeafNvidia.exe 完整路径",
+                "インストール済みの VTubeLeafNvidia.exe のフルパスを選択してください",
+                "Elige la ruta completa del VTubeLeafNvidia.exe instalado",
+                "Choisissez le chemin complet du VTubeLeafNvidia.exe installé",
+            ])
+            .into());
         }
         if !model_dir.is_absolute() || !model_dir.is_dir() {
-            return Err("请选择 NVIDIA AR SDK 的 models 目录完整路径".into());
+            return Err(locale::text([
+                "Choose the full path of the NVIDIA AR SDK models folder",
+                "请选择 NVIDIA AR SDK 的 models 目录完整路径",
+                "NVIDIA AR SDK の models フォルダーのフルパスを選択してください",
+                "Elige la ruta completa de la carpeta models del NVIDIA AR SDK",
+                "Choisissez le chemin complet du dossier models du NVIDIA AR SDK",
+            ])
+            .into());
         }
         if camera > 32 || ![15, 24, 30, 60].contains(&fps) {
-            return Err("摄像头编号或帧率无效".into());
+            return Err(locale::text([
+                "Invalid camera number or frame rate",
+                "摄像头编号或帧率无效",
+                "カメラ番号またはフレームレートが無効です",
+                "Número de cámara o velocidad de fotogramas no válidos",
+                "Numéro de caméra ou fréquence d’images invalide",
+            ])
+            .into());
         }
         let (width, height) = match resolution {
             "360p" => (640, 360),
             "720p" => (1280, 720),
             "1080p" => (1920, 1080),
-            _ => return Err("摄像头分辨率无效".into()),
+            _ => {
+                return Err(locale::text([
+                    "Invalid camera resolution",
+                    "摄像头分辨率无效",
+                    "カメラの解像度が無効です",
+                    "Resolución de cámara no válida",
+                    "Résolution de caméra invalide",
+                ])
+                .into())
+            }
         };
         let mut command = Command::new(executable);
         command
-            .current_dir(executable.parent().ok_or("扩展程序路径无效")?)
+            .current_dir(executable.parent().ok_or(locale::text([
+                "Invalid extension path",
+                "扩展程序路径无效",
+                "拡張機能のパスが無効です",
+                "Ruta de la extensión no válida",
+                "Chemin de l’extension invalide",
+            ]))?)
             .arg(model_dir)
             .arg(camera.to_string())
             .arg(fps.to_string())
@@ -110,7 +153,18 @@ impl Tracker {
             .stdout(Stdio::piped())
             .stderr(Stdio::null())
             .spawn()
-            .map_err(|error| format!("无法启动 NVIDIA 扩展：{error}"))?;
+            .map_err(|error| {
+                format!(
+                    "{}{error}",
+                    locale::text([
+                        "Could not start the NVIDIA extension: ",
+                        "无法启动 NVIDIA 扩展：",
+                        "NVIDIA 拡張機能を起動できません：",
+                        "No se pudo iniciar la extensión de NVIDIA: ",
+                        "Impossible de démarrer l’extension NVIDIA : "
+                    ])
+                )
+            })?;
         let stdout = child.stdout.take().expect("stdout was piped");
         let stop = Arc::new(AtomicBool::new(false));
         let cancelled = Arc::clone(&stop);
@@ -128,7 +182,16 @@ impl Tracker {
                                 continue;
                             };
                             let packet = serde_json::from_str::<Value>(json)
-                                .map_err(|_| "NVIDIA 扩展输出了无效数据".to_string())
+                                .map_err(|_| {
+                                    locale::text([
+                                        "The NVIDIA extension sent invalid data",
+                                        "NVIDIA 扩展输出了无效数据",
+                                        "NVIDIA 拡張機能が無効なデータを出力しました",
+                                        "La extensión de NVIDIA envió datos no válidos",
+                                        "L’extension NVIDIA a envoyé des données invalides",
+                                    ])
+                                    .to_string()
+                                })
                                 .and_then(|value| {
                                     validate(&value)?;
                                     Ok(value)
@@ -139,7 +202,14 @@ impl Tracker {
                             }
                         }
                         _ => {
-                            let _ = send.send(Err("NVIDIA 扩展输出过长或无法读取".into()));
+                            let _ = send.send(Err(locale::text([
+                                "The NVIDIA extension output is too long or unreadable",
+                                "NVIDIA 扩展输出过长或无法读取",
+                                "NVIDIA 拡張機能の出力が長すぎるか、読み込めません",
+                                "La salida de la extensión de NVIDIA es demasiado larga o ilegible",
+                                "La sortie de l’extension NVIDIA est trop longue ou illisible",
+                            ])
+                            .into()));
                             break;
                         }
                     }
@@ -166,14 +236,26 @@ impl Tracker {
                     }
                     Err(mpsc::RecvTimeoutError::Disconnected) => {
                         error = Some(
-                            "NVIDIA 扩展已退出，请检查 RTX 驱动、SDK DLL、模型与摄像头".into(),
+                            locale::text([
+                                "The NVIDIA extension exited. Check the RTX driver, SDK DLLs, models and camera",
+                                "NVIDIA 扩展已退出，请检查 RTX 驱动、SDK DLL、模型与摄像头",
+                                "NVIDIA 拡張機能が終了しました。RTX ドライバー、SDK DLL、モデル、カメラを確認してください",
+                                "La extensión de NVIDIA se cerró. Comprueba el controlador RTX, las DLL del SDK, los modelos y la cámara",
+                                "L’extension NVIDIA s’est arrêtée. Vérifiez le pilote RTX, les DLL du SDK, les modèles et la caméra",
+                            ]).into(),
                         );
                         break;
                     }
                     Err(mpsc::RecvTimeoutError::Timeout) => {}
                 }
                 if last_frame.elapsed() > timeout {
-                    error = Some("NVIDIA 扩展等待数据超时，请检查模型加载与摄像头".into());
+                    error = Some(locale::text([
+                        "The NVIDIA extension timed out waiting for data. Check model loading and the camera",
+                        "NVIDIA 扩展等待数据超时，请检查模型加载与摄像头",
+                        "NVIDIA 拡張機能のデータ待ちがタイムアウトしました。モデルの読み込みとカメラを確認してください",
+                        "Se agotó el tiempo de espera de datos de la extensión de NVIDIA. Comprueba la carga de modelos y la cámara",
+                        "L’extension NVIDIA a dépassé le délai d’attente des données. Vérifiez le chargement des modèles et la caméra",
+                    ]).into());
                     break;
                 }
             }

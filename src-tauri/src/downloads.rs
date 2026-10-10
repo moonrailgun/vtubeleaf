@@ -1,5 +1,15 @@
+use crate::locale;
+
 fn release_url(value: &str) -> Result<tauri::Url, String> {
-    let url = tauri::Url::parse(value).map_err(|_| "下载链接无效")?;
+    let url = tauri::Url::parse(value).map_err(|_| {
+        locale::text([
+            "Invalid download link",
+            "下载链接无效",
+            "ダウンロードリンクが無効です",
+            "Enlace de descarga no válido",
+            "Lien de téléchargement invalide",
+        ])
+    })?;
     if url.scheme() != "https"
         || url.host_str() != Some("github.com")
         || !url.username().is_empty()
@@ -9,7 +19,14 @@ fn release_url(value: &str) -> Result<tauri::Url, String> {
         || url.fragment().is_some()
         || !url.path().starts_with("/moonrailgun/vtubeleaf/releases/")
     {
-        return Err("仅允许打开 VTubeLeaf 发布链接".into());
+        return Err(locale::text([
+            "Only VTubeLeaf release links can be opened",
+            "仅允许打开 VTubeLeaf 发布链接",
+            "VTubeLeaf のリリースリンクのみ開けます",
+            "Solo se pueden abrir enlaces de versiones de VTubeLeaf",
+            "Seuls les liens de version de VTubeLeaf peuvent être ouverts",
+        ])
+        .into());
     }
     Ok(url)
 }
@@ -38,15 +55,41 @@ pub async fn open_release_url(window: tauri::WebviewWindow, url: String) -> Resu
         let status = std::process::Command::new(opener)
             .arg(url.as_str())
             .status()
-            .map_err(|error| format!("无法打开浏览器：{error}"))?;
+            .map_err(|error| {
+                format!(
+                    "{}{error}",
+                    locale::text([
+                        "Could not open the browser: ",
+                        "无法打开浏览器：",
+                        "ブラウザーを開けません：",
+                        "No se pudo abrir el navegador: ",
+                        "Impossible d’ouvrir le navigateur : "
+                    ])
+                )
+            })?;
         if status.success() || cfg!(target_os = "windows") {
             Ok(())
         } else {
-            Err("无法打开浏览器".into())
+            Err(locale::text([
+                "Could not open the browser",
+                "无法打开浏览器",
+                "ブラウザーを開けません",
+                "No se pudo abrir el navegador",
+                "Impossible d’ouvrir le navigateur",
+            ])
+            .into())
         }
     })
     .await
-    .map_err(|_| "打开下载链接任务中断")?
+    .map_err(|_| {
+        locale::text([
+            "Opening the download link was interrupted",
+            "打开下载链接任务中断",
+            "ダウンロードリンクを開く処理が中断されました",
+            "Se interrumpió la apertura del enlace de descarga",
+            "L’ouverture du lien de téléchargement a été interrompue",
+        ])
+    })?
 }
 
 #[cfg(test)]

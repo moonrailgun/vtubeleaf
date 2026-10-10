@@ -1,3 +1,4 @@
+use crate::locale;
 use serde::{Deserialize, Serialize};
 use std::{
     io,
@@ -97,13 +98,34 @@ impl Tracker {
         on_error: impl Fn(&'static str) + Send + 'static,
     ) -> Result<Self, String> {
         if port == 0 || camera > 128 {
-            return Err("OpenSeeFace 端口或摄像头编号无效".into());
+            return Err(locale::text([
+                "Invalid OpenSeeFace port or camera number",
+                "OpenSeeFace 端口或摄像头编号无效",
+                "OpenSeeFace のポートまたはカメラ番号が無効です",
+                "Puerto de OpenSeeFace o número de cámara no válidos",
+                "Port OpenSeeFace ou numéro de caméra invalide",
+            ])
+            .into());
         }
         let socket = UdpSocket::bind((Ipv4Addr::LOCALHOST, port))
-            .map_err(|_| "无法绑定 OpenSeeFace 本机端口，可能已被占用")?;
+            .map_err(|_| locale::text([
+                "Could not bind the local OpenSeeFace port. It may already be in use",
+                "无法绑定 OpenSeeFace 本机端口，可能已被占用",
+                "OpenSeeFace のローカルポートをバインドできません。すでに使用されている可能性があります",
+                "No se pudo enlazar el puerto local de OpenSeeFace. Puede que ya esté en uso",
+                "Impossible d’utiliser le port local d’OpenSeeFace. Il est peut-être déjà occupé",
+            ]))?;
         socket
             .set_read_timeout(Some(Duration::from_millis(100)))
-            .map_err(|_| "无法设置 OpenSeeFace 接收超时")?;
+            .map_err(|_| {
+                locale::text([
+                    "Could not set the OpenSeeFace receive timeout",
+                    "无法设置 OpenSeeFace 接收超时",
+                    "OpenSeeFace の受信タイムアウトを設定できません",
+                    "No se pudo configurar el tiempo de espera de recepción de OpenSeeFace",
+                    "Impossible de définir le délai de réception d’OpenSeeFace",
+                ])
+            })?;
         let command = match source {
             Source::External => None,
             Source::Python(python, script) => {
@@ -112,23 +134,50 @@ impl Tracker {
                     python.to_owned()
                 } else {
                     std::env::current_dir()
-                        .map_err(|_| "无法解析 Python 相对路径")?
+                        .map_err(|_| {
+                            locale::text([
+                                "Could not resolve the relative Python path",
+                                "无法解析 Python 相对路径",
+                                "Python の相対パスを解決できません",
+                                "No se pudo resolver la ruta relativa de Python",
+                                "Impossible de résoudre le chemin relatif de Python",
+                            ])
+                        })?
                         .join(python)
                 };
-                let script = script
-                    .canonicalize()
-                    .map_err(|_| "OpenSeeFace 脚本路径不存在")?;
+                let script = script.canonicalize().map_err(|_| {
+                    locale::text([
+                        "The OpenSeeFace script path does not exist",
+                        "OpenSeeFace 脚本路径不存在",
+                        "OpenSeeFace スクリプトのパスが存在しません",
+                        "La ruta del script de OpenSeeFace no existe",
+                        "Le chemin du script OpenSeeFace n’existe pas",
+                    ])
+                })?;
                 if !python.is_file()
                     || !script.is_file()
                     || script.extension().is_none_or(|extension| extension != "py")
                 {
-                    return Err("请选择 Python 可执行文件和 OpenSeeFace 启动脚本".into());
+                    return Err(locale::text([
+                        "Choose the Python executable and the OpenSeeFace launch script",
+                        "请选择 Python 可执行文件和 OpenSeeFace 启动脚本",
+                        "Python の実行ファイルと OpenSeeFace 起動スクリプトを選択してください",
+                        "Elige el ejecutable de Python y el script de inicio de OpenSeeFace",
+                        "Choisissez l’exécutable Python et le script de lancement d’OpenSeeFace",
+                    ])
+                    .into());
                 }
                 let mut command = Command::new(python);
                 command
                     .arg("-u")
                     .arg(&script)
-                    .current_dir(script.parent().ok_or("OpenSeeFace 脚本目录无效")?);
+                    .current_dir(script.parent().ok_or(locale::text([
+                        "Invalid OpenSeeFace script folder",
+                        "OpenSeeFace 脚本目录无效",
+                        "OpenSeeFace スクリプトのフォルダーが無効です",
+                        "Carpeta del script de OpenSeeFace no válida",
+                        "Dossier du script OpenSeeFace invalide",
+                    ]))?);
                 Some(command)
             }
         };
@@ -167,7 +216,13 @@ impl Tracker {
             Some(
                 command
                     .spawn()
-                    .map_err(|_| "无法启动 OpenSeeFace，请检查程序是否完整及执行权限")?,
+                    .map_err(|_| locale::text([
+                        "Could not start OpenSeeFace. Check that it is complete and has permission to run",
+                        "无法启动 OpenSeeFace，请检查程序是否完整及执行权限",
+                        "OpenSeeFace を起動できません。プログラムが揃っているか、実行権限があるか確認してください",
+                        "No se pudo iniciar OpenSeeFace. Comprueba que esté completo y tenga permiso de ejecución",
+                        "Impossible de démarrer OpenSeeFace. Vérifiez qu’il est complet et qu’il a le droit de s’exécuter",
+                    ]))?,
             )
         } else {
             None
@@ -200,7 +255,13 @@ impl Tracker {
                     if child_exited {
                         if !receiver_stop.load(Ordering::Acquire) {
                             on_error(
-                                "OpenSeeFace 进程已退出，请检查摄像头权限、占用情况和跟踪程序是否完整",
+                                locale::text([
+                                    "The OpenSeeFace process exited. Check camera permission, whether the camera is in use, and that the tracker is complete",
+                                    "OpenSeeFace 进程已退出，请检查摄像头权限、占用情况和跟踪程序是否完整",
+                                    "OpenSeeFace のプロセスが終了しました。カメラの権限、使用状況、トラッカーのファイルが揃っているかを確認してください",
+                                    "El proceso de OpenSeeFace se cerró. Comprueba el permiso de la cámara, si está en uso y que el programa de seguimiento esté completo",
+                                    "Le processus OpenSeeFace s’est arrêté. Vérifiez l’autorisation de la caméra, qu’elle n’est pas déjà utilisée et que le programme de suivi est complet",
+                                ]),
                             );
                         }
                         break;
@@ -236,7 +297,14 @@ impl Tracker {
             Ok(receiver) => receiver,
             Err(_) => {
                 stop_child(&mut child.lock().unwrap_or_else(|error| error.into_inner()));
-                return Err("无法启动 OpenSeeFace 接收线程".into());
+                return Err(locale::text([
+                    "Could not start the OpenSeeFace receiver thread",
+                    "无法启动 OpenSeeFace 接收线程",
+                    "OpenSeeFace の受信スレッドを開始できません",
+                    "No se pudo iniciar el hilo de recepción de OpenSeeFace",
+                    "Impossible de démarrer le fil de réception d’OpenSeeFace",
+                ])
+                .into());
             }
         };
         Ok(Self {

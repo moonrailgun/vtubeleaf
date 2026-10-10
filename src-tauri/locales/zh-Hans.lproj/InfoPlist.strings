@@ -1,0 +1,3 @@
+"NSCameraUsageDescription" = "VTubeLeaf 在本机使用摄像头跟踪表情并驱动虚拟形象，不上传摄像头画面。";
+"NSMicrophoneUsageDescription" = "仅在你开启音频口型后，VTubeLeaf 在本机分析麦克风声音驱动口型，不录音或上传声音。";
+"NSSystemExtensionUsageDescription" = "将 VTubeLeaf 角色画布作为虚拟摄像头提供给会议软件。";

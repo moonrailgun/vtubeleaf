@@ -2,9 +2,17 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
+  <key>CFBundleLocalizations</key>
+  <array>
+    <string>en</string>
+    <string>zh-Hans</string>
+    <string>ja</string>
+    <string>es</string>
+    <string>fr</string>
+  </array>
   <key>NSCameraUsageDescription</key>
-  <string>VTubeLeaf 在本机使用摄像头跟踪表情并驱动虚拟形象，不上传摄像头画面。</string>
+  <string>VTubeLeaf uses the camera on this Mac to track your expressions and drive your avatar. Camera images are never uploaded.</string>
   <key>NSMicrophoneUsageDescription</key>
-  <string>仅在你开启音频口型后，VTubeLeaf 在本机分析麦克风声音驱动口型，不录音或上传声音。</string>
+  <string>Only when you turn on audio lip sync, VTubeLeaf analyzes microphone sound on this Mac to drive lip sync. Audio is never recorded or uploaded.</string>
 </dict>
 </plist>

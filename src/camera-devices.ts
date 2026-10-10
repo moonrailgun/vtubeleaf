@@ -1,3 +1,5 @@
+import { t } from './i18n.ts';
+
 export function isVTubeLeafCamera(device: { label: string }) {
   return device.label.toLowerCase().includes('vtubeleaf camera');
 }
@@ -34,10 +36,7 @@ function trackingCamera(devices: MediaDeviceInfo[]) {
 }
 
 function noTrackingCamera() {
-  return new DOMException(
-    '未找到可用于跟踪的摄像头。VTubeLeaf Camera 仅用于输出。',
-    'NotFoundError',
-  );
+  return new DOMException(t('cameraDevices.noTrackingCamera'), 'NotFoundError');
 }
 
 export async function openTrackingCamera(

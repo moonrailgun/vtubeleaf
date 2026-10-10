@@ -1,100 +1,102 @@
 # VTubeLeaf
 
+**English** | [简体中文](README.zh-CN.md)
+
 <img src="public/brand/lockup-light.svg" width="360" alt="VTubeLeaf" />
 
-VTubeLeaf 是一款适用于 **Windows 和 macOS** 的免费虚拟形象软件，提供 **Linux x64 实验支持**。用摄像头，让 Live2D 角色跟着你眨眼、说话和转头，用于直播、录屏或视频聊天。
+VTubeLeaf is free avatar software for **Windows and macOS**, with **experimental Linux x64 support**. Using your webcam, it makes a Live2D character blink, talk and turn its head along with you — for streaming, screen recording or video calls.
 
-摄像头画面在你的电脑上处理，不会上传。应用内置三个角色，安装后就可以开始体验。
+Your camera feed is processed on your computer and never uploaded. Three characters are built in, so you can try it right after installing. The interface is available in English, Chinese, Japanese, Spanish and French and follows your system language.
 
-**[前往官网下载](https://vtubeleaf.vercel.app/) · [查看版本与下载](https://github.com/moonrailgun/vtubeleaf/releases/latest) · [反馈问题](https://github.com/moonrailgun/vtubeleaf/issues)**
+**[Download from the website](https://vtubeleaf.vercel.app/) · [Releases and downloads](https://github.com/moonrailgun/vtubeleaf/releases/latest) · [Report an issue](https://github.com/moonrailgun/vtubeleaf/issues)**
 
-## 下载与安装
+## Download and install
 
-- **Windows**：需要 Windows 10 或更新版本，支持 Intel / AMD 的 64 位电脑。下载安装包后，按提示完成安装。
-- **macOS**：需要 macOS 14 或更新版本，支持 Apple 芯片和 Intel 芯片。打开安装包，把 VTubeLeaf 拖进「应用程序」文件夹。
-- **Linux（实验中）**：以 Ubuntu 22.04 及以上 x64 为构建基线，提供 `.deb` 和 AppImage。仅在对应 Release 已发布时显示下载；也可按 [Linux 构建说明](docs/SETUP.md#linux-开发与打包)从源码运行。摄像头与桌面兼容性仍待实机验证。
+- **Windows**: Windows 10 or later on a 64-bit Intel / AMD PC. Download the installer and follow the prompts.
+- **macOS**: macOS 14 or later, on Apple silicon or Intel. Open the disk image and drag VTubeLeaf into the Applications folder.
+- **Linux (experimental)**: built against Ubuntu 22.04+ x64, shipped as `.deb` and AppImage. Downloads appear only when the matching Release has been published; you can also run from source following the [Linux build notes](docs/SETUP.md#linux-开发与打包) (Chinese). Camera and desktop compatibility still needs testing on real hardware.
 
-首次使用时，请允许应用访问摄像头。如果想让角色根据麦克风声音张嘴，也需要允许使用麦克风。
+On first launch, allow the app to use your camera. If you want the character's mouth to follow your microphone, allow microphone access too.
 
-## 第一次使用
+## Getting started
 
-1. 打开「角色库」，选择一个内置角色：**Haru、Hiyori 或 Mao**。
-2. 在「面捕」中选择摄像头，点击「开始跟踪」。
-3. 面向镜头，自然睁眼、闭嘴，点击「校准中立姿态」，按提示保持姿势，让角色记住你平时的表情。
-4. 试着转头、眨眼和说话，看看角色的反应。
-5. 在画面中按住鼠标左键拖动角色来调整位置，用滚轮调整大小。应用会记住每个角色的设置。
+1. Open “Library” and pick a built-in character: **Haru, Hiyori or Mao**.
+2. In “Tracking”, choose your camera and click “Start tracking”.
+3. Face the camera with your eyes naturally open and mouth closed, click “Calibrate neutral pose” and hold still as prompted so the character learns your resting expression.
+4. Turn your head, blink and talk to see how the character responds.
+5. Drag the character on the stage with the left mouse button to move it, and use the scroll wheel to resize it. Settings are remembered per character.
 
-使用时尽量让面部光线均匀、不要遮住眼睛和嘴巴。换了坐姿或摄像头位置后，可以重新校准。
+Even lighting on your face helps, and keep your eyes and mouth uncovered. Recalibrate after changing your seating or camera position.
 
-## 使用自己的角色
+## Use your own character
 
-把完整的 Live2D 模型文件夹或 ZIP 压缩包拖进窗口，就能加入「角色库」。也可以选择模型中的 `.model3.json` 文件，请保留它旁边的其他资源文件。
+Drag a complete Live2D model folder or ZIP archive into the window to add it to “Library”. You can also pick the model's `.model3.json` file — keep the other resource files next to it.
 
-导入后，应用会保存一份副本。移动原文件不会影响角色库中的角色，点击角色卡片即可切换。
+The app keeps its own copy after importing, so moving the original files won't affect the character in your library. Click a character card to switch to it.
 
-普通 PNG、JPEG 图片不能直接变成会跟随表情的角色，但可以作为画面中的装饰。请使用你有权使用的模型；内置角色的来源与使用条款见 [模型说明](vendor/models/README.md)。
+Plain PNG or JPEG images can't become a character that follows your expressions, but you can place them on the stage as decorations. Only use models you have the rights to use; see the [model notes](vendor/models/README.md) for the sources and terms of the built-in characters.
 
-## 用于直播或视频聊天
+## Streaming and video calls
 
-### 让其他软件把角色当作摄像头
+### Use your character as a camera in other apps
 
-1. 在 VTubeLeaf 中选好角色并开始跟踪。
-2. 打开「接入」，点击「安装虚拟摄像头」。macOS 首次安装时，需要按提示到系统设置中允许摄像头扩展。
-3. 点击「启动虚拟摄像头」。
-4. 在直播或视频聊天软件里，重新打开摄像头列表，选择 **VTubeLeaf Camera**。麦克风仍选择你平时使用的设备。
+1. In VTubeLeaf, choose a character and start tracking.
+2. Open “Connect” and click “Install virtual camera”. On macOS, the first install asks you to allow the camera extension in System Settings.
+3. Click “Start virtual camera”.
+4. In your streaming or video call app, reopen the camera list and choose **VTubeLeaf Camera**. Keep using your usual microphone.
 
-不同软件对虚拟摄像头的支持可能不同。如果找不到角色画面，可以尝试下面的 OBS 方式。
+Virtual camera support varies between apps. If you can't find your character there, try the OBS options below.
 
-Linux 暂无内置虚拟摄像头，请通过 OBS 输出；会议使用需要安装 `v4l2loopback`，在 OBS 启动虚拟摄像头后选择「OBS Virtual Camera」。
+Linux has no built-in virtual camera yet; output through OBS instead. For video calls, install `v4l2loopback`, start OBS's virtual camera and select “OBS Virtual Camera”.
 
-### 使用 OBS 直播或录屏
+### Stream or record with OBS
 
-需要透明背景时，在 VTubeLeaf「接入 → OBS 接入」中启动透明输出。角色和道具的透明度会直接保留，无需色键；VTubeLeaf 的纯色和背景图不会进入此来源，可在 OBS 中添加背景。输出方式有两种：
+For a transparent background, start the transparent output in VTubeLeaf under “Connect → OBS”. Character and prop transparency is kept as-is, so no chroma key is needed; VTubeLeaf's solid color and background image are not part of this source, so add your background in OBS. There are two output methods:
 
-- **Syphon（macOS）/ Spout2（Windows）**：默认方式，以 `1920×1080` 直接向 OBS 共享画面，帧率跟随「渲染帧率」设置，延迟和占用最低。macOS 在 OBS 添加「Syphon客户端」来源，选择 VTubeLeaf 并勾选「允许透明度」；Windows 需先为 OBS 安装 [Spout2 插件](https://github.com/Off-World-Live/obs-spout2-plugin)，再添加「Spout2 Capture」来源，选择 VTubeLeaf，并把「Composite mode」设为 Premultiplied Alpha。
-- **浏览器源**：无需插件。复制地址后在 OBS 添加「浏览器」来源，粘贴地址，宽度设为 `1280`、高度 `720`、帧率 `30`。画面仅通过本机地址提供，实际帧率取决于 PNG 编码速度，上限为 30 FPS。
+- **Syphon (macOS) / Spout2 (Windows)**: the default. Shares frames with OBS directly at `1920×1080`, at the “Render frame rate” you set, with the lowest latency and overhead. On macOS, add a “Syphon Client” source in OBS, choose VTubeLeaf and tick “Allow Transparency”. On Windows, first install the [Spout2 plugin](https://github.com/Off-World-Live/obs-spout2-plugin) for OBS, then add a “Spout2 Capture” source, choose VTubeLeaf and set “Composite mode” to Premultiplied Alpha.
+- **Browser source**: no plugin needed. Copy the address, add a “Browser” source in OBS and paste it, with width `1280`, height `720` and FPS `30`. Frames are served only on a local address; the actual frame rate depends on PNG encoding speed, up to 30 FPS.
 
-两种方式都需要保持 VTubeLeaf 运行。停止输出后会清空画面，重新启动输出后自动恢复。
+Both methods need VTubeLeaf to keep running. Stopping the output clears the image, and it comes back when you start the output again.
 
-点击 VTubeLeaf 顶部的「直播模式」，隐藏设置面板，再在 OBS 中捕获 VTubeLeaf 窗口。回到 VTubeLeaf 按 `Esc` 可以恢复界面，角色会继续跟随你的动作。
+Click “Stream mode” at the top of VTubeLeaf to hide the settings panels, then capture the VTubeLeaf window in OBS. Press `Esc` in VTubeLeaf to bring the interface back; the character keeps following you the whole time.
 
-如果需要一边调整设置一边输出画面，可以使用「独立输出窗口」。应用「接入」页面也提供了 OBS 的操作说明。
+To adjust settings while sending video out, use the “Output window”. The “Connect” page in the app also walks you through the OBS setup.
 
-## 还可以做什么
+## What else you can do
 
-- **让动作更丰富**：识别上半身动作，也可以单独开启手指跟踪或麦克风口型。角色需要支持相应动作。
-- **布置自己的画面**：添加图片、动图或 Live2D 道具，保存成场景，随时切换。
-- **切换表情和动作**：使用角色自带的表情、动作，也能设置快捷键。
-- **录下角色动作**：手动录制并导出角色动作，不会录下摄像头画面或声音。
+- **Richer movement**: tracks upper-body motion, with optional finger tracking or microphone lip sync. The character needs to support those motions.
+- **Build your own scene**: add images, animated GIFs or Live2D props, save them as scenes and switch any time.
+- **Expressions and motions**: trigger the character's own expressions and motions, with hotkeys if you like.
+- **Record motions**: record and export your character's movements manually. Your camera image and voice are never recorded.
 
-## 更新应用
+## Updating
 
-点击主界面底部的版本号，选择「检查更新」。有新版本时，按提示点击「下载更新」，完成后选择「安装并重启」。安装前请保存尚未保存的动作录制，更新会停止跟踪和虚拟摄像头。
+Click the version number at the bottom of the main window and choose “Check for updates”. When a new version is available, click “Download update”, then “Install and restart” when it's ready. Save any unsaved motion recording first — updating stops tracking and the virtual camera.
 
-应用默认会自动检查更新，下载和安装由你决定，也可以关闭自动检查。旧版本如果没有更新入口，可从 [官网](https://vtubeleaf.vercel.app/)重新下载安装。
+The app checks for updates automatically by default, but downloading and installing are always up to you, and you can turn automatic checks off. Older versions without the update option can be reinstalled from the [website](https://vtubeleaf.vercel.app/).
 
-## 常见问题
+## FAQ
 
-**摄像头打不开怎么办？**
+**My camera won't open.**
 
-先检查系统设置是否允许 VTubeLeaf 使用摄像头，再确认其他软件没有占用摄像头。在「面捕」中重新选择设备后再试一次。
+Check that your system settings allow VTubeLeaf to use the camera, and that no other app is using it. Then reselect the device in “Tracking” and try again.
 
-**角色没有反应，或者表情不自然？**
+**The character doesn't move, or its expressions look off.**
 
-确认已点击「开始跟踪」，面部在镜头内且光线充足。保持自然表情后重新校准；如果只有某个部位不动，也可能是角色本身没有制作这个动作。
+Make sure you clicked “Start tracking” and that your face is in frame and well lit. Recalibrate with a relaxed expression. If only one part doesn't move, the character itself may not include that motion.
 
-**导入角色时提示缺少文件？**
+**Importing a character says files are missing.**
 
-请使用完整的模型文件夹或压缩包。单独复制 `.model3.json` 文件不够，角色还需要配套的图片和其他文件。
+Use the complete model folder or archive. The `.model3.json` file alone isn't enough — the character also needs its textures and other files.
 
-## 反馈与参与
+## Feedback and contributing
 
-遇到问题或有功能建议，欢迎 [提交反馈](https://github.com/moonrailgun/vtubeleaf/issues)。请附上系统版本、应用版本，以及问题出现前的操作；有截图会更方便排查。
+Found a problem or have a feature idea? [Open an issue](https://github.com/moonrailgun/vtubeleaf/issues). Please include your OS version, app version and what you did before the problem appeared; screenshots help a lot.
 
-想参与开发、改进文档或协助测试，请看 [贡献指南](CONTRIBUTING.md)。
+To help with development, documentation or testing, see the [contributing guide](CONTRIBUTING.md).
 
-社区: [**linux.do**](http://linux.do)
+Community: [**linux.do**](http://linux.do)
 
-## 许可证
+## License
 
-VTubeLeaf 自有代码采用 [MIT 许可证](LICENSE)。角色素材和第三方组件各有自己的使用条款，详见 [模型说明](vendor/models/README.md)和[第三方许可](docs/THIRD_PARTY.md)。
+VTubeLeaf's own code is released under the [MIT License](LICENSE). Character assets and third-party components have their own terms; see the [model notes](vendor/models/README.md) and [third-party licenses](docs/THIRD_PARTY.md).

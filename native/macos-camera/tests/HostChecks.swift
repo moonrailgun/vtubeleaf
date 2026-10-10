@@ -38,6 +38,7 @@ private final class EnabledCameraProperties: OSSystemExtensionProperties {
 
 @main struct HostChecks {
     static func main() throws {
+        hostLanguage = 1 // zh: the assertions below match the Chinese messages.
         let demand = StartingCameraHost()
         demand.installed = true
         demand.device = 1

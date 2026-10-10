@@ -1,3 +1,4 @@
+use crate::locale;
 use serde::Serialize;
 use serde_json::Value;
 use std::{
@@ -13,6 +14,126 @@ const MAX_FILE_BYTES: u64 = 128 * 1024 * 1024;
 const MAX_TOTAL_BYTES: u64 = 512 * 1024 * 1024;
 const MAX_ENTRIES: usize = 2048;
 const MAX_ICON_BYTES: u64 = 4 * 1024 * 1024;
+
+const CREATE_LIBRARY_FAILED: [&str; 5] = [
+    "Could not create the avatars folder",
+    "无法创建角色文件夹",
+    "キャラクターフォルダーを作成できません",
+    "No se pudo crear la carpeta de avatares",
+    "Impossible de créer le dossier des avatars",
+];
+
+const LIBRARY_INACCESSIBLE: [&str; 5] = [
+    "Could not access the avatars folder",
+    "无法访问角色文件夹",
+    "キャラクターフォルダーにアクセスできません",
+    "No se pudo acceder a la carpeta de avatares",
+    "Impossible d’accéder au dossier des avatars",
+];
+
+const INVALID_AVATAR_PATH: [&str; 5] = [
+    "Invalid avatar path",
+    "角色路径无效",
+    "キャラクターのパスが無効です",
+    "Ruta del avatar no válida",
+    "Chemin de l’avatar invalide",
+];
+
+const MODELS_UNAVAILABLE: [&str; 5] = [
+    "Model state is unavailable",
+    "模型状态不可用",
+    "モデルの状態を利用できません",
+    "El estado del modelo no está disponible",
+    "L’état du modèle est indisponible",
+];
+
+const RESOURCE_MISSING: [&str; 5] = [
+    "Could not read a model file. Make sure it still exists",
+    "无法读取模型资源，请确认文件仍然存在",
+    "モデルファイルを読み込めません。ファイルがまだ存在するか確認してください",
+    "No se pudo leer un archivo del modelo. Comprueba que todavía exista",
+    "Impossible de lire un fichier du modèle. Vérifiez qu’il existe toujours",
+];
+
+const RESOURCE_TOO_LARGE: [&str; 5] = [
+    "A model file exceeds the size limit",
+    "模型资源超过大小限制",
+    "モデルファイルがサイズ上限を超えています",
+    "Un archivo del modelo supera el límite de tamaño",
+    "Un fichier du modèle dépasse la taille maximale",
+];
+
+const MODEL_NOT_LOADED: [&str; 5] = [
+    "The model is not loaded yet",
+    "模型尚未加载",
+    "モデルがまだ読み込まれていません",
+    "El modelo aún no se ha cargado",
+    "Le modèle n’est pas encore chargé",
+];
+
+const SAVE_PREVIEW_FAILED: [&str; 5] = [
+    "Could not save the avatar preview",
+    "无法保存角色预览",
+    "キャラクタープレビューを保存できません",
+    "No se pudo guardar la vista previa del avatar",
+    "Impossible d’enregistrer l’aperçu de l’avatar",
+];
+
+const MODEL_TOO_LARGE: [&str; 5] = [
+    "Model files exceed 512 MB in total",
+    "模型资源总大小超过 512 MB",
+    "モデルファイルの合計サイズが 512 MB を超えています",
+    "Los archivos del modelo superan 512 MB en total",
+    "Les fichiers du modèle dépassent 512 MB au total",
+];
+
+const UNSAFE_RESOURCE_PATH: [&str; 5] = [
+    "Unsafe model file path",
+    "模型资源路径不安全",
+    "モデルファイルのパスが安全ではありません",
+    "Ruta de archivo del modelo no segura",
+    "Chemin de fichier du modèle non sécurisé",
+];
+
+const CHECK_RESOURCE_FAILED: [&str; 5] = [
+    "Could not check a model file",
+    "无法检查模型资源",
+    "モデルファイルを確認できません",
+    "No se pudo comprobar un archivo del modelo",
+    "Impossible de vérifier un fichier du modèle",
+];
+
+const ENTRY_INACCESSIBLE: [&str; 5] = [
+    "Could not access the model3.json file",
+    "无法访问模型入口",
+    "model3.json ファイルにアクセスできません",
+    "No se pudo acceder al archivo model3.json",
+    "Impossible d’accéder au fichier model3.json",
+];
+
+const TOO_MANY_DIRECTORY_FILES: [&str; 5] = [
+    "The model folder has more than 2048 files",
+    "模型目录文件数超过 2048",
+    "モデルフォルダーのファイル数が 2048 を超えています",
+    "La carpeta del modelo tiene más de 2048 archivos",
+    "Le dossier du modèle contient plus de 2048 fichiers",
+];
+
+const TOO_MANY_RESOURCES: [&str; 5] = [
+    "The model has more than 2048 files",
+    "模型资源数超过 2048",
+    "モデルのファイル数が 2048 を超えています",
+    "El modelo tiene más de 2048 archivos",
+    "Le modèle contient plus de 2048 fichiers",
+];
+
+const ZIP_TOO_LARGE: [&str; 5] = [
+    "The extracted ZIP exceeds the size limit",
+    "ZIP 解压大小超过限制",
+    "ZIP の展開後のサイズが上限を超えています",
+    "El contenido descomprimido del ZIP supera el límite de tamaño",
+    "Le contenu décompressé du ZIP dépasse la taille maximale",
+];
 
 #[derive(Clone, Serialize)]
 pub struct ModelInfo {
@@ -71,7 +192,9 @@ pub struct Registry {
 }
 
 fn lock<T>(mutex: &Mutex<T>) -> Result<MutexGuard<'_, T>, String> {
-    mutex.lock().map_err(|_| "模型状态不可用".into())
+    mutex
+        .lock()
+        .map_err(|_| locale::text(MODELS_UNAVAILABLE).into())
 }
 
 impl Registry {
@@ -86,10 +209,10 @@ impl Registry {
     pub fn load(&self, path: &Path, data_dir: &Path) -> Result<ModelInfo, String> {
         let _disk = lock(&self.disk)?;
         let destination = data_dir.join("models");
-        fs::create_dir_all(&destination).map_err(|_| "无法创建角色文件夹")?;
+        fs::create_dir_all(&destination).map_err(|_| locale::text(CREATE_LIBRARY_FAILED))?;
         let destination = destination
             .canonicalize()
-            .map_err(|_| "无法访问角色文件夹")?;
+            .map_err(|_| locale::text(LIBRARY_INACCESSIBLE))?;
         let model = if path
             .extension()
             .is_some_and(|extension| extension.eq_ignore_ascii_case("zip"))
@@ -120,14 +243,26 @@ impl Registry {
             .entry
             .file_name()
             .and_then(|name| name.to_str())
-            .ok_or("模型文件名必须是有效的 UTF-8")?
+            .ok_or(locale::text([
+                "The model file name must be valid UTF-8",
+                "模型文件名必须是有效的 UTF-8",
+                "モデルのファイル名は有効な UTF-8 である必要があります",
+                "El nombre del archivo del modelo debe ser UTF-8 válido",
+                "Le nom du fichier du modèle doit être en UTF-8 valide",
+            ]))?
             .to_owned();
         let info = ModelInfo {
             id: id.clone(),
             path: model
                 .entry
                 .to_str()
-                .ok_or("模型路径必须是有效的 UTF-8")?
+                .ok_or(locale::text([
+                    "The model path must be valid UTF-8",
+                    "模型路径必须是有效的 UTF-8",
+                    "モデルのパスは有効な UTF-8 である必要があります",
+                    "La ruta del modelo debe ser UTF-8 válido",
+                    "Le chemin du modèle doit être en UTF-8 valide",
+                ]))?
                 .to_owned(),
             name: entry.trim_end_matches(".model3.json").to_owned(),
             entry,
@@ -149,7 +284,7 @@ impl Registry {
     ) -> Result<Library, String> {
         let _disk = lock(&self.disk)?;
         let directory = data_dir.join("models");
-        fs::create_dir_all(&directory).map_err(|_| "无法创建角色文件夹")?;
+        fs::create_dir_all(&directory).map_err(|_| locale::text(CREATE_LIBRARY_FAILED))?;
         let mut errors = Vec::new();
         for name in ["Haru", "Hiyori", "Mao"] {
             let destination = directory.join(format!("builtin-{name}"));
@@ -161,11 +296,28 @@ impl Registry {
                 .and_then(|model| {
                     fs::rename(&model.root, &destination).map_err(|_| {
                         let _ = fs::remove_dir_all(&model.root);
-                        "无法保存内置角色".to_owned()
+                        locale::text([
+                            "Could not save the built-in avatar",
+                            "无法保存内置角色",
+                            "内蔵キャラクターを保存できません",
+                            "No se pudo guardar el avatar integrado",
+                            "Impossible d’enregistrer l’avatar intégré",
+                        ])
+                        .to_owned()
                     })
                 });
             if let Err(error) = result {
-                errors.push(format!("内置角色 {name}：{error}"));
+                errors.push(
+                    locale::text([
+                        "Built-in avatar {name}: {error}",
+                        "内置角色 {name}：{error}",
+                        "内蔵キャラクター {name}：{error}",
+                        "Avatar integrado {name}: {error}",
+                        "Avatar intégré {name} : {error}",
+                    ])
+                    .replace("{name}", name)
+                    .replace("{error}", &error),
+                );
             }
         }
         let mut library = self.list(data_dir)?;
@@ -176,16 +328,32 @@ impl Registry {
     // Callers hold `disk`.
     fn list(&self, data_dir: &Path) -> Result<Library, String> {
         let directory = data_dir.join("models");
-        fs::create_dir_all(&directory).map_err(|_| "无法创建角色文件夹")?;
+        fs::create_dir_all(&directory).map_err(|_| locale::text(CREATE_LIBRARY_FAILED))?;
         let mut library = Library {
             directory: directory.to_string_lossy().into_owned(),
             models: Vec::new(),
             errors: Vec::new(),
         };
         let mut entries = fs::read_dir(&directory)
-            .map_err(|_| "无法读取角色文件夹")?
+            .map_err(|_| {
+                locale::text([
+                    "Could not read the avatars folder",
+                    "无法读取角色文件夹",
+                    "キャラクターフォルダーを読み込めません",
+                    "No se pudo leer la carpeta de avatares",
+                    "Impossible de lire le dossier des avatars",
+                ])
+            })?
             .collect::<Result<Vec<_>, _>>()
-            .map_err(|_| "无法读取角色目录")?;
+            .map_err(|_| {
+                locale::text([
+                    "Could not read the contents of the avatars folder",
+                    "无法读取角色目录",
+                    "キャラクターフォルダーの中身を読み込めません",
+                    "No se pudo leer el contenido de la carpeta de avatares",
+                    "Impossible de lire le contenu du dossier des avatars",
+                ])
+            })?;
         // Managed directories are created on import; selecting a model does not change this time.
         entries.sort_by_cached_key(|entry| {
             let added = entry
@@ -195,14 +363,34 @@ impl Registry {
             (Reverse(added), entry.file_name())
         });
         for entry in entries {
-            if !entry.file_type().map_err(|_| "无法检查角色目录")?.is_dir() {
+            if !entry
+                .file_type()
+                .map_err(|_| {
+                    locale::text([
+                        "Could not check an avatar folder",
+                        "无法检查角色目录",
+                        "キャラクターフォルダーを確認できません",
+                        "No se pudo comprobar una carpeta de avatar",
+                        "Impossible de vérifier un dossier d’avatar",
+                    ])
+                })?
+                .is_dir()
+            {
                 continue;
             }
             match validate_model(&entry.path()).and_then(|model| self.register(model)) {
                 Ok(info) => library.models.push(info),
-                Err(error) => library
-                    .errors
-                    .push(format!("{}：{error}", entry.file_name().to_string_lossy())),
+                Err(error) => library.errors.push(
+                    locale::text([
+                        "{name}: {error}",
+                        "{name}：{error}",
+                        "{name}：{error}",
+                        "{name}: {error}",
+                        "{name} : {error}",
+                    ])
+                    .replace("{name}", &entry.file_name().to_string_lossy())
+                    .replace("{error}", &error),
+                ),
             }
         }
         Ok(library)
@@ -210,32 +398,90 @@ impl Registry {
 
     pub fn remove(&self, id: &str, data_dir: &Path) -> Result<(), String> {
         let _disk = lock(&self.disk)?;
-        let model = self.model(id, "角色不在库中")?;
+        let model = self.model(
+            id,
+            locale::text([
+                "This avatar is not in the library",
+                "角色不在库中",
+                "このキャラクターはライブラリにありません",
+                "Este avatar no está en la biblioteca",
+                "Cet avatar n’est pas dans la bibliothèque",
+            ]),
+        )?;
         let directory = data_dir
             .join("models")
             .canonicalize()
-            .map_err(|_| "无法访问角色文件夹")?;
-        let relative = model
-            .entry
-            .strip_prefix(&directory)
-            .map_err(|_| "只能移除角色库内的副本")?;
+            .map_err(|_| locale::text(LIBRARY_INACCESSIBLE))?;
+        let relative = model.entry.strip_prefix(&directory).map_err(|_| {
+            locale::text([
+                "Only copies inside the library can be removed",
+                "只能移除角色库内的副本",
+                "ライブラリ内のコピーのみ削除できます",
+                "Solo se pueden eliminar las copias de la biblioteca",
+                "Seules les copies présentes dans la bibliothèque peuvent être supprimées",
+            ])
+        })?;
         let mut components = relative.components();
-        let key = components.next().ok_or("角色路径无效")?.as_os_str();
+        let key = components
+            .next()
+            .ok_or(locale::text(INVALID_AVATAR_PATH))?
+            .as_os_str();
         if components.next().is_none() {
-            return Err("角色路径无效".into());
+            return Err(locale::text(INVALID_AVATAR_PATH).into());
         }
         if key.to_string_lossy().starts_with("builtin-") {
-            return Err("内置角色不能移除".into());
+            return Err(locale::text([
+                "Built-in avatars cannot be removed",
+                "内置角色不能移除",
+                "内蔵キャラクターは削除できません",
+                "Los avatares integrados no se pueden eliminar",
+                "Les avatars intégrés ne peuvent pas être supprimés",
+            ])
+            .into());
         }
         // ZIP imports can have nested folders: remove only their top-level managed directory.
         let target = directory.join(key);
-        if target.canonicalize().map_err(|_| "角色文件夹不存在")? != target
-            || model.entry.canonicalize().map_err(|_| "角色文件不存在")? != model.entry
+        if target.canonicalize().map_err(|_| {
+            locale::text([
+                "The avatar folder does not exist",
+                "角色文件夹不存在",
+                "キャラクターフォルダーが存在しません",
+                "La carpeta del avatar no existe",
+                "Le dossier de l’avatar n’existe pas",
+            ])
+        })? != target
+            || model.entry.canonicalize().map_err(|_| {
+                locale::text([
+                    "The avatar file does not exist",
+                    "角色文件不存在",
+                    "キャラクターのファイルが存在しません",
+                    "El archivo del avatar no existe",
+                    "Le fichier de l’avatar n’existe pas",
+                ])
+            })? != model.entry
         {
-            return Err("角色路径已改变，请重新打开应用后再试".into());
+            return Err(locale::text([
+                "The avatar path has changed. Reopen the app and try again",
+                "角色路径已改变，请重新打开应用后再试",
+                "キャラクターのパスが変更されました。アプリを開き直してからもう一度お試しください",
+                "La ruta del avatar ha cambiado. Vuelve a abrir la app e inténtalo de nuevo",
+                "Le chemin de l’avatar a changé. Rouvrez l’application puis réessayez",
+            ])
+            .into());
         }
         let preview = self.preview_path(id, data_dir)?;
-        fs::remove_dir_all(&target).map_err(|error| format!("无法移除角色文件夹：{error}"))?;
+        fs::remove_dir_all(&target).map_err(|error| {
+            format!(
+                "{}{error}",
+                locale::text([
+                    "Could not remove the avatar folder: ",
+                    "无法移除角色文件夹：",
+                    "キャラクターフォルダーを削除できません：",
+                    "No se pudo eliminar la carpeta del avatar: ",
+                    "Impossible de supprimer le dossier de l’avatar : "
+                ])
+            )
+        })?;
         lock(&self.state)?
             .models
             .retain(|_, model| !model.entry.starts_with(&target));
@@ -244,25 +490,30 @@ impl Registry {
     }
 
     fn preview_path(&self, id: &str, data_dir: &Path) -> Result<PathBuf, String> {
-        let model = self.model(id, "模型尚未加载")?;
+        let model = self.model(id, locale::text(MODEL_NOT_LOADED))?;
         let directory = data_dir
             .join("models")
             .canonicalize()
-            .map_err(|_| "无法访问角色文件夹")?;
-        let relative = model
-            .entry
-            .strip_prefix(directory)
-            .map_err(|_| "模型不在角色库中")?;
+            .map_err(|_| locale::text(LIBRARY_INACCESSIBLE))?;
+        let relative = model.entry.strip_prefix(directory).map_err(|_| {
+            locale::text([
+                "The model is not in the library",
+                "模型不在角色库中",
+                "モデルがライブラリにありません",
+                "El modelo no está en la biblioteca",
+                "Le modèle n’est pas dans la bibliothèque",
+            ])
+        })?;
         let key = relative
             .components()
             .next()
-            .ok_or("角色路径无效")?
+            .ok_or(locale::text(INVALID_AVATAR_PATH))?
             .as_os_str();
         Ok(data_dir.join("avatars").join(key).with_extension("png"))
     }
 
     pub fn read_preview(&self, id: &str, data_dir: &Path) -> Result<Vec<u8>, String> {
-        let model = self.model(id, "模型尚未加载")?;
+        let model = self.model(id, locale::text(MODEL_NOT_LOADED))?;
         if let Some(icon) = &model.icon {
             if let Ok(bytes) = checked_resource(&model.root, icon)
                 .and_then(|path| read_bounded(&path, MAX_ICON_BYTES))
@@ -289,32 +540,80 @@ impl Registry {
             .iter()
             .any(|size| *size == 0 || *size > 512)
         {
-            return Err("角色预览必须是 512 × 512 以内的 PNG 图片".into());
+            return Err(locale::text([
+                "The avatar preview must be a PNG image up to 512 × 512",
+                "角色预览必须是 512 × 512 以内的 PNG 图片",
+                "キャラクタープレビューは 512 × 512 以内の PNG 画像である必要があります",
+                "La vista previa del avatar debe ser una imagen PNG de hasta 512 × 512",
+                "L’aperçu de l’avatar doit être une image PNG de 512 × 512 maximum",
+            ])
+            .into());
         }
         // A concurrent removal must not leave this preview behind.
         let _disk = lock(&self.disk)?;
         let path = self.preview_path(id, data_dir)?;
-        let parent = path.parent().ok_or("预览路径无效")?;
-        fs::create_dir_all(parent).map_err(|_| "无法创建预览文件夹")?;
-        let mut staging =
-            tempfile::NamedTempFile::new_in(parent).map_err(|_| "无法创建预览文件")?;
-        staging.write_all(png).map_err(|_| "无法保存角色预览")?;
-        staging.persist(path).map_err(|_| "无法保存角色预览")?;
+        let parent = path.parent().ok_or(locale::text([
+            "Invalid preview path",
+            "预览路径无效",
+            "プレビューのパスが無効です",
+            "Ruta de vista previa no válida",
+            "Chemin de l’aperçu invalide",
+        ]))?;
+        fs::create_dir_all(parent).map_err(|_| {
+            locale::text([
+                "Could not create the preview folder",
+                "无法创建预览文件夹",
+                "プレビューフォルダーを作成できません",
+                "No se pudo crear la carpeta de vistas previas",
+                "Impossible de créer le dossier des aperçus",
+            ])
+        })?;
+        let mut staging = tempfile::NamedTempFile::new_in(parent).map_err(|_| {
+            locale::text([
+                "Could not create the preview file",
+                "无法创建预览文件",
+                "プレビューファイルを作成できません",
+                "No se pudo crear el archivo de vista previa",
+                "Impossible de créer le fichier d’aperçu",
+            ])
+        })?;
+        staging
+            .write_all(png)
+            .map_err(|_| locale::text(SAVE_PREVIEW_FAILED))?;
+        staging
+            .persist(path)
+            .map_err(|_| locale::text(SAVE_PREVIEW_FAILED))?;
         Ok(())
     }
 
     pub fn read(&self, id: &str, resource: &str) -> Result<Vec<u8>, String> {
         validate_resource(resource)?;
-        let model = self.model(id, "模型尚未加载，请重新导入")?;
+        let model = self.model(
+            id,
+            locale::text([
+                "The model is not loaded yet. Please import it again",
+                "模型尚未加载，请重新导入",
+                "モデルがまだ読み込まれていません。もう一度インポートしてください",
+                "El modelo aún no se ha cargado. Vuelve a importarlo",
+                "Le modèle n’est pas encore chargé. Veuillez le réimporter",
+            ]),
+        )?;
         if !model.files.iter().any(|file| file == resource) {
-            return Err("禁止读取模型未声明的资源".into());
+            return Err(locale::text([
+                "Files not declared by the model cannot be read",
+                "禁止读取模型未声明的资源",
+                "モデルで宣言されていないファイルは読み込めません",
+                "No se pueden leer archivos que el modelo no declara",
+                "Les fichiers non déclarés par le modèle ne peuvent pas être lus",
+            ])
+            .into());
         }
         let path = checked_resource(&model.root, resource)?;
         read_bounded(&path, MAX_FILE_BYTES)
     }
 
     pub fn read_vts_config(&self, id: &str) -> Result<Option<Value>, String> {
-        let model = self.model(id, "模型尚未加载")?;
+        let model = self.model(id, locale::text(MODEL_NOT_LOADED))?;
         if let Some(warning) = &model.vts_warning {
             return Err(warning.clone());
         }
@@ -326,37 +625,98 @@ fn copy_model(source: &Model, destination: &Path) -> Result<Model, String> {
     let staging = tempfile::Builder::new()
         .prefix("model-")
         .tempdir_in(destination)
-        .map_err(|_| "无法创建角色目录")?;
+        .map_err(|_| {
+            locale::text([
+                "Could not create the avatar folder",
+                "无法创建角色目录",
+                "キャラクターフォルダーを作成できません",
+                "No se pudo crear la carpeta del avatar",
+                "Impossible de créer le dossier de l’avatar",
+            ])
+        })?;
     let mut total = 0;
     for resource in &source.files {
         // Rejects links leaving the model, non-regular files and files over 128 MB.
         let input = checked_resource(&source.root, resource)?;
         let limit = MAX_FILE_BYTES.min(MAX_TOTAL_BYTES - total);
-        let file = File::open(&input).map_err(|_| "无法读取模型资源，请确认文件仍然存在")?;
-        if file.metadata().map_err(|_| "无法检查模型资源")?.len() > limit {
-            return Err("模型资源总大小超过 512 MB".into());
+        let file = File::open(&input).map_err(|_| locale::text(RESOURCE_MISSING))?;
+        if file
+            .metadata()
+            .map_err(|_| locale::text(CHECK_RESOURCE_FAILED))?
+            .len()
+            > limit
+        {
+            return Err(locale::text(MODEL_TOO_LARGE).into());
         }
         let target = staging.path().join(resource);
-        fs::create_dir_all(target.parent().ok_or("资源路径无效")?)
-            .map_err(|_| "无法创建角色资源目录")?;
+        fs::create_dir_all(target.parent().ok_or(locale::text([
+            "Invalid file path",
+            "资源路径无效",
+            "ファイルのパスが無効です",
+            "Ruta de archivo no válida",
+            "Chemin de fichier invalide",
+        ]))?)
+        .map_err(|_| {
+            locale::text([
+                "Could not create a folder for avatar files",
+                "无法创建角色资源目录",
+                "キャラクターファイル用のフォルダーを作成できません",
+                "No se pudo crear una carpeta para los archivos del avatar",
+                "Impossible de créer un dossier pour les fichiers de l’avatar",
+            ])
+        })?;
+
         // Streams into a fresh file instead of buffering it. Unlike fs::copy, no source flags
         // (e.g. Finder's lock) carry over and later block removing the model.
         let copied = File::create(&target)
             .and_then(|mut output| io::copy(&mut file.take(limit + 1), &mut output))
-            .map_err(|_| "无法复制角色资源，请检查磁盘空间")?;
+            .map_err(|_| {
+                locale::text([
+                    "Could not copy avatar files. Check your free disk space",
+                    "无法复制角色资源，请检查磁盘空间",
+                    "キャラクターのファイルをコピーできません。ディスクの空き容量を確認してください",
+                    "No se pudieron copiar los archivos del avatar. Comprueba el espacio en disco",
+                    "Impossible de copier les fichiers de l’avatar. Vérifiez l’espace disque disponible",
+                ])
+            })?;
         // The source may have grown since it was checked.
         if copied > limit {
-            return Err("模型资源超过大小限制".into());
+            return Err(locale::text(RESOURCE_TOO_LARGE).into());
         }
         total += copied;
     }
     // Optional VTS data must never prevent an otherwise valid model from loading.
     let vts_warning = (|| -> Result<(), String> {
         if let Some((name, value)) = super::vts::model_config(&source.entry)? {
-            validate_resource(&name)
-                .map_err(|error| format!("VTS 配置「{name}」未复制：{error}"))?;
-            let bytes = serde_json::to_vec(&value).map_err(|_| "无法保存 VTS 配置")?;
-            fs::write(staging.path().join(name), bytes).map_err(|_| "无法复制 VTS 配置")?;
+            validate_resource(&name).map_err(|error| {
+                locale::text([
+                    "VTS config “{name}” was not copied: {error}",
+                    "VTS 配置「{name}」未复制：{error}",
+                    "VTS 設定「{name}」はコピーされませんでした：{error}",
+                    "La configuración de VTS “{name}” no se copió: {error}",
+                    "La configuration VTS « {name} » n’a pas été copiée : {error}",
+                ])
+                .replace("{name}", &name)
+                .replace("{error}", &error)
+            })?;
+            let bytes = serde_json::to_vec(&value).map_err(|_| {
+                locale::text([
+                    "Could not save the VTS config",
+                    "无法保存 VTS 配置",
+                    "VTS 設定を保存できません",
+                    "No se pudo guardar la configuración de VTS",
+                    "Impossible d’enregistrer la configuration VTS",
+                ])
+            })?;
+            fs::write(staging.path().join(name), bytes).map_err(|_| {
+                locale::text([
+                    "Could not copy the VTS config",
+                    "无法复制 VTS 配置",
+                    "VTS 設定をコピーできません",
+                    "No se pudo copiar la configuración de VTS",
+                    "Impossible de copier la configuration VTS",
+                ])
+            })?;
         }
         Ok(())
     })()
@@ -388,7 +748,7 @@ fn validate_resource(resource: &str) -> Result<(), String> {
             .chars()
             .any(|c| c.is_control() || "\\:%?#".contains(c))
     {
-        return Err("模型资源路径不安全".into());
+        return Err(locale::text(UNSAFE_RESOURCE_PATH).into());
     }
     for component in resource.split('/') {
         let stem = component
@@ -406,41 +766,78 @@ fn validate_resource(resource: &str) -> Result<(), String> {
             || component.ends_with(['.', ' '])
             || device
         {
-            return Err("模型资源路径不安全".into());
+            return Err(locale::text(UNSAFE_RESOURCE_PATH).into());
         }
     }
     Ok(())
 }
 
 fn read_bounded(path: &Path, limit: u64) -> Result<Vec<u8>, String> {
-    let file = File::open(path).map_err(|_| "无法读取模型资源，请确认文件仍然存在")?;
-    let metadata = file.metadata().map_err(|_| "无法检查模型资源")?;
+    let file = File::open(path).map_err(|_| locale::text(RESOURCE_MISSING))?;
+    let metadata = file
+        .metadata()
+        .map_err(|_| locale::text(CHECK_RESOURCE_FAILED))?;
     if !metadata.is_file() || metadata.len() > limit {
-        return Err("模型资源不是普通文件或超过大小限制".into());
+        return Err(locale::text([
+            "A model file is not a regular file or exceeds the size limit",
+            "模型资源不是普通文件或超过大小限制",
+            "モデルファイルが通常のファイルではないか、サイズ上限を超えています",
+            "Un archivo del modelo no es un archivo normal o supera el límite de tamaño",
+            "Un fichier du modèle n’est pas un fichier standard ou dépasse la taille maximale",
+        ])
+        .into());
     }
     // `Take` hides the file size from read_to_end; reserving it avoids regrowing large buffers.
     let mut bytes = Vec::with_capacity(metadata.len() as usize);
-    file.take(limit + 1)
-        .read_to_end(&mut bytes)
-        .map_err(|_| "读取模型资源失败")?;
+    file.take(limit + 1).read_to_end(&mut bytes).map_err(|_| {
+        locale::text([
+            "Failed to read a model file",
+            "读取模型资源失败",
+            "モデルファイルの読み込みに失敗しました",
+            "Error al leer un archivo del modelo",
+            "Échec de la lecture d’un fichier du modèle",
+        ])
+    })?;
     if bytes.len() as u64 > limit {
-        return Err("模型资源超过大小限制".into());
+        return Err(locale::text(RESOURCE_TOO_LARGE).into());
     }
     Ok(bytes)
 }
 
 fn checked_resource(root: &Path, resource: &str) -> Result<PathBuf, String> {
     validate_resource(resource)?;
-    let path = root
-        .join(resource)
-        .canonicalize()
-        .map_err(|_| format!("缺少模型资源：{resource}"))?;
+    let path = root.join(resource).canonicalize().map_err(|_| {
+        format!(
+            "{}{resource}",
+            locale::text([
+                "Missing model file: ",
+                "缺少模型资源：",
+                "モデルファイルがありません：",
+                "Falta un archivo del modelo: ",
+                "Fichier du modèle manquant : "
+            ])
+        )
+    })?;
     if !path.starts_with(root) {
-        return Err("模型资源链接超出模型目录".into());
+        return Err(locale::text([
+            "A model file link points outside the model folder",
+            "模型资源链接超出模型目录",
+            "モデルファイルのリンクがモデルフォルダーの外を指しています",
+            "Un enlace de archivo del modelo apunta fuera de la carpeta del modelo",
+            "Un lien de fichier du modèle pointe hors du dossier du modèle",
+        ])
+        .into());
     }
-    let metadata = fs::metadata(&path).map_err(|_| "无法检查模型资源")?;
+    let metadata = fs::metadata(&path).map_err(|_| locale::text(CHECK_RESOURCE_FAILED))?;
     if !metadata.is_file() || metadata.len() > MAX_FILE_BYTES {
-        return Err("模型资源不是普通文件或超过 128 MB".into());
+        return Err(locale::text([
+            "A model file is not a regular file or is larger than 128 MB",
+            "模型资源不是普通文件或超过 128 MB",
+            "モデルファイルが通常のファイルではないか、128 MB を超えています",
+            "Un archivo del modelo no es un archivo normal o supera los 128 MB",
+            "Un fichier du modèle n’est pas un fichier standard ou dépasse 128 MB",
+        ])
+        .into());
     }
     Ok(path)
 }
@@ -452,24 +849,64 @@ fn find_entry(path: &Path) -> Result<PathBuf, String> {
             .and_then(|name| name.to_str())
             .is_some_and(|name| name.ends_with(".model3.json"))
         {
-            return Err("请选择 .model3.json 文件或模型目录".into());
+            return Err(locale::text([
+                "Choose a .model3.json file or a model folder",
+                "请选择 .model3.json 文件或模型目录",
+                ".model3.json ファイルまたはモデルフォルダーを選択してください",
+                "Elige un archivo .model3.json o una carpeta de modelo",
+                "Choisissez un fichier .model3.json ou un dossier de modèle",
+            ])
+            .into());
         }
-        return path.canonicalize().map_err(|_| "无法访问模型入口".into());
+        return path
+            .canonicalize()
+            .map_err(|_| locale::text(ENTRY_INACCESSIBLE).into());
     }
     let mut pending = vec![(path.to_owned(), 0)];
     let mut count = 0;
     let mut found = None;
     while let Some((directory, depth)) = pending.pop() {
         if depth > 16 {
-            return Err("模型目录层级过深".into());
+            return Err(locale::text([
+                "The model folder is nested too deeply",
+                "模型目录层级过深",
+                "モデルフォルダーの階層が深すぎます",
+                "La carpeta del modelo tiene demasiados niveles",
+                "Le dossier du modèle contient trop de sous-niveaux",
+            ])
+            .into());
         }
-        for entry in fs::read_dir(directory).map_err(|_| "无法读取模型目录")? {
-            let entry = entry.map_err(|_| "无法读取模型目录内容")?;
+        for entry in fs::read_dir(directory).map_err(|_| {
+            locale::text([
+                "Could not read the model folder",
+                "无法读取模型目录",
+                "モデルフォルダーを読み込めません",
+                "No se pudo leer la carpeta del modelo",
+                "Impossible de lire le dossier du modèle",
+            ])
+        })? {
+            let entry = entry.map_err(|_| {
+                locale::text([
+                    "Could not read the model folder contents",
+                    "无法读取模型目录内容",
+                    "モデルフォルダーの中身を読み込めません",
+                    "No se pudo leer el contenido de la carpeta del modelo",
+                    "Impossible de lire le contenu du dossier du modèle",
+                ])
+            })?;
             count += 1;
             if count > MAX_ENTRIES {
-                return Err("模型目录文件数超过 2048".into());
+                return Err(locale::text(TOO_MANY_DIRECTORY_FILES).into());
             }
-            let kind = entry.file_type().map_err(|_| "无法检查模型目录内容")?;
+            let kind = entry.file_type().map_err(|_| {
+                locale::text([
+                    "Could not check the model folder contents",
+                    "无法检查模型目录内容",
+                    "モデルフォルダーの中身を確認できません",
+                    "No se pudo comprobar el contenido de la carpeta del modelo",
+                    "Impossible de vérifier le contenu du dossier du modèle",
+                ])
+            })?;
             if kind.is_symlink() {
                 continue;
             }
@@ -482,39 +919,88 @@ fn find_entry(path: &Path) -> Result<PathBuf, String> {
                     .is_some_and(|name| name.ends_with(".model3.json"))
             {
                 if found.is_some() {
-                    return Err("目录包含多个模型，请直接选择需要的 .model3.json".into());
+                    return Err(locale::text([
+                        "The folder contains several models. Choose the .model3.json you want directly",
+                        "目录包含多个模型，请直接选择需要的 .model3.json",
+                        "フォルダーに複数のモデルがあります。使いたい .model3.json を直接選択してください",
+                        "La carpeta contiene varios modelos. Elige directamente el .model3.json que quieras",
+                        "Le dossier contient plusieurs modèles. Choisissez directement le .model3.json voulu",
+                    ]).into());
                 }
                 found = Some(entry.path());
             }
         }
     }
     found
-        .ok_or_else(|| "未找到 .model3.json 模型入口".to_owned())?
+        .ok_or_else(|| {
+            locale::text([
+                "No .model3.json file found",
+                "未找到 .model3.json 模型入口",
+                ".model3.json ファイルが見つかりません",
+                "No se encontró ningún archivo .model3.json",
+                "Aucun fichier .model3.json trouvé",
+            ])
+            .to_owned()
+        })?
         .canonicalize()
-        .map_err(|_| "无法访问模型入口".into())
+        .map_err(|_| locale::text(ENTRY_INACCESSIBLE).into())
 }
 
 fn validate_model(path: &Path) -> Result<Model, String> {
     let entry = find_entry(path)?;
-    let root = entry.parent().ok_or("模型入口没有有效目录")?.to_owned();
-    let document: Value = serde_json::from_slice(&read_bounded(&entry, MAX_FILE_BYTES)?)
-        .map_err(|_| "模型入口不是有效的 JSON")?;
+    let root = entry
+        .parent()
+        .ok_or(locale::text([
+            "The model3.json file has no valid folder",
+            "模型入口没有有效目录",
+            "model3.json ファイルのフォルダーが無効です",
+            "El archivo model3.json no tiene una carpeta válida",
+            "Le fichier model3.json n’a pas de dossier valide",
+        ]))?
+        .to_owned();
+    let document: Value =
+        serde_json::from_slice(&read_bounded(&entry, MAX_FILE_BYTES)?).map_err(|_| {
+            locale::text([
+                "The model3.json file is not valid JSON",
+                "模型入口不是有效的 JSON",
+                "model3.json ファイルが有効な JSON ではありません",
+                "El archivo model3.json no es un JSON válido",
+                "Le fichier model3.json n’est pas un JSON valide",
+            ])
+        })?;
     if document.get("Version").and_then(Value::as_u64) != Some(3) {
-        return Err("仅支持 Cubism 3/4/5 的 model3.json 模型".into());
+        return Err(locale::text([
+            "Only Cubism 3/4/5 model3.json models are supported",
+            "仅支持 Cubism 3/4/5 的 model3.json 模型",
+            "Cubism 3/4/5 の model3.json モデルのみ対応しています",
+            "Solo se admiten modelos model3.json de Cubism 3/4/5",
+            "Seuls les modèles model3.json de Cubism 3/4/5 sont pris en charge",
+        ])
+        .into());
     }
     let refs = document
         .get("FileReferences")
         .and_then(Value::as_object)
-        .ok_or("模型入口缺少 FileReferences")?;
+        .ok_or(locale::text([
+            "The model3.json file is missing FileReferences",
+            "模型入口缺少 FileReferences",
+            "model3.json ファイルに FileReferences がありません",
+            "Al archivo model3.json le falta FileReferences",
+            "Il manque FileReferences dans le fichier model3.json",
+        ]))?;
     let mut resources = BTreeSet::new();
     let mut add = |value: Option<&Value>| -> Result<(), String> {
-        let resource = value
-            .and_then(Value::as_str)
-            .ok_or("模型入口包含无效资源引用")?;
+        let resource = value.and_then(Value::as_str).ok_or(locale::text([
+            "The model3.json file has an invalid file reference",
+            "模型入口包含无效资源引用",
+            "model3.json ファイルに無効なファイル参照があります",
+            "El archivo model3.json contiene una referencia de archivo no válida",
+            "Le fichier model3.json contient une référence de fichier invalide",
+        ]))?;
         validate_resource(resource)?;
         resources.insert(resource.to_owned());
         if resources.len() > MAX_ENTRIES {
-            return Err("模型资源数超过 2048".into());
+            return Err(locale::text(TOO_MANY_RESOURCES).into());
         }
         Ok(())
     };
@@ -523,7 +1009,13 @@ fn validate_model(path: &Path) -> Result<Model, String> {
         .get("Textures")
         .and_then(Value::as_array)
         .filter(|items| !items.is_empty())
-        .ok_or("模型入口缺少纹理")?;
+        .ok_or(locale::text([
+            "The model3.json file has no textures",
+            "模型入口缺少纹理",
+            "model3.json ファイルにテクスチャがありません",
+            "El archivo model3.json no tiene texturas",
+            "Le fichier model3.json ne contient aucune texture",
+        ]))?;
     for texture in textures {
         add(Some(texture))?;
     }
@@ -533,13 +1025,35 @@ fn validate_model(path: &Path) -> Result<Model, String> {
         }
     }
     if let Some(expressions) = refs.get("Expressions") {
-        for expression in expressions.as_array().ok_or("模型表情引用无效")? {
+        for expression in expressions.as_array().ok_or(locale::text([
+            "Invalid expression references in the model",
+            "模型表情引用无效",
+            "モデルの表情の参照が無効です",
+            "Referencias de expresiones del modelo no válidas",
+            "Références d’expressions du modèle invalides",
+        ]))? {
             add(expression.get("File"))?;
         }
     }
     if let Some(groups) = refs.get("Motions") {
-        for motions in groups.as_object().ok_or("模型动作引用无效")?.values() {
-            for motion in motions.as_array().ok_or("模型动作列表无效")? {
+        for motions in groups
+            .as_object()
+            .ok_or(locale::text([
+                "Invalid motion references in the model",
+                "模型动作引用无效",
+                "モデルのモーションの参照が無効です",
+                "Referencias de animaciones del modelo no válidas",
+                "Références d’animations du modèle invalides",
+            ]))?
+            .values()
+        {
+            for motion in motions.as_array().ok_or(locale::text([
+                "Invalid motion list in the model",
+                "模型动作列表无效",
+                "モデルのモーション一覧が無効です",
+                "Lista de animaciones del modelo no válida",
+                "Liste d’animations du modèle invalide",
+            ]))? {
                 add(motion.get("File"))?;
                 if let Some(sound) = motion.get("Sound") {
                     add(Some(sound))?;
@@ -551,7 +1065,13 @@ fn validate_model(path: &Path) -> Result<Model, String> {
         entry
             .file_name()
             .and_then(|name| name.to_str())
-            .ok_or("模型入口文件名无效")?
+            .ok_or(locale::text([
+                "Invalid model3.json file name",
+                "模型入口文件名无效",
+                "model3.json のファイル名が無効です",
+                "Nombre de archivo model3.json no válido",
+                "Nom du fichier model3.json invalide",
+            ]))?
             .to_owned(),
     );
     let icon = find_icon(&root, &entry, &resources);
@@ -559,14 +1079,16 @@ fn validate_model(path: &Path) -> Result<Model, String> {
         resources.insert(icon.clone());
     }
     if resources.len() > MAX_ENTRIES {
-        return Err("模型资源数超过 2048".into());
+        return Err(locale::text(TOO_MANY_RESOURCES).into());
     }
     let mut total = 0;
     for resource in &resources {
         let file = checked_resource(&root, resource)?;
-        total += fs::metadata(file).map_err(|_| "无法检查模型资源")?.len();
+        total += fs::metadata(file)
+            .map_err(|_| locale::text(CHECK_RESOURCE_FAILED))?
+            .len();
         if total > MAX_TOTAL_BYTES {
-            return Err("模型资源总大小超过 512 MB".into());
+            return Err(locale::text(MODEL_TOO_LARGE).into());
         }
     }
     let (config, vts_warning) = match super::vts::model_config(&entry) {
@@ -603,7 +1125,13 @@ fn discover_model_resources(
         }
         result
             .warnings
-            .push("VTS 配置版本不支持，已跳过其资源引用".into());
+            .push(locale::text([
+                "Unsupported VTS config version; its file references were skipped",
+                "VTS 配置版本不支持，已跳过其资源引用",
+                "VTS 設定のバージョンに対応していないため、ファイル参照をスキップしました",
+                "Versión de configuración de VTS no compatible; se omitieron sus referencias de archivos",
+                "Version de configuration VTS non prise en charge ; ses références de fichiers ont été ignorées",
+            ]).into());
         false
     });
     let mut hotkeys = config
@@ -612,7 +1140,13 @@ fn discover_model_resources(
     if hotkeys.is_some_and(|items| items.len() > 128) {
         result
             .warnings
-            .push("VTS 快捷键超过 128 个，已跳过其资源引用".into());
+            .push(locale::text([
+                "The VTS config has more than 128 hotkeys; their file references were skipped",
+                "VTS 快捷键超过 128 个，已跳过其资源引用",
+                "VTS のホットキーが 128 個を超えているため、ファイル参照をスキップしました",
+                "La configuración de VTS tiene más de 128 atajos; se omitieron sus referencias de archivos",
+                "La configuration VTS contient plus de 128 raccourcis ; leurs références de fichiers ont été ignorées",
+            ]).into());
         hotkeys = None;
     }
     let mut references = Vec::new();
@@ -654,7 +1188,16 @@ fn discover_model_resources(
                 }
             }
         }
-        Err(error) => result.warnings.push(format!("附加资源搜索已跳过：{error}")),
+        Err(error) => result.warnings.push(format!(
+            "{}{error}",
+            locale::text([
+                "Skipped searching for extra files: ",
+                "附加资源搜索已跳过：",
+                "追加ファイルの検索をスキップしました：",
+                "Se omitió la búsqueda de archivos adicionales: ",
+                "Recherche de fichiers supplémentaires ignorée : "
+            ])
+        )),
     }
     let mut seen = BTreeSet::new();
     for (reference, name, expression) in references {
@@ -668,22 +1211,44 @@ fn discover_model_resources(
                 ".motion3.json"
             };
             if !reference.to_ascii_lowercase().ends_with(suffix) {
-                return Err(format!("应引用 {suffix} 文件"));
+                return Err(locale::text([
+                    "Should reference a {suffix} file",
+                    "应引用 {suffix} 文件",
+                    "{suffix} ファイルを参照する必要があります",
+                    "Debe hacer referencia a un archivo {suffix}",
+                    "Doit référencer un fichier {suffix}",
+                ])
+                .replace("{suffix}", suffix));
             }
             let file = resolve_vts_resource(root, &reference, &inventory)?;
             if resources.contains(&file) {
                 return Ok(None);
             }
             if resources.len() >= MAX_ENTRIES {
-                return Err("模型资源数超过 2048".into());
+                return Err(locale::text(TOO_MANY_RESOURCES).into());
             }
             let bytes = read_bounded(&checked_resource(root, &file)?, MAX_FILE_BYTES)?;
             if bytes.len() as u64 > MAX_TOTAL_BYTES - total {
-                return Err("模型资源总大小超过 512 MB".into());
+                return Err(locale::text(MODEL_TOO_LARGE).into());
             }
-            let data: Value = serde_json::from_slice(&bytes).map_err(|_| "资源不是有效 JSON")?;
+            let data: Value = serde_json::from_slice(&bytes).map_err(|_| {
+                locale::text([
+                    "The file is not valid JSON",
+                    "资源不是有效 JSON",
+                    "ファイルが有効な JSON ではありません",
+                    "El archivo no es un JSON válido",
+                    "Le fichier n’est pas un JSON valide",
+                ])
+            })?;
             if !valid_vts_resource(&data, expression) {
-                return Err("资源的表情或动作结构无效".into());
+                return Err(locale::text([
+                    "The file is not a valid expression or motion",
+                    "资源的表情或动作结构无效",
+                    "ファイルの表情またはモーションの構造が無効です",
+                    "El archivo no es una expresión o animación válida",
+                    "Le fichier n’est pas une expression ou une animation valide",
+                ])
+                .into());
             }
             total += bytes.len() as u64;
             resources.insert(file.clone());
@@ -710,14 +1275,24 @@ fn discover_model_resources(
                 }
             }
             Ok(None) => {}
-            Err(error) => result.warnings.push(format!(
-                "附加资源「{}」：{error}；已跳过，请从包含该文件的完整原模型包重新导入",
-                reference
-                    .chars()
-                    .filter(|c| !c.is_control())
-                    .take(200)
-                    .collect::<String>()
-            )),
+            Err(error) => result.warnings.push(
+                locale::text([
+                    "Extra file “{file}”: {error}. Skipped; re-import from the complete original model package that includes this file",
+                    "附加资源「{file}」：{error}；已跳过，请从包含该文件的完整原模型包重新导入",
+                    "追加ファイル「{file}」：{error}。スキップしました。このファイルを含む元のモデルパッケージ一式から再インポートしてください",
+                    "Archivo adicional “{file}”: {error}. Se omitió; vuelve a importar desde el paquete original completo del modelo que incluye este archivo",
+                    "Fichier supplémentaire « {file} » : {error}. Ignoré ; réimportez depuis le paquet d’origine complet du modèle contenant ce fichier",
+                ])
+                .replace("{error}", &error)
+                .replace(
+                    "{file}",
+                    &reference
+                        .chars()
+                        .filter(|c| !c.is_control())
+                        .take(200)
+                        .collect::<String>(),
+                ),
+            ),
         }
     }
     result
@@ -745,8 +1320,20 @@ fn resolve_vts_resource(
             checked_resource(root, file)?;
             Ok((*file).clone())
         }
-        [] => Err("模型目录内缺少该文件".into()),
-        _ => Err("模型目录内存在多个同名文件，请在 VTS 配置中指定相对路径".into()),
+        [] => Err(locale::text([
+            "The file is missing from the model folder",
+            "模型目录内缺少该文件",
+            "モデルフォルダーにこのファイルがありません",
+            "Falta el archivo en la carpeta del modelo",
+            "Le fichier est absent du dossier du modèle",
+        ]).into()),
+        _ => Err(locale::text([
+            "The model folder has several files with this name. Specify a relative path in the VTS config",
+            "模型目录内存在多个同名文件，请在 VTS 配置中指定相对路径",
+            "モデルフォルダーに同名のファイルが複数あります。VTS 設定で相対パスを指定してください",
+            "La carpeta del modelo tiene varios archivos con este nombre. Indica una ruta relativa en la configuración de VTS",
+            "Le dossier du modèle contient plusieurs fichiers portant ce nom. Indiquez un chemin relatif dans la configuration VTS",
+        ]).into()),
     }
 }
 
@@ -756,15 +1343,46 @@ fn model_resource_inventory(root: &Path) -> Result<Vec<String>, String> {
     let mut count = 0;
     while let Some((directory, depth)) = pending.pop() {
         if depth > 16 {
-            return Err("模型目录层级超过 16".into());
+            return Err(locale::text([
+                "The model folder is nested more than 16 levels deep",
+                "模型目录层级超过 16",
+                "モデルフォルダーの階層が 16 を超えています",
+                "La carpeta del modelo tiene más de 16 niveles",
+                "Le dossier du modèle dépasse 16 niveaux de profondeur",
+            ])
+            .into());
         }
-        for entry in fs::read_dir(directory).map_err(|_| "无法搜索模型资源目录")? {
-            let entry = entry.map_err(|_| "无法读取模型资源目录")?;
+        for entry in fs::read_dir(directory).map_err(|_| {
+            locale::text([
+                "Could not search the model folder",
+                "无法搜索模型资源目录",
+                "モデルフォルダーを検索できません",
+                "No se pudo buscar en la carpeta del modelo",
+                "Impossible de parcourir le dossier du modèle",
+            ])
+        })? {
+            let entry = entry.map_err(|_| {
+                locale::text([
+                    "Could not read the model folder",
+                    "无法读取模型资源目录",
+                    "モデルフォルダーを読み込めません",
+                    "No se pudo leer la carpeta del modelo",
+                    "Impossible de lire le dossier du modèle",
+                ])
+            })?;
             count += 1;
             if count > MAX_ENTRIES {
-                return Err("模型目录文件数超过 2048".into());
+                return Err(locale::text(TOO_MANY_DIRECTORY_FILES).into());
             }
-            let kind = entry.file_type().map_err(|_| "无法检查模型资源类型")?;
+            let kind = entry.file_type().map_err(|_| {
+                locale::text([
+                    "Could not check a model file type",
+                    "无法检查模型资源类型",
+                    "モデルファイルの種類を確認できません",
+                    "No se pudo comprobar el tipo de un archivo del modelo",
+                    "Impossible de vérifier le type d’un fichier du modèle",
+                ])
+            })?;
             if kind.is_dir() {
                 pending.push((entry.path(), depth + 1));
             } else if kind.is_file() {
@@ -910,59 +1528,183 @@ fn find_icon(root: &Path, entry: &Path, resources: &BTreeSet<String>) -> Option<
 }
 
 fn import_zip(archive: &Path, destination: &Path) -> Result<Model, String> {
-    let file = File::open(archive).map_err(|_| "无法读取 ZIP 文件")?;
-    if file.metadata().map_err(|_| "无法检查 ZIP 文件")?.len() > MAX_TOTAL_BYTES {
-        return Err("ZIP 文件超过 512 MB".into());
+    let file = File::open(archive).map_err(|_| {
+        locale::text([
+            "Could not read the ZIP file",
+            "无法读取 ZIP 文件",
+            "ZIP ファイルを読み込めません",
+            "No se pudo leer el archivo ZIP",
+            "Impossible de lire le fichier ZIP",
+        ])
+    })?;
+    if file
+        .metadata()
+        .map_err(|_| {
+            locale::text([
+                "Could not check the ZIP file",
+                "无法检查 ZIP 文件",
+                "ZIP ファイルを確認できません",
+                "No se pudo comprobar el archivo ZIP",
+                "Impossible de vérifier le fichier ZIP",
+            ])
+        })?
+        .len()
+        > MAX_TOTAL_BYTES
+    {
+        return Err(locale::text([
+            "The ZIP file is larger than 512 MB",
+            "ZIP 文件超过 512 MB",
+            "ZIP ファイルが 512 MB を超えています",
+            "El archivo ZIP supera los 512 MB",
+            "Le fichier ZIP dépasse 512 MB",
+        ])
+        .into());
     }
-    let mut archive = zip::ZipArchive::new(file).map_err(|_| "不是有效的 ZIP 文件")?;
+    let mut archive = zip::ZipArchive::new(file).map_err(|_| {
+        locale::text([
+            "Not a valid ZIP file",
+            "不是有效的 ZIP 文件",
+            "有効な ZIP ファイルではありません",
+            "No es un archivo ZIP válido",
+            "Ce n’est pas un fichier ZIP valide",
+        ])
+    })?;
     if archive.len() > MAX_ENTRIES {
-        return Err("ZIP 文件数超过 2048".into());
+        return Err(locale::text([
+            "The ZIP has more than 2048 files",
+            "ZIP 文件数超过 2048",
+            "ZIP 内のファイル数が 2048 を超えています",
+            "El ZIP tiene más de 2048 archivos",
+            "Le ZIP contient plus de 2048 fichiers",
+        ])
+        .into());
     }
-    fs::create_dir_all(destination).map_err(|_| "无法创建模型保存目录")?;
+    fs::create_dir_all(destination).map_err(|_| {
+        locale::text([
+            "Could not create the model storage folder",
+            "无法创建模型保存目录",
+            "モデルの保存フォルダーを作成できません",
+            "No se pudo crear la carpeta para guardar el modelo",
+            "Impossible de créer le dossier d’enregistrement du modèle",
+        ])
+    })?;
     let staging = tempfile::Builder::new()
         .prefix("model-")
         .tempdir_in(destination)
-        .map_err(|_| "无法创建模型临时目录")?;
+        .map_err(|_| {
+            locale::text([
+                "Could not create a temporary model folder",
+                "无法创建模型临时目录",
+                "モデルの一時フォルダーを作成できません",
+                "No se pudo crear una carpeta temporal para el modelo",
+                "Impossible de créer un dossier temporaire pour le modèle",
+            ])
+        })?;
     let mut names = BTreeSet::new();
     let mut total = 0;
     for index in 0..archive.len() {
-        let mut entry = archive
-            .by_index(index)
-            .map_err(|_| "ZIP 包含无法读取的文件")?;
+        let mut entry = archive.by_index(index).map_err(|_| {
+            locale::text([
+                "The ZIP contains a file that cannot be read",
+                "ZIP 包含无法读取的文件",
+                "ZIP に読み込めないファイルが含まれています",
+                "El ZIP contiene un archivo que no se puede leer",
+                "Le ZIP contient un fichier illisible",
+            ])
+        })?;
         let directory = entry.is_dir();
         let name = entry.name().strip_suffix('/').unwrap_or(entry.name());
         validate_resource(name)?;
         if !names.insert(name.to_lowercase()) {
-            return Err("ZIP 包含重复文件路径".into());
+            return Err(locale::text([
+                "The ZIP contains duplicate file paths",
+                "ZIP 包含重复文件路径",
+                "ZIP に重複したファイルパスが含まれています",
+                "El ZIP contiene rutas de archivo duplicadas",
+                "Le ZIP contient des chemins de fichier en double",
+            ])
+            .into());
         }
         if let Some(mode) = entry.unix_mode() {
             let kind = mode & 0o170000;
             if kind != 0 && kind != 0o100000 && kind != 0o040000 {
-                return Err("ZIP 不允许符号链接或特殊文件".into());
+                return Err(locale::text([
+                    "Symbolic links and special files are not allowed in the ZIP",
+                    "ZIP 不允许符号链接或特殊文件",
+                    "ZIP にシンボリックリンクや特殊ファイルは使用できません",
+                    "No se permiten enlaces simbólicos ni archivos especiales en el ZIP",
+                    "Les liens symboliques et fichiers spéciaux ne sont pas autorisés dans le ZIP",
+                ])
+                .into());
             }
             if (kind == 0o040000) != directory && kind != 0 {
-                return Err("ZIP 文件类型无效".into());
+                return Err(locale::text([
+                    "Invalid file type in the ZIP",
+                    "ZIP 文件类型无效",
+                    "ZIP 内のファイルの種類が無効です",
+                    "Tipo de archivo no válido en el ZIP",
+                    "Type de fichier invalide dans le ZIP",
+                ])
+                .into());
             }
         }
         if entry.size() > MAX_FILE_BYTES || entry.size() > MAX_TOTAL_BYTES - total {
-            return Err("ZIP 解压大小超过限制".into());
+            return Err(locale::text(ZIP_TOO_LARGE).into());
         }
         let output_path = staging.path().join(name);
         if directory {
-            fs::create_dir_all(output_path).map_err(|_| "ZIP 目录结构冲突")?;
+            fs::create_dir_all(output_path).map_err(|_| {
+                locale::text([
+                    "Conflicting folder structure in the ZIP",
+                    "ZIP 目录结构冲突",
+                    "ZIP のフォルダー構造が競合しています",
+                    "Estructura de carpetas en conflicto en el ZIP",
+                    "Structure de dossiers en conflit dans le ZIP",
+                ])
+            })?;
         } else {
-            fs::create_dir_all(output_path.parent().ok_or("ZIP 路径无效")?)
-                .map_err(|_| "无法创建模型资源目录")?;
+            fs::create_dir_all(output_path.parent().ok_or(locale::text([
+                "Invalid path in the ZIP",
+                "ZIP 路径无效",
+                "ZIP 内のパスが無効です",
+                "Ruta no válida en el ZIP",
+                "Chemin invalide dans le ZIP",
+            ]))?)
+            .map_err(|_| {
+                locale::text([
+                    "Could not create a folder for model files",
+                    "无法创建模型资源目录",
+                    "モデルファイル用のフォルダーを作成できません",
+                    "No se pudo crear una carpeta para los archivos del modelo",
+                    "Impossible de créer un dossier pour les fichiers du modèle",
+                ])
+            })?;
             let mut output = OpenOptions::new()
                 .write(true)
                 .create_new(true)
                 .open(output_path)
-                .map_err(|_| "ZIP 资源路径冲突或无法写入")?;
+                .map_err(|_| {
+                    locale::text([
+                        "A ZIP file path conflicts or cannot be written",
+                        "ZIP 资源路径冲突或无法写入",
+                        "ZIP 内のファイルパスが競合しているか、書き込めません",
+                        "Una ruta de archivo del ZIP está en conflicto o no se puede escribir",
+                        "Un chemin de fichier du ZIP est en conflit ou ne peut pas être écrit",
+                    ])
+                })?;
             let remaining = MAX_FILE_BYTES.min(MAX_TOTAL_BYTES - total);
-            let copied = io::copy(&mut entry.by_ref().take(remaining + 1), &mut output)
-                .map_err(|_| "ZIP 资源解压失败")?;
+            let copied =
+                io::copy(&mut entry.by_ref().take(remaining + 1), &mut output).map_err(|_| {
+                    locale::text([
+                        "Failed to extract a file from the ZIP",
+                        "ZIP 资源解压失败",
+                        "ZIP からのファイルの展開に失敗しました",
+                        "Error al extraer un archivo del ZIP",
+                        "Échec de l’extraction d’un fichier du ZIP",
+                    ])
+                })?;
             if copied > MAX_FILE_BYTES || copied > MAX_TOTAL_BYTES - total {
-                return Err("ZIP 解压大小超过限制".into());
+                return Err(locale::text(ZIP_TOO_LARGE).into());
             }
             total += copied;
         }

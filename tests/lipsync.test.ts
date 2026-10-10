@@ -7,6 +7,9 @@ import {
   vowels,
   type VoiceTemplates,
 } from '../src/lipsync.ts';
+import { setLang } from '../src/i18n.ts';
+
+setLang('zh');
 
 const sampleRate = 16_000;
 const silence = () => new Float32Array(256).fill(-Infinity);

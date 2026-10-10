@@ -2,6 +2,9 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { setImmediate as nextTurn, setTimeout as delay } from 'node:timers/promises';
 import { VirtualCamera } from '../src/virtual-camera.ts';
+import { setLang } from '../src/i18n.ts';
+
+setLang('zh');
 
 test('browser construction remains unsupported without native API', async () => {
   const camera = new VirtualCamera(() => {});

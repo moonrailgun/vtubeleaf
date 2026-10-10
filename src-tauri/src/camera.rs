@@ -1,3 +1,4 @@
+use crate::locale;
 use serde::{Deserialize, Serialize};
 use tauri::{ipc::InvokeBody, plugin::TauriPlugin, Runtime, WebviewWindow};
 
@@ -17,7 +18,14 @@ fn require_main<R: Runtime>(window: &WebviewWindow<R>) -> Result<(), String> {
     if window.label() == "main" {
         Ok(())
     } else {
-        Err("虚拟摄像头仅允许从工作台控制".into())
+        Err(locale::text([
+            "The virtual camera can only be controlled from the main window",
+            "虚拟摄像头仅允许从工作台控制",
+            "仮想カメラはメインウィンドウからのみ操作できます",
+            "La cámara virtual solo se puede controlar desde la ventana principal",
+            "La caméra virtuelle ne peut être contrôlée que depuis la fenêtre principale",
+        ])
+        .into())
     }
 }
 
@@ -42,8 +50,15 @@ fn control(operation: i32) -> Result<CameraStatus, String> {
             .iter()
             .position(|byte| *byte == 0)
             .unwrap_or(output.len());
-        let status: CameraStatus =
-            serde_json::from_slice(&output[..length]).map_err(|_| "摄像头桥接返回无效状态")?;
+        let status: CameraStatus = serde_json::from_slice(&output[..length]).map_err(|_| {
+            locale::text([
+                "The camera bridge returned an invalid status",
+                "摄像头桥接返回无效状态",
+                "カメラブリッジが無効な状態を返しました",
+                "El puente de la cámara devolvió un estado no válido",
+                "Le pont de la caméra a renvoyé un état invalide",
+            ])
+        })?;
         if result == 0 {
             Ok(status)
         } else {
@@ -58,7 +73,13 @@ fn control(operation: i32) -> Result<CameraStatus, String> {
             installed: false,
             active: false,
             consumers: None,
-            message: "Linux 请通过 OBS 输出画面；会议摄像头需在 OBS 中启动虚拟摄像头，并安装 v4l2loopback".into(),
+            message: locale::text([
+                "On Linux, output through OBS. For meeting apps, start the virtual camera in OBS and install v4l2loopback",
+                "Linux 请通过 OBS 输出画面；会议摄像头需在 OBS 中启动虚拟摄像头，并安装 v4l2loopback",
+                "Linux では OBS 経由で出力してください。会議アプリで使うには OBS で仮想カメラを開始し、v4l2loopback をインストールしてください",
+                "En Linux, emite a través de OBS. Para apps de reuniones, inicia la cámara virtual en OBS e instala v4l2loopback",
+                "Sous Linux, passez par OBS pour la sortie. Pour les applis de visio, démarrez la caméra virtuelle dans OBS et installez v4l2loopback",
+            ]).into(),
         })
     }
 }
@@ -98,7 +119,14 @@ async fn background_control(operation: i32) -> Result<CameraStatus, String> {
 fn frame_body(body: &InvokeBody) -> Result<&[u8], String> {
     match body {
         InvokeBody::Raw(bytes) if bytes.len() == FRAME_BYTES => Ok(bytes),
-        _ => Err("帧必须是 1280×720 的 RGBA 二进制数据".into()),
+        _ => Err(locale::text([
+            "Frames must be 1280×720 binary RGBA data",
+            "帧必须是 1280×720 的 RGBA 二进制数据",
+            "フレームは 1280×720 の RGBA バイナリデータである必要があります",
+            "Los fotogramas deben ser datos binarios RGBA de 1280×720",
+            "Les images doivent être des données binaires RGBA en 1280×720",
+        ])
+        .into()),
     }
 }
 
@@ -120,7 +148,14 @@ fn submit<R: Runtime>(
     #[cfg(not(any(target_os = "macos", target_os = "windows")))]
     {
         let _ = bytes;
-        Err("当前平台不支持原生虚拟摄像头".into())
+        Err(locale::text([
+            "The native virtual camera is not supported on this platform",
+            "当前平台不支持原生虚拟摄像头",
+            "このプラットフォームはネイティブ仮想カメラに対応していません",
+            "Esta plataforma no admite la cámara virtual nativa",
+            "La caméra virtuelle native n’est pas prise en charge sur cette plateforme",
+        ])
+        .into())
     }
 }
 

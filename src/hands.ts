@@ -1,3 +1,5 @@
+import type { Key } from './i18n.ts';
+
 export type HandSignals = {
   handLeftFound?: number;
   handLeftX?: number;
@@ -23,29 +25,30 @@ export type HandSignals = {
   handRightLittle?: number;
 };
 
-export const handSources: Record<keyof HandSignals, string> = {
-  handLeftFound: '左手出现',
-  handLeftX: '左手左右',
-  handLeftY: '左手上下',
-  handLeftZ: '左手远近',
-  handLeftAngle: '左手旋转',
-  handLeftOpen: '左手张开',
-  handLeftThumb: '左手拇指',
-  handLeftIndex: '左手食指',
-  handLeftMiddle: '左手中指',
-  handLeftRing: '左手无名指',
-  handLeftLittle: '左手小指',
-  handRightFound: '右手出现',
-  handRightX: '右手左右',
-  handRightY: '右手上下',
-  handRightZ: '右手远近',
-  handRightAngle: '右手旋转',
-  handRightOpen: '右手张开',
-  handRightThumb: '右手拇指',
-  handRightIndex: '右手食指',
-  handRightMiddle: '右手中指',
-  handRightRing: '右手无名指',
-  handRightLittle: '右手小指',
+// Values are i18n keys; render them with t().
+export const handSources: Record<keyof HandSignals, Key> = {
+  handLeftFound: 'face.handLeftFound',
+  handLeftX: 'face.handLeftX',
+  handLeftY: 'face.handLeftY',
+  handLeftZ: 'face.handLeftZ',
+  handLeftAngle: 'face.handLeftAngle',
+  handLeftOpen: 'face.handLeftOpen',
+  handLeftThumb: 'face.handLeftThumb',
+  handLeftIndex: 'face.handLeftIndex',
+  handLeftMiddle: 'face.handLeftMiddle',
+  handLeftRing: 'face.handLeftRing',
+  handLeftLittle: 'face.handLeftLittle',
+  handRightFound: 'face.handRightFound',
+  handRightX: 'face.handRightX',
+  handRightY: 'face.handRightY',
+  handRightZ: 'face.handRightZ',
+  handRightAngle: 'face.handRightAngle',
+  handRightOpen: 'face.handRightOpen',
+  handRightThumb: 'face.handRightThumb',
+  handRightIndex: 'face.handRightIndex',
+  handRightMiddle: 'face.handRightMiddle',
+  handRightRing: 'face.handRightRing',
+  handRightLittle: 'face.handRightLittle',
 };
 
 type Point = { x: number; y: number; z?: number };

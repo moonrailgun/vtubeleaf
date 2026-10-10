@@ -3,6 +3,7 @@ import { invoke, isTauri } from '@tauri-apps/api/core';
 import { Download } from 'lucide-react';
 import { Button } from './components/ui/button';
 import { loadLatestRelease } from '../website/src/release';
+import { t } from './i18n.ts';
 
 const platforms = {
   'windows-x86_64': 'Windows x64',
@@ -21,7 +22,7 @@ export function OpenSeeFaceDownload() {
     if (!isTauri()) return;
     invoke<keyof typeof platforms>('get_download_platform')
       .then(setPlatform)
-      .catch(() => setError('无法识别当前架构，请去到下载页选择启动包。'));
+      .catch(() => setError(t('openseeface.archError')));
   }, []);
 
   async function download(url: string) {
@@ -30,7 +31,7 @@ export function OpenSeeFaceDownload() {
       if (isTauri()) await invoke('open_release_url', { url });
       else window.open(url, '_blank', 'noopener,noreferrer');
     } catch (error) {
-      setError(`无法打开下载链接：${String(error)}`);
+      setError(t('openseeface.openError', { error: String(error) }));
     }
   }
 
@@ -44,7 +45,7 @@ export function OpenSeeFaceDownload() {
       if (!url) throw new Error('Missing OpenSeeFace download');
       await download(url);
     } catch {
-      setError('暂时无法获取下载信息，请重试或去到下载页。');
+      setError(t('openseeface.fetchError'));
     } finally {
       setLoading(false);
     }
@@ -59,14 +60,18 @@ export function OpenSeeFaceDownload() {
           onClick={() => void downloadCurrent()}
         >
           <Download aria-hidden="true" />
-          {loading ? '正在获取最新版…' : label ? `下载 ${label} 版` : '下载当前架构版本'}
+          {loading
+            ? t('openseeface.fetching')
+            : label
+              ? t('openseeface.downloadFor', { platform: label })
+              : t('openseeface.downloadCurrent')}
         </Button>
         <Button
           variant="outline"
           className="px-2 text-xs"
           onClick={() => void download('https://github.com/moonrailgun/vtubeleaf/releases/latest')}
         >
-          去到下载页
+          {t('openseeface.downloadPage')}
         </Button>
       </div>
       {error && (

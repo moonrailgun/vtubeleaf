@@ -45,6 +45,18 @@
     --line: #eee6eb;
     --surface: #fff;
   }
+  /* Latin text: the Chinese fonts above would draw ’ “ ” as full-width glyphs. */
+  :root:lang(en),
+  :root:lang(es),
+  :root:lang(fr) {
+    font-family: 'SF Pro Rounded', system-ui, sans-serif;
+  }
+  /* Japanese text needs Japanese glyph forms, not the Simplified Chinese fonts above. */
+  :root:lang(ja) {
+    font-family:
+      'SF Pro Rounded', 'Hiragino Sans', 'Hiragino Kaku Gothic ProN', 'Yu Gothic UI', Meiryo,
+      system-ui, sans-serif;
+  }
   * {
     box-sizing: border-box;
     border-color: var(--border);

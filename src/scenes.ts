@@ -1,3 +1,5 @@
+import { t, type Key } from './i18n.ts';
+
 export type SceneItem = {
   id: string;
   name: string;
@@ -14,16 +16,23 @@ export type SceneItem = {
   attach: 'stage' | 'model';
 };
 export type Composition = { backgroundImage: string; items: SceneItem[] };
+// `name` is an i18n key; render it with t().
 // `thumb` is a 320 px copy for picker tiles; decoding all seven full images takes ~44 MB.
-export const builtinBackgrounds = [
-  { id: 'builtin:beach', name: '海滩', src: '/backgrounds/beach.jpg' },
-  { id: 'builtin:meeting-room', name: '会议室', src: '/backgrounds/meeting-room.jpg' },
-  { id: 'builtin:office', name: '办公室', src: '/backgrounds/office.jpg' },
-  { id: 'builtin:home', name: '家居', src: '/backgrounds/home.jpg' },
-  { id: 'builtin:bedroom', name: '卧室', src: '/backgrounds/bedroom.jpg' },
-  { id: 'builtin:cafe', name: '咖啡馆', src: '/backgrounds/cafe.jpg' },
-  { id: 'builtin:gaming-room', name: '游戏房', src: '/backgrounds/gaming-room.jpg' },
-].map((b) => ({ ...b, thumb: b.src.replace('/backgrounds/', '/backgrounds/thumbs/') }));
+export const builtinBackgrounds = (
+  [
+    { id: 'builtin:beach', name: 'scenes.beach', src: '/backgrounds/beach.jpg' },
+    {
+      id: 'builtin:meeting-room',
+      name: 'scenes.meetingRoom',
+      src: '/backgrounds/meeting-room.jpg',
+    },
+    { id: 'builtin:office', name: 'scenes.office', src: '/backgrounds/office.jpg' },
+    { id: 'builtin:home', name: 'scenes.home', src: '/backgrounds/home.jpg' },
+    { id: 'builtin:bedroom', name: 'scenes.bedroom', src: '/backgrounds/bedroom.jpg' },
+    { id: 'builtin:cafe', name: 'scenes.cafe', src: '/backgrounds/cafe.jpg' },
+    { id: 'builtin:gaming-room', name: 'scenes.gamingRoom', src: '/backgrounds/gaming-room.jpg' },
+  ] satisfies { id: string; name: Key; src: string }[]
+).map((b) => ({ ...b, thumb: b.src.replace('/backgrounds/', '/backgrounds/thumbs/') }));
 export type Placement = {
   x: number;
   y: number;
@@ -74,7 +83,7 @@ export function readComposition(v: unknown): Composition {
     if (live && result.items.filter((i) => i.kind === 'live2d').length >= 4) continue;
     result.items.push({
       id: item.id,
-      name: typeof item.name === 'string' ? item.name.slice(0, 100) : '道具',
+      name: typeof item.name === 'string' ? item.name.slice(0, 100) : t('scenes.defaultProp'),
       kind: live ? 'live2d' : 'image',
       source: item.source as string,
       x: number(item.x, 0, -2, 2),
@@ -118,7 +127,7 @@ export function readScenes(v: unknown): Scene[] {
     result.push(
       snapshotScene(
         scene.id,
-        typeof scene.name === 'string' ? scene.name : '场景',
+        typeof scene.name === 'string' ? scene.name : t('scenes.defaultScene'),
         typeof scene.modelPath === 'string' && scene.modelPath.length < 4096 ? scene.modelPath : '',
         typeof scene.background === 'string' && /^#[a-f0-9]{6}$/i.test(scene.background)
           ? scene.background

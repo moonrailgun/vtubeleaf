@@ -4,6 +4,9 @@ import { mockIPC } from '@tauri-apps/api/mocks';
 import { Hotkeys, validateHotkey } from '../src/hotkeys.ts';
 import { importVtsConfig } from '../src/vts.ts';
 import { readSettings } from '../src/state.ts';
+import { setLang } from '../src/i18n.ts';
+
+setLang('zh');
 
 function environment(t, native = false) {
   const window = Object.assign(new EventTarget(), { crypto: globalThis.crypto });

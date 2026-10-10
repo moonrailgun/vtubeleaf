@@ -1,5 +1,6 @@
 import { invoke } from '@tauri-apps/api/core';
 import { check, type Update } from '@tauri-apps/plugin-updater';
+import { t } from './i18n.ts';
 
 export type UpdateState = {
   status:
@@ -68,7 +69,10 @@ export class AppUpdater {
         });
       }
     } catch (error) {
-      this.set({ status: previous, error: silent ? '' : `检查更新失败：${String(error)}` });
+      this.set({
+        status: previous,
+        error: silent ? '' : t('updater.checkFailed', { error: String(error) }),
+      });
     }
   }
 
@@ -106,7 +110,10 @@ export class AppUpdater {
       }
       this.set({ status: 'ready', received });
     } catch (error) {
-      this.set({ status: 'available', error: `下载或签名校验失败，请重试：${String(error)}` });
+      this.set({
+        status: 'available',
+        error: t('updater.downloadFailed', { error: String(error) }),
+      });
     } finally {
       clearTimeout(timer);
     }
@@ -128,7 +135,7 @@ export class AppUpdater {
       try {
         await this.update.install();
       } catch (error) {
-        this.set({ status: 'ready', error: `安装失败，请重试：${String(error)}` });
+        this.set({ status: 'ready', error: t('updater.installFailed', { error: String(error) }) });
         return;
       }
     }
@@ -136,7 +143,7 @@ export class AppUpdater {
     try {
       await invoke('restart_app');
     } catch (error) {
-      this.set({ error: `更新已安装，请退出并重新打开应用：${String(error)}` });
+      this.set({ error: t('updater.restartFailed', { error: String(error) }) });
     }
   }
 

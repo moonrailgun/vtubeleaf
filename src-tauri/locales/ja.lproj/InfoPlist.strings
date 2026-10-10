@@ -1,0 +1,3 @@
+"NSCameraUsageDescription" = "VTubeLeaf はこの Mac 上でカメラを使って表情をトラッキングし、キャラクターを動かします。カメラの映像はアップロードされません。";
+"NSMicrophoneUsageDescription" = "音声リップシンクをオンにしたときだけ、VTubeLeaf はこの Mac 上でマイクの音声を分析してリップシンクを行います。録音やアップロードは行いません。";
+"NSSystemExtensionUsageDescription" = "VTubeLeaf のキャラクター画面を仮想カメラとしてビデオ会議アプリに提供します。";

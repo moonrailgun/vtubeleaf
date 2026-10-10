@@ -1,5 +1,6 @@
 import { invoke, isTauri } from '@tauri-apps/api/core';
 import type { Settings } from './state';
+import { t } from './i18n.ts';
 
 /** `native` shares frames through Syphon (macOS) or Spout2 (Windows); `browser` serves PNG frames to an OBS browser source. */
 export type ObsMode = Settings['obsOutput'];
@@ -40,7 +41,7 @@ export class ObsOutput {
   ) {}
 
   setEnabled(enabled: boolean, mode: ObsMode = 'browser'): Promise<void> {
-    if (!this.state.supported) return Promise.reject(new Error('OBS 透明输出需要桌面应用'));
+    if (!this.state.supported) return Promise.reject(new Error(t('obs.needsDesktop')));
     if (!this.state.native) mode = 'browser';
     const revision = ++this.revision;
     this.state.active = false;
@@ -107,7 +108,7 @@ export class ObsOutput {
         source
           .transparentCanvas()
           .toBlob(
-            (blob) => (blob ? resolve(blob) : reject(new Error('无法编码透明画面'))),
+            (blob) => (blob ? resolve(blob) : reject(new Error(t('obs.encodeFailed')))),
             'image/png',
           );
       });
@@ -117,7 +118,7 @@ export class ObsOutput {
     })()
       .catch((error) => {
         if (revision !== this.revision) return;
-        this.report(`OBS 透明输出失败：${String(error)}`);
+        this.report(t('obs.outputFailed', { error: String(error) }));
         void this.setEnabled(false).catch((failure) => this.report(String(failure)));
       })
       .finally(() => {

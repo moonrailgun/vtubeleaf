@@ -4,6 +4,7 @@ import { parseGIF, decompressFrames } from 'gifuct-js';
 import { builtinBackgrounds, type SceneItem, type Composition } from './scenes';
 import type { Settings } from './state';
 import type { AvatarStage, ModelInfo } from './renderer';
+import { t } from './i18n';
 
 export type SceneFrame = {
   index?: number;
@@ -26,7 +27,8 @@ async function imageAsset(id: string): Promise<Visual> {
   const background = builtinBackgrounds.find((b) => b.id === id);
   const bytes = background
     ? await fetch(background.src).then((response) => {
-        if (!response.ok) throw new Error(`内置背景「${background.name}」加载失败`);
+        if (!response.ok)
+          throw new Error(t('sceneRenderer.builtinBackgroundFailed', { name: t(background.name) }));
         return response.arrayBuffer();
       })
     : await invoke<ArrayBuffer>('read_asset', { id });
@@ -59,9 +61,9 @@ async function imageAsset(id: string): Promise<Visual> {
             f.image.descriptor.top + f.image.descriptor.height > height),
       )
     )
-      throw new Error('GIF 尺寸或帧数过大（最大 4096 像素、300 帧、64 MB 解码数据）');
+      throw new Error(t('sceneRenderer.gifTooLarge'));
     const frames = decompressFrames(gif, true);
-    if (!frames.length) throw new Error('GIF 没有可显示的图像');
+    if (!frames.length) throw new Error(t('sceneRenderer.gifEmpty'));
     const canvas = document.createElement('canvas');
     canvas.width = width;
     canvas.height = height;
@@ -126,7 +128,7 @@ async function imageAsset(id: string): Promise<Visual> {
         image.naturalHeight > 8192 ||
         image.naturalWidth * image.naturalHeight > 32 * 1024 * 1024
       )
-        throw new Error('图片尺寸过大');
+        throw new Error(t('sceneRenderer.imageTooLarge'));
       texture = PIXI.Texture.from(image);
     } catch (error) {
       revoke();
@@ -171,7 +173,7 @@ export class SceneLayers {
         if (item.kind === 'image') visuals.push({ ...(await imageAsset(item.source)), item });
         else {
           const info = models.find((model) => model.path === item.source);
-          if (!info) throw new Error(`Live2D 道具「${item.name}」不在角色库中，请重新导入`);
+          if (!info) throw new Error(t('sceneRenderer.propMissing', { name: item.name }));
           const stage = this.createModel();
           try {
             await stage.load(info);

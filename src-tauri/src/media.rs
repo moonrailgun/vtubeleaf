@@ -80,10 +80,28 @@ pub fn configure_media(window: &tauri::WebviewWindow) -> tauri::Result<()> {
                 request.deny();
                 return true;
             };
-            let device = match (media.is_for_video_device(), media.is_for_audio_device()) {
-                (true, true) => "摄像头和麦克风",
-                (true, false) => "摄像头",
-                (false, true) => "麦克风",
+            let question = match (media.is_for_video_device(), media.is_for_audio_device()) {
+                (true, true) => crate::locale::text([
+                    "Allow VTubeLeaf to use the camera and microphone for local tracking?",
+                    "允许 VTubeLeaf 使用摄像头和麦克风进行本地追踪？",
+                    "VTubeLeaf がローカルでのトラッキングにカメラとマイクを使用することを許可しますか？",
+                    "¿Permitir que VTubeLeaf use la cámara y el micrófono para el seguimiento local?",
+                    "Autoriser VTubeLeaf à utiliser la caméra et le microphone pour le suivi local ?",
+                ]),
+                (true, false) => crate::locale::text([
+                    "Allow VTubeLeaf to use the camera for local tracking?",
+                    "允许 VTubeLeaf 使用摄像头进行本地追踪？",
+                    "VTubeLeaf がローカルでのトラッキングにカメラを使用することを許可しますか？",
+                    "¿Permitir que VTubeLeaf use la cámara para el seguimiento local?",
+                    "Autoriser VTubeLeaf à utiliser la caméra pour le suivi local ?",
+                ]),
+                (false, true) => crate::locale::text([
+                    "Allow VTubeLeaf to use the microphone for local tracking?",
+                    "允许 VTubeLeaf 使用麦克风进行本地追踪？",
+                    "VTubeLeaf がローカルでのトラッキングにマイクを使用することを許可しますか？",
+                    "¿Permitir que VTubeLeaf use el micrófono para el seguimiento local?",
+                    "Autoriser VTubeLeaf à utiliser le microphone pour le suivi local ?",
+                ]),
                 _ => {
                     request.deny();
                     return true;
@@ -102,7 +120,7 @@ pub fn configure_media(window: &tauri::WebviewWindow) -> tauri::Result<()> {
                 .destroy_with_parent(true)
                 .message_type(gtk::MessageType::Question)
                 .buttons(gtk::ButtonsType::YesNo)
-                .text(format!("允许 VTubeLeaf 使用{device}进行本地追踪？"))
+                .text(question)
                 .build();
             dialog.set_default_response(gtk::ResponseType::No);
             let request = request.clone();

@@ -6,6 +6,8 @@ export default defineConfig({
   workers: 1,
   use: {
     baseURL: 'http://127.0.0.1:1420',
+    // Specs assert the Chinese UI text.
+    locale: 'zh-CN',
     viewport: { width: 1200, height: 800 },
     launchOptions: {
       args: [
