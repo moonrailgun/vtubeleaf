@@ -5,7 +5,7 @@ export default defineConfig({
   testMatch: '*.spec.ts',
   workers: 1,
   use: {
-    baseURL: 'http://127.0.0.1:1420',
+    baseURL: 'http://127.0.0.1:21420',
     // Specs assert the Chinese UI text.
     locale: 'zh-CN',
     viewport: { width: 1200, height: 800 },
@@ -23,7 +23,7 @@ export default defineConfig({
   },
   webServer: {
     command: 'npm run dev',
-    url: 'http://127.0.0.1:1420',
+    url: 'http://127.0.0.1:21420',
     reuseExistingServer: !process.env.CI,
   },
 });
