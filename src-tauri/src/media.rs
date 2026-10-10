@@ -11,7 +11,7 @@ fn trusted_page(uri: &str) -> bool {
     let dev = cfg!(debug_assertions)
         && url.scheme() == "http"
         && url.host_str() == Some("localhost")
-        && url.port() == Some(1420);
+        && url.port() == Some(21420);
     (bundled || dev)
         && url.username().is_empty()
         && url.password().is_none()
@@ -152,7 +152,7 @@ mod tests {
         assert!(super::trusted_page("tauri://localhost/"));
         assert!(super::trusted_page("http://tauri.localhost/index.html"));
         assert_eq!(
-            super::trusted_page("http://localhost:1420/"),
+            super::trusted_page("http://localhost:21420/"),
             cfg!(debug_assertions)
         );
         for uri in [
@@ -162,10 +162,10 @@ mod tests {
             "tauri://localhost/output.html",
             "http://tauri.localhost/output.html",
             "https://tauri.localhost/",
-            "http://tauri.localhost:1420/",
+            "http://tauri.localhost:21420/",
             "tauri://tauri.localhost/",
             "http://localhost:1234/",
-            "http://localhost:1420/output.html",
+            "http://localhost:21420/output.html",
             "invalid",
         ] {
             assert!(!super::trusted_page(uri), "unexpected permission for {uri}");

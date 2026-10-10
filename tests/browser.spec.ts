@@ -1376,7 +1376,7 @@ test('local MediaPipe runs with a synthetic camera and stop releases every track
 }) => {
   const external: string[] = [];
   page.on('request', (request) => {
-    if (/^https?:/.test(request.url()) && !request.url().startsWith('http://127.0.0.1:1420/'))
+    if (/^https?:/.test(request.url()) && !request.url().startsWith('http://127.0.0.1:21420/'))
       external.push(request.url());
   });
   await page.goto('/');
