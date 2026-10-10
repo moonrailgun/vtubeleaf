@@ -1,4 +1,5 @@
-import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { useEffect, useMemo, useRef, useState, useSyncExternalStore, type ReactNode } from 'react';
+import { flushSync } from 'react-dom';
 import { AlertDialog, ContextMenu, Dialog, DropdownMenu, Tabs, ToggleGroup } from 'radix-ui';
 import {
   Image,
@@ -110,9 +111,37 @@ function Range({
         max={max}
         step={step}
         value={[value]}
-        onValueChange={([next]) => onChange(next)}
+        // Render before the next move: WKWebView can send several per frame, and Radix skips a
+        // move that matches the not-yet-rendered value, which would leave the thumb off the pointer.
+        onValueChange={([next]) => flushSync(() => onChange(next))}
       />
     </div>
+  );
+}
+const silentMic: Studio['micLevel'] = { get: () => 0, subscribe: () => () => {} };
+// Subscribes on its own so a moving level re-renders only the meter, not the whole studio.
+function MicMeter({ source }: { source: Studio['micLevel'] }) {
+  const level = useSyncExternalStore(source.subscribe, source.get);
+  return (
+    <>
+      <div className="slider-label">
+        <span id="mic-volume-label">输入音量</span>
+        <span className="text-xs tabular-nums text-muted-foreground">
+          {Math.round(level * 100)}%
+        </span>
+      </div>
+      <div
+        id="mic-volume"
+        role="meter"
+        aria-labelledby="mic-volume-label"
+        aria-valuemin={0}
+        aria-valuemax={1}
+        aria-valuenow={level}
+        className="mt-2 h-2 w-full overflow-hidden rounded-full bg-muted"
+      >
+        <div className="h-full rounded-full bg-primary" style={{ width: `${level * 100}%` }} />
+      </div>
+    </>
   );
 }
 const tabs = [
@@ -146,7 +175,6 @@ const initialView: StudioView = {
   cameraDevices: [],
   micDevices: [],
   micActive: false,
-  micVolume: 0,
   micStarting: false,
   micLabel: '',
   voiceCalibration: null,
@@ -193,9 +221,7 @@ export function App() {
     setView(studio.snapshot());
     const element = container.current!;
     const wheel = (event: WheelEvent) => {
-      const current = studio.snapshot();
-      if ((!current.model && !current.selectedItem) || current.modelLoading || current.sceneBusy)
-        return;
+      if (!studio.canMove()) return;
       event.preventDefault();
       const rect = element.getBoundingClientRect();
       const delta =
@@ -879,26 +905,7 @@ export function App() {
               {s.lipSyncMode !== 'off' && (
                 <>
                   <div className="range-field">
-                    <div className="slider-label">
-                      <span id="mic-volume-label">输入音量</span>
-                      <span className="text-xs tabular-nums text-muted-foreground">
-                        {Math.round(view.micVolume * 100)}%
-                      </span>
-                    </div>
-                    <div
-                      id="mic-volume"
-                      role="meter"
-                      aria-labelledby="mic-volume-label"
-                      aria-valuemin={0}
-                      aria-valuemax={1}
-                      aria-valuenow={view.micVolume}
-                      className="mt-2 h-2 w-full overflow-hidden rounded-full bg-muted"
-                    >
-                      <div
-                        className="h-full rounded-full bg-primary"
-                        style={{ width: `${view.micVolume * 100}%` }}
-                      />
-                    </div>
+                    <MicMeter source={runtime.current?.micLevel ?? silentMic} />
                     <p className="hint">
                       {!view.micActive
                         ? '开启麦克风后显示输入音量。'

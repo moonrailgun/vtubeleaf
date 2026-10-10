@@ -453,6 +453,72 @@ test('bundled Haru, Hiyori and Mao render previews, and models can be pinned, se
   await expect(page.locator('#model-name')).toHaveText('未加载角色');
 });
 
+test('startup restores the last model while library icons load, then renders missing avatars', async ({
+  page,
+}) => {
+  test.setTimeout(60_000);
+  const resources = new Map<string, string>();
+  const models = ['Haru', 'Hiyori', 'Mao'].map((name) => {
+    const root = resolve('vendor/models', name);
+    const files = readdirSync(root, { recursive: true, withFileTypes: true })
+      .filter((entry) => entry.isFile())
+      .map((entry) => {
+        const path = resolve(entry.parentPath, entry.name);
+        const resource = path.slice(root.length + 1).replaceAll('\\', '/');
+        resources.set(`${name}/${resource}`, path);
+        return resource;
+      });
+    return {
+      id: name,
+      name,
+      path: `${root}/${name}.model3.json`,
+      entry: `${name}.model3.json`,
+      files,
+    };
+  });
+  await page.route('**/startup-fixture/**', (route) => {
+    const resource = decodeURIComponent(
+      new URL(route.request().url()).pathname.slice('/startup-fixture/'.length),
+    );
+    const path = resources.get(resource);
+    return path ? route.fulfill({ path }) : route.abort();
+  });
+  await page.route('**/src/main.tsx*', async (route) => {
+    const response = await route.fetch();
+    const bootstrap = `import { mockIPC, mockWindows } from '/node_modules/@tauri-apps/api/mocks.js';
+      window.isTauri = true; mockWindows('main');
+      const models = ${JSON.stringify(models)};
+      const icons = new Promise((resolve) => { window.releaseIcons = resolve; });
+      const restore = new Promise((resolve) => { window.releaseRestore = resolve; });
+      window.rendered = [];
+      mockIPC(async (cmd, args) => {
+        if (cmd === 'load_settings') return { modelPath: models[2].path };
+        if (cmd === 'list_models') return { models, directory: '/managed/models', errors: [] };
+        if (cmd === 'load_model') return models.find((model) => model.path === args.path);
+        if (cmd === 'read_model_preview') { await icons; return new ArrayBuffer(0); }
+        if (cmd === 'read_model_resource') {
+          if (!window.rendered.includes(args.id)) window.rendered.push(args.id);
+          if (args.id === 'Mao') await restore;
+          return (await fetch('/startup-fixture/' + args.id + '/' + encodeURI(args.resource))).arrayBuffer();
+        }
+      }, { shouldMockEvents: true });\n`;
+    await route.fulfill({ response, body: bootstrap + (await response.text()) });
+  });
+  await page.goto('/');
+  const rendered = () => page.evaluate(() => (window as any).rendered);
+  // No icon has loaded yet, but the last model is already being restored.
+  await expect.poll(rendered).toEqual(['Mao']);
+  await page.evaluate(() => (window as any).releaseIcons());
+  // Avatars without icons render only after the restore instead of competing with it.
+  await page.waitForTimeout(500);
+  expect(await rendered()).toEqual(['Mao']);
+  await page.evaluate(() => (window as any).releaseRestore());
+  await expect(page.locator('#model-name')).toHaveText('Mao');
+  await page.getByRole('button', { name: '角色库', exact: true }).click();
+  await expect(page.locator('.model-card img')).toHaveCount(3);
+  expect((await rendered()).sort()).toEqual(['Haru', 'Hiyori', 'Mao']);
+});
+
 test('official Cubism Core renders a supplied model and applies head, body, eye, and mouth parameters', async ({
   page,
 }, testInfo) => {
@@ -1227,6 +1293,29 @@ test('React controls preserve keyboard edits across status updates and reload', 
   await expect(mirror).not.toBeChecked();
   await expect(sensitivity).toHaveAttribute('aria-valuenow', '1.1');
   expect(errors).toEqual([]);
+});
+
+test('settings text fields keep the caret while typing in the middle', async ({ page }) => {
+  await page.addInitScript(() =>
+    localStorage.setItem(
+      'vtubeleaf-preview',
+      JSON.stringify({ engine: 'openseeface', openseefaceMode: 'custom', pythonPath: '/abc' }),
+    ),
+  );
+  await page.goto('/');
+  await page.locator('#osf-options summary').click();
+  const python = page.locator('#pythonPath');
+  await python.click();
+  await python.press('End');
+  await python.press('ArrowLeft');
+  await python.press('ArrowLeft');
+  await page.keyboard.type('XY');
+  await expect(python).toHaveValue('/aXYbc');
+  await expect
+    .poll(() =>
+      page.evaluate(() => JSON.parse(localStorage.getItem('vtubeleaf-preview')!).pythonPath),
+    )
+    .toBe('/aXYbc');
 });
 
 test('React unmount flushes settings and releases a camera permission granted later', async ({
@@ -3683,23 +3772,115 @@ test('attached dragging follows the pointer and scene recall preserves the live 
     state.release();
     await state.pending;
   });
-  expect(
-    await page.evaluate(() => {
-      const state = (window as any).sceneTransaction;
-      return {
-        error: state.error,
-        background: state.container.style.backgroundColor,
-        busy: state.view.sceneBusy,
-        sameCanvas: state.canvas === state.container.querySelector('canvas'),
-      };
-    }),
-  ).toEqual({
-    error: 'missing scene model',
-    background: 'rgb(255, 0, 0)',
-    busy: false,
-    sameCanvas: true,
-  });
+  // Views are published once per frame, so the last one may still be on its way.
+  await expect
+    .poll(() =>
+      page.evaluate(() => {
+        const state = (window as any).sceneTransaction;
+        return {
+          error: state.error,
+          background: state.container.style.backgroundColor,
+          busy: state.view.sceneBusy,
+          sameCanvas: state.canvas === state.container.querySelector('canvas'),
+        };
+      }),
+    )
+    .toEqual({
+      error: 'missing scene model',
+      background: 'rgb(255, 0, 0)',
+      busy: false,
+      sameCanvas: true,
+    });
   await page.evaluate(() => (window as any).sceneTransaction.studio.destroy());
+});
+
+test('studio publishes once per frame and refreshes panels about ten times a second while dragging', async ({
+  page,
+}) => {
+  await page.goto('/?output=1');
+  await page.evaluate(async () => {
+    const { createStudio } = await import('/src/studio.ts');
+    const { mockIPC, mockWindows } = await import('/node_modules/@tauri-apps/api/mocks.js');
+    (window as any).isTauri = true;
+    mockWindows('main');
+    const asset = 'a'.repeat(32) + '.gif';
+    const bytes = Uint8Array.from(
+      '47494638396101000100800000ff00000000ff21f90400050000002c00000000010001000002024401003b'.match(
+        /../g,
+      )!,
+      (h) => parseInt(h, 16),
+    ).buffer;
+    const state = ((window as any).coalesced = { updates: 0, synced: [] as number[] });
+    mockIPC(
+      (cmd: string) => {
+        if (cmd === 'list_models') return { models: [], directory: '/models', errors: [] };
+        if (cmd === 'load_settings')
+          return { composition: { items: [{ id: 'flag', kind: 'image', source: asset }] } };
+        if (cmd === 'read_asset') return bytes;
+        if (cmd.startsWith('plugin:virtual-camera|'))
+          return { supported: false, installed: false, active: false, message: 'Test' };
+      },
+      { shouldMockEvents: true },
+    );
+    const invoke = (window as any).__TAURI_INTERNALS__.invoke;
+    (window as any).__TAURI_INTERNALS__.invoke = (cmd: string, args: any, options: any) => {
+      if (cmd === 'plugin:event|emit_to' && args.event === 'output-state')
+        state.synced.push(args.payload.settings.rotation);
+      return invoke(cmd, args, options);
+    };
+    const container = document.createElement('div');
+    container.style.cssText = 'position:fixed;width:600px;height:300px;left:0;top:0';
+    document.body.append(container);
+    state.studio = createStudio(container, document.createElement('video'), (view) => {
+      state.updates++;
+      state.view = view;
+    });
+  });
+  await expect.poll(() => page.evaluate(() => (window as any).coalesced.view?.ready)).toBe(true);
+  const burst = await page.evaluate(async () => {
+    const { emit } = await import('/node_modules/@tauri-apps/api/event.js');
+    const state = (window as any).coalesced;
+    const frame = () => new Promise(requestAnimationFrame);
+    await emit('output-ready');
+    await frame();
+    const updates = state.updates;
+    state.synced = [];
+    for (let rotation = 1; rotation <= 30; rotation++)
+      state.studio.actions.setSetting('rotation', rotation);
+    await frame();
+    await frame();
+    return { updates: state.updates - updates, rotation: state.view.settings.rotation };
+  });
+  // The 1 s status refresh may add one more update.
+  expect(burst.updates).toBeLessThanOrEqual(2);
+  expect(burst.rotation).toBe(30);
+  // The output window receives the final settings once instead of thirty times.
+  await expect.poll(() => page.evaluate(() => (window as any).coalesced.synced)).toEqual([30]);
+  const drag = await page.evaluate(async () => {
+    const state = (window as any).coalesced;
+    const frame = () => new Promise(requestAnimationFrame);
+    state.studio.actions.selectItem('flag');
+    await frame();
+    const updates = state.updates;
+    const start = performance.now();
+    for (let move = 0; move < 24; move++) {
+      state.studio.actions.pan(0.001, 0);
+      await frame();
+    }
+    const elapsed = performance.now() - start;
+    const during = state.updates - updates;
+    await new Promise((resolve) => setTimeout(resolve, 150));
+    await frame();
+    const item = (view: any) => view.settings.composition.items[0].x;
+    return { elapsed, during, x: item(state.view), live: item(state.studio.snapshot()) };
+  });
+  // One refresh per 100 ms at most (plus the 1 s status refresh), not one per move.
+  expect(drag.during).toBeLessThanOrEqual(Math.ceil(drag.elapsed / 100) + 1);
+  expect(drag.during).toBeLessThan(12);
+  expect(drag.x).toBeCloseTo(0.024, 5);
+  // A trailing refresh always shows where the drag ended.
+  expect(drag.x).toBe(drag.live);
+  await page.evaluate(() => (window as any).coalesced.studio.destroy());
 });
 
 test('application shortcuts preserve native controls and release on blur', async ({ page }) => {
@@ -4052,9 +4233,9 @@ test('focused output forwards application shortcuts and releases held actions wi
   expect(await page.evaluate(() => (window as any).outputKeys.synced.globalHotkeys)).toEqual({
     'toggle-model': 'KeyK',
   });
-  expect(await page.evaluate(() => (window as any).outputKeys.view.settings.modelVisible)).toBe(
-    false,
-  );
+  await expect
+    .poll(() => page.evaluate(() => (window as any).outputKeys.view.settings.modelVisible))
+    .toBe(false);
   expect(await page.evaluate(() => (window as any).outputKeys.view.micActive)).toBe(false);
   await page.evaluate(async () => {
     const { emit } = await import('/node_modules/@tauri-apps/api/event.js');
@@ -4062,9 +4243,9 @@ test('focused output forwards application shortcuts and releases held actions wi
     await emit('output-hotkey', { action: 'toggle-model', pressed: true });
     await emit('output-hotkey', { action: 'toggle-model', pressed: false });
   });
-  expect(await page.evaluate(() => (window as any).outputKeys.synced.useKeyboardHotkeys)).toBe(
-    false,
-  );
+  await expect
+    .poll(() => page.evaluate(() => (window as any).outputKeys.synced.useKeyboardHotkeys))
+    .toBe(false);
   expect(await page.evaluate(() => (window as any).outputKeys.view.settings.modelVisible)).toBe(
     false,
   );
@@ -4078,8 +4259,8 @@ test('focused output forwards application shortcuts and releases held actions wi
     await emit('output-closed');
     await emit('output-hotkey', { action: 'toggle-model', pressed: true });
   });
-  expect(await page.evaluate(() => (window as any).outputKeys.view.settings.modelVisible)).toBe(
-    true,
-  );
+  await expect
+    .poll(() => page.evaluate(() => (window as any).outputKeys.view.settings.modelVisible))
+    .toBe(true);
   await page.evaluate(() => (window as any).outputKeys.studio.destroy());
 });

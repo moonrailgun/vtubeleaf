@@ -305,6 +305,12 @@ const profileRanges = {
   y: [-3, 3],
 } as const;
 
+/** Clamps one ranged profile value like readSettings; invalid input falls back to the default. */
+export const readRange = (key: keyof typeof profileRanges, value: unknown) =>
+  typeof value === 'number' && Number.isFinite(value)
+    ? clamp(value, profileRanges[key][0], profileRanges[key][1])
+    : defaults[key];
+
 export function isFace(v: unknown): v is Face {
   return (
     record(v) &&
@@ -436,8 +442,7 @@ function readProfile(v: unknown): ModelProfile {
   ] as const)
     if (typeof v[key] === 'boolean') p[key] = v[key];
   for (const key of Object.keys(profileRanges) as (keyof typeof profileRanges)[])
-    if (typeof v[key] === 'number' && Number.isFinite(v[key]))
-      p[key] = clamp(v[key], profileRanges[key][0], profileRanges[key][1]);
+    p[key] = readRange(key, v[key]);
   // Legacy profiles cannot distinguish default 1 from a manual 1; migrate once, then retain edits.
   if (v.depthDefaultsVersion !== 1 && v.depthSensitivity === 1)
     p.depthSensitivity = defaults.depthSensitivity;

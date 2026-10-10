@@ -9,6 +9,7 @@ import { enumerateCaptureDevices, isVTubeLeafCamera } from './camera-devices';
 import {
   defaults,
   readSettings,
+  readRange,
   FaceMapper,
   faceSources,
   rememberProfile,
@@ -60,6 +61,7 @@ export function createStudio(
   const previews: Record<string, string> = {};
   let previewStage: AvatarStage | undefined;
   let previewTask: Promise<void> | undefined;
+  let previewReads: Promise<unknown> | undefined;
   let lastFace: Partial<Face> | null = null;
   let lastFaceAt = 0;
   let lastDetectedFaceAt = 0;
@@ -70,12 +72,16 @@ export function createStudio(
   let profileRevision = 0;
   let modelLoading = false;
   let outputOpen = false;
+  let outputStale = false;
   let frameSending = false;
   let saveTimer = 0;
+  let gestureTimer = 0;
   let saveQueue = Promise.resolve();
   let cameraDevices: MediaDeviceInfo[] = [];
   let micDevices: MediaDeviceInfo[] = [];
   let micStarting = false;
+  let micLevel = 0;
+  const micListeners = new Set<() => void>();
   let micOperation = 0;
   let voiceOperation = 0;
   let voiceCalibration: Vowel | null = null;
@@ -140,7 +146,6 @@ export function createStudio(
     cameraDevices,
     micDevices,
     micActive: audio.active,
-    micVolume: audio.inputVolume(settings.micGain),
     micStarting,
     micLabel: audio.deviceLabel,
     voiceCalibration,
@@ -163,8 +168,38 @@ export function createStudio(
     duration: recording.duration,
     canSaveRecording: !recording.active && recording.duration > 0,
   });
+  let publishQueued = false;
+  const flush = () => {
+    if (!publishQueued || disposed) return;
+    publishQueued = false;
+    update(snapshot());
+  };
+  // One React update per frame; hidden pages get no frames, so they flush in a microtask.
+  // WebKit can also hold frames for seconds while the page still reports visible, so a timer
+  // backs the frame up.
+  // User input still updates synchronously, or React restores a controlled field's previous
+  // value and the next key or move compares against a stale one (slider Home then ArrowRight;
+  // WKWebView delivers several slider pointermoves per frame). Stage drags publish from a timer.
+  const discrete = [
+    'input',
+    'change',
+    'click',
+    'keydown',
+    'keyup',
+    'pointerdown',
+    'pointermove',
+    'pointerup',
+  ];
   const publish = () => {
-    if (!disposed) update(snapshot());
+    if (disposed) return;
+    const queued = publishQueued;
+    publishQueued = true;
+    if (discrete.includes(window.event?.type ?? '')) flush();
+    else if (document.hidden) queueMicrotask(flush);
+    else if (!queued) {
+      requestAnimationFrame(flush);
+      setTimeout(flush, 100);
+    }
   };
   function notify(message: string, error = false) {
     if (disposed) return;
@@ -231,6 +266,7 @@ export function createStudio(
     return saveQueue;
   }
   async function syncOutput() {
+    outputStale = false;
     if (native && outputOpen && !disposed)
       await emitTo('output', 'output-state', {
         model,
@@ -255,14 +291,19 @@ export function createStudio(
       }),
     );
   }
-  function changed() {
+  function changed(gesture = false) {
     stage?.display(settings);
     window.clearTimeout(saveTimer);
     saveTimer = window.setTimeout(() => void save(), 250);
-    void syncOutput().catch(() => {
-      outputOpen = false;
-    });
-    publish();
+    // The next render tick sends the output window the latest settings, at most once per frame.
+    outputStale = true;
+    if (!gesture) publish();
+    // Stage drags and wheel zooms redraw on every event but refresh the panels ~10 times a second.
+    else
+      gestureTimer ||= window.setTimeout(() => {
+        gestureTimer = 0;
+        publish();
+      }, 100);
   }
   async function devices(requestPermission = false) {
     const next = await enumerateCaptureDevices(requestPermission, () => disposed);
@@ -413,14 +454,14 @@ export function createStudio(
     if (disposed) return;
     library = result.models;
     libraryDirectory = result.directory;
-    publish();
-    for (const entry of library) {
-      if (disposed) return;
-      await readPreview(entry);
-    }
     if (result.errors.length) notify(`部分角色暂不可用：${result.errors.join('；')}`, true);
     publish();
-    generatePreviews();
+    // Icons decode in the background, a few at a time, so they never delay restoring the model.
+    const queue = [...library];
+    const read = async () => {
+      for (let entry; !disposed && (entry = queue.shift());) await readPreview(entry);
+    };
+    previewReads = Promise.all([read(), read(), read()]);
   }
   async function readPreview(entry: ModelInfo) {
     if (previews[entry.path] || disposed) return;
@@ -547,7 +588,8 @@ export function createStudio(
     notify('正在加载角色资源…');
     updateLibrary(next);
     publish();
-    await readPreview(next);
+    // The icon loads alongside the model; it only decides below whether to save a thumbnail.
+    const preview = readPreview(next);
     if (disposed || operation !== modelOperation) return;
     if (!(await stage.load(next)) || disposed || operation !== modelOperation) return;
     const existingProfile =
@@ -585,6 +627,7 @@ export function createStudio(
     await bindHotkeys();
     if (disposed || operation !== modelOperation) return;
     await save();
+    await preview;
     if (!previews[next.path]) {
       try {
         await savePreview(next, stage.thumbnail());
@@ -664,7 +707,7 @@ export function createStudio(
       selectedItem = id;
       publish();
     },
-    updateItem(id: string, patch: Partial<SceneItem>) {
+    updateItem(id: string, patch: Partial<SceneItem>, gesture = false) {
       if (sceneBusy) return;
       settings.composition = readComposition({
         ...settings.composition,
@@ -674,7 +717,7 @@ export function createStudio(
             : item,
         ),
       });
-      changed();
+      changed(gesture);
     },
     async removeItem(id: string) {
       if (sceneBusy) return;
@@ -1145,29 +1188,28 @@ export function createStudio(
           dx = (x * Math.cos(angle) + y * Math.sin(angle)) / (width * zoom);
           dy = (-x * Math.sin(angle) + y * Math.cos(angle)) / (height * zoom);
         }
-        if (!item.locked) actions.updateItem(item.id, { x: item.x + dx, y: item.y + dy });
+        if (!item.locked) actions.updateItem(item.id, { x: item.x + dx, y: item.y + dy }, true);
         return;
       }
       if (!model) return;
-      settings = readSettings({ ...settings, x: settings.x + dx, y: settings.y + dy });
-      changed();
+      settings.x = readRange('x', settings.x + dx);
+      settings.y = readRange('y', settings.y + dy);
+      changed(true);
     },
     zoom(factor: number, anchorX: number, anchorY: number) {
       if (sceneBusy || modelLoading || disposed) return;
       const item = settings.composition.items.find((i) => i.id === selectedItem);
       if (item) {
-        if (!item.locked) actions.updateItem(item.id, { scale: item.scale * factor });
+        if (!item.locked) actions.updateItem(item.id, { scale: item.scale * factor }, true);
         return;
       }
       if (!model) return;
-      const next = readSettings({ ...settings, zoom: settings.zoom * factor });
-      const ratio = next.zoom / settings.zoom;
-      settings = readSettings({
-        ...next,
-        x: anchorX - (anchorX - settings.x) * ratio,
-        y: anchorY - (anchorY - settings.y) * ratio,
-      });
-      changed();
+      const zoom = readRange('zoom', settings.zoom * factor);
+      const ratio = zoom / settings.zoom;
+      settings.x = readRange('x', anchorX - (anchorX - settings.x) * ratio);
+      settings.y = readRange('y', anchorY - (anchorY - settings.y) * ratio);
+      settings.zoom = zoom;
+      changed(true);
     },
     resetDisplay() {
       Object.assign(settings, {
@@ -1522,6 +1564,8 @@ export function createStudio(
         );
       }
     }
+    // Rendering missing avatars would compete with the restore, so it waits for it and the icons.
+    void previewReads?.then(generatePreviews);
     await run(() => stage?.compose(settings, library));
     await bindHotkeys();
     ready = true;
@@ -1541,10 +1585,14 @@ export function createStudio(
   let before = performance.now(),
     frames = 0,
     since = before,
-    lastMicPublish = before;
+    lastMicSample = before;
   let failedRevision = -1;
   function tick() {
     if (disposed) return;
+    if (outputStale)
+      void syncOutput().catch(() => {
+        outputOpen = false;
+      });
     const now = performance.now(),
       dt = now - before;
     before = now;
@@ -1617,16 +1665,16 @@ export function createStudio(
       frames = 0;
       inputFrames = 0;
       since = now;
-      lastMicPublish = now;
       publish();
-    } else if (
-      audio.active &&
-      tracking !== 'paused' &&
-      settings.lipSyncMode !== 'off' &&
-      now - lastMicPublish >= 100
-    ) {
-      lastMicPublish = now;
-      publish();
+    }
+    // The meter subscribes to this level itself, so it moves without re-rendering the panels.
+    if (now - lastMicSample >= 100) {
+      lastMicSample = now;
+      const level = audio.inputVolume(settings.micGain);
+      if (level !== micLevel) {
+        micLevel = level;
+        micListeners.forEach((listener) => listener());
+      }
     }
   }
   const needsFrames = () =>
@@ -1646,6 +1694,15 @@ export function createStudio(
   return {
     actions,
     snapshot,
+    micLevel: {
+      get: () => micLevel,
+      subscribe(listener: () => void) {
+        micListeners.add(listener);
+        return () => void micListeners.delete(listener);
+      },
+    },
+    // Wheel events check this instead of cloning the settings through snapshot().
+    canMove: () => !!(model || selectedItem) && !modelLoading && !sceneBusy,
     destroy() {
       disposed = true;
       window.clearTimeout(updateTimer);

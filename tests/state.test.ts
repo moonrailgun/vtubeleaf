@@ -291,6 +291,26 @@ test('untrusted settings recover and clamp without carrying unknown fields', () 
   assert.equal(s.recentModels.length, 1);
   assert.equal('evil' in s, false);
 });
+
+test('stage gestures clamp position and zoom exactly as settings validation does', () => {
+  const values = [NaN, Infinity, -Infinity, '0.5', null, -1e9, -3.01, -0.81, 0, 0.04, 3.5, 11];
+  for (const key of ['x', 'y', 'zoom'] as const)
+    for (const value of values)
+      assert.equal(
+        state.readRange(key, value),
+        readSettings({ [key]: value })[key],
+        `${key} ${value}`,
+      );
+  // Non-finite input falls back to the default instead of the nearest limit.
+  assert.deepEqual(
+    [Infinity, -5, 0.5, NaN].map((x) => state.readRange('x', x)),
+    [0, -0.8, 0.5, 0],
+  );
+  assert.deepEqual(
+    [Infinity, 0, 20].map((zoom) => state.readRange('zoom', zoom)),
+    [1, 0.05, 10],
+  );
+});
 test('mapping respects model limits, missing parameters, calibration and lost face', () => {
   const mapper = new FaceMapper();
   const p = [
