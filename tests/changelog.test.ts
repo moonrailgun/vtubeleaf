@@ -1,7 +1,12 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { changelogNotes, checkUnreleased, releaseChangelog } from '../scripts/changelog.mjs';
-import { parseChangelog, releasesSince } from '../src/changelog.ts';
+import {
+  bilingualNotes,
+  changelogNotes,
+  checkUnreleased,
+  releaseChangelog,
+} from '../scripts/changelog.mjs';
+import { localNotes, parseChangelog, releasesSince } from '../src/changelog.ts';
 
 const unreleased = '## 未发布';
 const draft =
@@ -63,4 +68,12 @@ test('the app reads released sections and picks the ones installed since last la
   assert.deepEqual(since('1.0.2', '0.9.9'), ['v1.0.2']);
   assert.deepEqual(since('1.0.0', '1.0.2'), []);
   assert.deepEqual(since('1.0.3', '1.0.0'), []);
+});
+
+test('update notes carry both languages and the app shows its own half', () => {
+  const notes = bilingualNotes('### Fixed\n\n- Fixed it.', '### 修复\n\n- 修好了。');
+  assert.equal(localNotes(notes, 'zh').trim(), '### 修复\n\n- 修好了。');
+  assert.equal(localNotes(notes, 'en').trim(), '### Fixed\n\n- Fixed it.');
+  assert.equal(localNotes(notes, 'ja').trim(), '### Fixed\n\n- Fixed it.');
+  assert.equal(localNotes('- 旧版只有中文。', 'en'), '- 旧版只有中文。');
 });

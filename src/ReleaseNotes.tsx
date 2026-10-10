@@ -1,8 +1,10 @@
-import changelog from '../CHANGELOG.md?raw';
+import en from '../CHANGELOG.md?raw';
+import zh from '../CHANGELOG.zh-CN.md?raw';
 import { parseChangelog, type NoteGroup, type Release } from './changelog';
-import { t } from './i18n.ts';
+import { lang, t } from './i18n.ts';
 
-export const releases = parseChangelog(changelog);
+// main.tsx sets the language before importing the windows that use this.
+export const releases = parseChangelog(lang === 'zh' ? zh : en);
 
 const inline = (text: string) =>
   text.split('`').map((part, i) => (i % 2 ? <code key={i}>{part}</code> : part));

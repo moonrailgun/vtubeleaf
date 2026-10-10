@@ -13,9 +13,9 @@ import { version } from '../package.json';
 import { Button } from './components/ui/button';
 import { Switch } from './components/ui/switch';
 import { initialUpdateState, type UpdateState } from './updater';
-import { parseNotes } from './changelog';
+import { localNotes, parseNotes } from './changelog';
 import { Notes, ReleaseList, releases } from './ReleaseNotes';
-import { t, type Key } from './i18n.ts';
+import { lang, t, type Key } from './i18n.ts';
 
 export function About() {
   const [events, setEvents] = useState<string[]>([]);
@@ -232,7 +232,7 @@ function Updates() {
           <div>
             <h2 className="font-semibold">{t('about.notesTitle', { version: state.version })}</h2>
             <div className="mt-1 break-words text-muted-foreground">
-              <Notes groups={parseNotes(state.notes)} />
+              <Notes groups={parseNotes(localNotes(state.notes, lang))} />
             </div>
           </div>
         )}

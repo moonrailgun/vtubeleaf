@@ -17,7 +17,14 @@ export function parseNotes(notes: string) {
   return groups;
 }
 
-// Newest first; an empty "未发布" section is dropped.
+// Update notes are the English notes, a "---" line, then the Chinese ones (scripts/changelog.mjs).
+// Chinese reads its half and every other language reads English; single-language notes show as is.
+export function localNotes(notes: string, lang: string) {
+  const [en, zh = en] = notes.split(/^---\r?$/m);
+  return lang === 'zh' ? zh : en;
+}
+
+// Newest first; an empty unreleased section is dropped.
 export function parseChangelog(text: string): Release[] {
   return text
     .split(/^(?=## )/m)
