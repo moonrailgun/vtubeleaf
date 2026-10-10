@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## v1.2.1 · 2026-10-11
+
 ### Improved
 
 - "Release notes" in "About VTubeLeaf" and the notes shown for a new version now follow the interface language: Chinese for the Chinese interface, English for every other language.
