@@ -113,7 +113,7 @@ public/runtime/
   mediapipe/wasm/vision_wasm_nosimd_internal.wasm
 ```
 
-`public/runtime/` 已被 Git 忽略，但 Vite 构建会将其中资源复制进 `dist/`，所以安装包发行前必须复核实际包含的第三方文件和条款。正常跟踪从这些本地路径加载资源；完成准备后能否在实际安装包中断网运行，仍须按验收表测试。
+`public/runtime/` 已被 Git 忽略，但 Vite 构建会将其中资源复制进 `dist/`，所以安装包发行前必须复核实际包含的第三方文件和条款。在 macOS 和 Windows 上，`npm run build` 会从 `dist/` 删除 `mediapipe/wasm/vision_wasm_nosimd_internal.{js,wasm}`，因为 WKWebView（macOS 14+）和 WebView2 始终支持 WebAssembly SIMD；Linux 构建保留这两个文件，`public/runtime/` 和 `setup:assets -- --check` 仍包含并校验全部四个 WASM / JS 文件。正常跟踪从这些本地路径加载资源；完成准备后能否在实际安装包中断网运行，仍须按验收表测试。
 
 固定下载地址和哈希保存在 [setup-assets.mjs](../scripts/setup-assets.mjs)，来源记录在本地 `manifest.json`。MediaPipe 的 API 和本地 WASM 配置可参见 [Face Landmarker Web Guide](https://ai.google.dev/edge/mediapipe/solutions/vision/face_landmarker/web_js)。
 

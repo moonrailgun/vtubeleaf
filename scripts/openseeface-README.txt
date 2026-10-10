@@ -23,5 +23,6 @@ macOS 正式版会独立检查更新，也可从「VTubeLeaf OpenSeeFace」菜�
 没有数据：检查摄像头权限、所选设备、端口是否一致，以及其他软件是否占用摄像头。
 macOS 请移动整个 .app；Windows / Linux 请保留整个解压文件夹，包括 _internal、模型和许可。
 技术用户可运行 facetracker --help（Windows 为 facetracker.exe）查看命令行参数。
+包内只含默认追踪模型（--model 3）；使用其他 --model 或 --benchmark 时，请用 --model-dir 指向完整的 OpenSeeFace models 目录。
 macOS 的 facetracker、BUILD.json、licenses/ 位于 .app/Contents/Resources/OpenSeeFace/。
 仅向本机 127.0.0.1 发送单人跟踪数据。依赖版本见 BUILD.json，第三方许可见 licenses/。

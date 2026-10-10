@@ -12,4 +12,6 @@ with patch("builtins.input", side_effect=["-1", "33", "$(touch x)", "2", "0", "6
     args = launcher["launcher_arguments"]()
 assert args[:6] == ["--ip", "127.0.0.1", "--port", "12000", "--capture", "2"]
 assert args[6:] == ["--faces", "1", "-F", "24", "-W", "640", "-H", "360", "--gaze-tracking", "0", "--visualize", "0", "--silent", "1"]
+# bundle-openseeface.py ships only the default model's files; other models must be bundled first.
+assert not {"--model", "--model-dir", "--benchmark"} & set(args)
 print("OpenSeeFace launcher checks passed")

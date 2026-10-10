@@ -16,11 +16,14 @@ arch = {"arm64": "aarch64", "aarch64": "aarch64", "amd64": "x86_64", "x86_64": "
 if arch is None or sys.platform not in ("darwin", "win32", "linux") or (sys.platform != "darwin" and arch != "x86_64"):
     raise SystemExit("OpenSeeFace bundles support macOS arm64/x86_64, Windows x64 and Linux x64")
 
+# Launchers never pass --model, --model-dir or --benchmark, so tracker.py loads only these.
+models = ("lm_model3_opt.onnx", "retinaface_640x640_opt.onnx", "priorbox_640x640.json",
+          "mnv3_gaze32_split_opt.onnx", "mnv3_detection_opt.onnx")
 command = [
     sys.executable, "-m", "PyInstaller", "--noconfirm", "--clean", "--onedir",
     "--name", "facetracker", "--distpath", str(work / "dist"),
-    "--workpath", str(work / "build"), "--specpath", str(work),
-    "--paths", str(source), "--add-data", f"{source / 'models'}:models",
+    "--workpath", str(work / "build"), "--specpath", str(work), "--paths", str(source),
+    *(arg for name in models for arg in ("--add-data", f"{source / 'models' / name}:models")),
     # These are optional training/GUI dependencies, not needed for tracking.
     "--exclude-module", "torch", "--exclude-module", "matplotlib",
     "--exclude-module", "scipy", "--exclude-module", "tkinter",

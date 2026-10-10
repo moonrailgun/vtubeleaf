@@ -38,3 +38,9 @@ webkit2gtk = { version = "2", features = ["v2_24"] }
 [target.'cfg(windows)'.dependencies]
 webview2-com = "0.38"
 windows = "0.61"
+
+# Smaller, faster release binaries. Panics keep unwinding so a failed background task cannot abort the app.
+[profile.release]
+lto = true
+codegen-units = 1
+strip = true
