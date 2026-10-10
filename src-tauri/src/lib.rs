@@ -462,6 +462,7 @@ pub fn run() {
             obs::obs_start,
             obs::obs_stop,
             obs::obs_submit,
+            obs::obs_wanted,
             texture::texture_start,
             texture::texture_stop,
             texture::texture_submit,

@@ -17,6 +17,8 @@ const STALE: Duration = Duration::from_secs(2);
 struct Frame {
     active: bool,
     latest: Option<(Instant, Bytes)>,
+    // An open OBS page polls /frame at least twice a second, even while the output is stopped.
+    requested: Option<Instant>,
 }
 
 #[derive(Default)]
@@ -79,7 +81,13 @@ impl Output {
         Ok(())
     }
 
-    fn submit(&self, bytes: &[u8]) -> Result<(), String> {
+    /// Whether an OBS browser source is polling, so PNG frames are worth encoding.
+    fn wanted(&self) -> Result<bool, String> {
+        let frame = self.frame.lock().map_err(|_| "OBS 输出状态不可用")?;
+        Ok(frame.requested.is_some_and(|at| at.elapsed() < STALE))
+    }
+
+    fn submit(&self, bytes: &[u8]) -> Result<bool, String> {
         if bytes.len() < 33
             || bytes.len() > 8 * 1024 * 1024
             || &bytes[..8] != b"\x89PNG\r\n\x1a\n"
@@ -93,7 +101,8 @@ impl Output {
         if frame.active {
             frame.latest = Some((Instant::now(), Bytes::copy_from_slice(bytes)));
         }
-        Ok(())
+        drop(frame);
+        self.wanted()
     }
 }
 
@@ -133,12 +142,15 @@ fn respond<B>(request: &Request<B>, frame: &Mutex<Frame>) -> Response<Full<Bytes
                 Bytes::from_static(include_bytes!("obs-source.js")),
             ),
             "/frame" => match frame.lock() {
-                Ok(frame) => match &frame.latest {
-                    Some((at, bytes)) if frame.active && at.elapsed() < STALE => {
-                        (StatusCode::OK, "image/png", bytes.clone())
+                Ok(mut frame) => {
+                    frame.requested = Some(Instant::now());
+                    match &frame.latest {
+                        Some((at, bytes)) if frame.active && at.elapsed() < STALE => {
+                            (StatusCode::OK, "image/png", bytes.clone())
+                        }
+                        _ => (StatusCode::NO_CONTENT, "image/png", Bytes::new()),
                     }
-                    _ => (StatusCode::NO_CONTENT, "image/png", Bytes::new()),
-                },
+                }
                 Err(_) => (
                     StatusCode::INTERNAL_SERVER_ERROR,
                     "text/plain",
@@ -174,12 +186,19 @@ pub fn obs_stop(window: WebviewWindow, output: State<'_, Mutex<Output>>) -> Resu
     output.lock().map_err(|_| "OBS 输出状态不可用")?.stop()
 }
 
+#[tauri::command]
+pub fn obs_wanted(window: WebviewWindow, output: State<'_, Mutex<Output>>) -> Result<bool, String> {
+    super::require_main(&window)?;
+    output.lock().map_err(|_| "OBS 输出状态不可用")?.wanted()
+}
+
+/// Returns whether an OBS page is still polling; the app idles until one is.
 #[tauri::command(async)]
 pub fn obs_submit(
     window: WebviewWindow,
     output: State<'_, Mutex<Output>>,
     request: tauri::ipc::Request<'_>,
-) -> Result<(), String> {
+) -> Result<bool, String> {
     super::require_main(&window)?;
     let InvokeBody::Raw(bytes) = request.body() else {
         return Err("OBS 帧必须是二进制数据".into());
@@ -194,6 +213,15 @@ pub fn obs_submit(
 mod tests {
     use super::*;
     use std::io::{Read, Write};
+
+    fn png() -> Vec<u8> {
+        let mut png = vec![0; 33];
+        png[..8].copy_from_slice(b"\x89PNG\r\n\x1a\n");
+        png[12..16].copy_from_slice(b"IHDR");
+        png[16..20].copy_from_slice(&1280_u32.to_be_bytes());
+        png[20..24].copy_from_slice(&720_u32.to_be_bytes());
+        png
+    }
 
     #[test]
     fn local_server_serves_frames_and_keeps_the_url_alive_across_restart() {
@@ -222,12 +250,11 @@ mod tests {
         assert!(page.starts_with(b"HTTP/1.1 200"));
         assert!(String::from_utf8(page).unwrap().contains("/source.js"));
         assert!(get("/frame").starts_with(b"HTTP/1.1 204"));
-        let mut png = vec![0; 33];
-        png[..8].copy_from_slice(b"\x89PNG\r\n\x1a\n");
-        png[12..16].copy_from_slice(b"IHDR");
-        png[16..20].copy_from_slice(&1280_u32.to_be_bytes());
-        png[20..24].copy_from_slice(&720_u32.to_be_bytes());
-        output.submit(&png).unwrap();
+        let png = png();
+        assert!(
+            output.submit(&png).unwrap(),
+            "the polling page wants frames"
+        );
         let frame = get("/frame");
         assert!(frame.starts_with(b"HTTP/1.1 200"));
         assert!(frame.ends_with(&png));
@@ -260,6 +287,7 @@ mod tests {
         *output.frame.lock().unwrap() = Frame {
             active: true,
             latest: Some((Instant::now(), Bytes::from_static(b"frame"))),
+            ..Default::default()
         };
         assert_eq!(get("/frame", ADDRESS, origin), StatusCode::OK);
         assert_eq!(
@@ -278,5 +306,31 @@ mod tests {
         output.stop().unwrap();
         assert!(output.frame.lock().unwrap().latest.is_none());
         assert!(!output.frame.lock().unwrap().active);
+    }
+
+    #[test]
+    fn frames_are_wanted_only_while_an_obs_page_polls() {
+        let output = Output::default();
+        let poll = |path, host| {
+            let request = Request::builder()
+                .uri(path)
+                .header("host", host)
+                .body(())
+                .unwrap();
+            respond(&request, &output.frame);
+        };
+        assert!(!output.wanted().unwrap());
+        poll("/", ADDRESS);
+        poll("/frame", "attacker.example:18765");
+        assert!(!output.wanted().unwrap(), "only allowed frame polls count");
+        poll("/frame", ADDRESS);
+        assert!(output.wanted().unwrap());
+        assert!(output.submit(&png()).unwrap());
+        // Stopping keeps the poll time so a restart serves an open page right away.
+        output.stop().unwrap();
+        assert!(output.wanted().unwrap());
+        *output.frame.lock().unwrap().requested.as_mut().unwrap() -= Duration::from_secs(3);
+        assert!(!output.wanted().unwrap());
+        assert!(!output.submit(&png()).unwrap());
     }
 }

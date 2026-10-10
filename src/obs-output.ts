@@ -31,7 +31,7 @@ export class ObsOutput {
   private running?: ObsMode;
   private revision = 0;
   private lastFrame = -Infinity;
-  // Whether a native receiver is attached; frames are not produced for nobody.
+  // Whether a Syphon client or a polling OBS page is attached; frames are not produced for nobody.
   private wanted = true;
 
   constructor(
@@ -78,7 +78,7 @@ export class ObsOutput {
   submit(source: ObsFrameSource): void {
     const now = performance.now();
     const native = this.running === 'native';
-    const idle = native && !this.wanted;
+    const idle = !this.wanted;
     // Native frames follow the render loop. PNG encoding is capped at 30 FPS, with slack for a
     // 30 FPS render loop whose ticks land slightly early. Without a receiver, only poll for one.
     if (
@@ -91,13 +91,15 @@ export class ObsOutput {
     this.lastFrame = now;
     const revision = this.revision;
     this.frame = (async () => {
+      if (idle) {
+        this.wanted = await invoke<boolean>(native ? 'texture_wanted' : 'obs_wanted');
+        return;
+      }
       if (native) {
-        this.wanted = idle
-          ? await invoke<boolean>('texture_wanted')
-          : await invoke<boolean>(
-              'texture_submit',
-              source.transparentPixels(NATIVE_WIDTH, NATIVE_HEIGHT),
-            );
+        this.wanted = await invoke<boolean>(
+          'texture_submit',
+          source.transparentPixels(NATIVE_WIDTH, NATIVE_HEIGHT),
+        );
         return;
       }
       // ponytail: PNG readback/encoding caps throughput; the native mode avoids it.
@@ -110,7 +112,8 @@ export class ObsOutput {
           );
       });
       const bytes = await blob.arrayBuffer();
-      if (this.state.active && revision === this.revision) await invoke('obs_submit', bytes);
+      if (this.state.active && revision === this.revision)
+        this.wanted = await invoke<boolean>('obs_submit', bytes);
     })()
       .catch((error) => {
         if (revision !== this.revision) return;

@@ -174,7 +174,9 @@ test('desktop OBS controls publish PNG frames and stop without late submissions'
         `
       import { mockIPC, mockWindows } from '/node_modules/@tauri-apps/api/mocks.js';
       window.isTauri = true; mockWindows('main');
-      const output = window.obsTest = { active: false, frames: 0, late: 0, header: [], texture: [], wanted: true };
+      const output = window.obsTest = { active: false, frames: 0, late: 0, header: [], texture: [], wanted: true, polls: 0, encodes: 0 };
+      const toBlob = HTMLCanvasElement.prototype.toBlob;
+      HTMLCanvasElement.prototype.toBlob = function (...args) { output.encodes++; return toBlob.apply(this, args); };
       mockIPC((cmd, args) => {
         if (cmd === 'load_settings') return { autoCheckUpdates: false };
         if (cmd === 'list_models') return { models: [], directory: '/test', errors: [] };
@@ -185,9 +187,11 @@ test('desktop OBS controls publish PNG frames and stop without late submissions'
         }
         if (cmd === 'obs_start') { output.active = true; return 'http://127.0.0.1:18765/'; }
         if (cmd === 'obs_stop') { output.active = false; return; }
+        if (cmd === 'obs_wanted') { output.polls++; return output.wanted; }
         if (cmd === 'obs_submit') {
           output.frames++; if (!output.active) output.late++;
           output.header = Array.from(new Uint8Array(args).slice(0, 8));
+          return output.wanted;
         }
       }, { shouldMockEvents: true });
     ` + (await response.text()),
@@ -235,6 +239,19 @@ test('desktop OBS controls publish PNG frames and stop without late submissions'
   await expect
     .poll(() => page.evaluate(() => (window as any).obsTest.header))
     .toEqual([137, 80, 78, 71, 13, 10, 26, 10]);
+  // Without a polling OBS page, PNG frames are neither rendered nor encoded; the app only polls.
+  const browser = () =>
+    page.evaluate(() => {
+      const { frames, polls, encodes } = (window as any).obsTest;
+      return { frames, polls, encodes };
+    });
+  await page.evaluate(() => ((window as any).obsTest.wanted = false));
+  await expect.poll(async () => (await browser()).polls).toBeGreaterThan(0);
+  const unwanted = await browser();
+  await expect.poll(async () => (await browser()).polls).toBeGreaterThan(unwanted.polls + 1);
+  expect(await browser()).toMatchObject({ frames: unwanted.frames, encodes: unwanted.encodes });
+  await page.evaluate(() => ((window as any).obsTest.wanted = true));
+  await expect.poll(async () => (await browser()).frames).toBeGreaterThan(unwanted.frames);
   await page.getByRole('button', { name: '停止透明输出', exact: true }).click();
   await expect(page.getByRole('button', { name: '启动透明输出', exact: true })).toBeEnabled();
   const count = await page.evaluate(() => (window as any).obsTest.frames);
@@ -259,7 +276,8 @@ test('OBS publisher bounds pending frames and ignores failures from a stopped se
     const errors: string[] = [];
     let failFrame: (error: Error) => void = () => {};
     mockIPC((cmd: string) => {
-      calls.push(cmd);
+      // The output window's own event listeners may also reach this mock.
+      if (cmd.startsWith('obs_')) calls.push(cmd);
       if (cmd === 'obs_start') return 'http://127.0.0.1:18765/';
       if (cmd === 'obs_submit') return new Promise((_, reject) => (failFrame = reject));
     });
