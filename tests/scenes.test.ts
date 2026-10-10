@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
+import { statSync } from 'node:fs';
 import { test } from 'node:test';
-import { readComposition, readScenes, snapshotScene } from '../src/scenes.ts';
+import { builtinBackgrounds, readComposition, readScenes, snapshotScene } from '../src/scenes.ts';
 import { readSettings } from '../src/state.ts';
 
 test('built-in backgrounds survive settings and scene reloads without allowing arbitrary sources', () => {
@@ -81,4 +82,10 @@ test('scene documents bound untrusted values and snapshots do not share items', 
   assert.equal(readScenes([scene])[0].placement.y, 3);
   assert.equal(readScenes([{ ...scene, placement: { y: -3 } }])[0].placement.y, -3);
   assert.equal(readScenes([{ ...scene, placement: {} }])[0].placement.modelVisible, true);
+});
+
+test('background picker tiles use small thumbnails of every built-in background', () => {
+  const size = (path: string) => statSync(new URL(`../public${path}`, import.meta.url)).size;
+  for (const { src, thumb } of builtinBackgrounds)
+    assert.ok(size(thumb) < Math.min(40_000, size(src) / 8), thumb);
 });

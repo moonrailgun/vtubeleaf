@@ -14,6 +14,7 @@ export type SceneItem = {
   attach: 'stage' | 'model';
 };
 export type Composition = { backgroundImage: string; items: SceneItem[] };
+// `thumb` is a 320 px copy for picker tiles; decoding all seven full images takes ~44 MB.
 export const builtinBackgrounds = [
   { id: 'builtin:beach', name: '海滩', src: '/backgrounds/beach.jpg' },
   { id: 'builtin:meeting-room', name: '会议室', src: '/backgrounds/meeting-room.jpg' },
@@ -22,7 +23,7 @@ export const builtinBackgrounds = [
   { id: 'builtin:bedroom', name: '卧室', src: '/backgrounds/bedroom.jpg' },
   { id: 'builtin:cafe', name: '咖啡馆', src: '/backgrounds/cafe.jpg' },
   { id: 'builtin:gaming-room', name: '游戏房', src: '/backgrounds/gaming-room.jpg' },
-];
+].map((b) => ({ ...b, thumb: b.src.replace('/backgrounds/', '/backgrounds/thumbs/') }));
 export type Placement = {
   x: number;
   y: number;

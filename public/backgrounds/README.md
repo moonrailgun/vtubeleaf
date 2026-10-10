@@ -4,6 +4,8 @@
 
 原始图像为 1672 × 941，使用 `sips -s format jpeg -s formatOptions 85` 转为 JPEG，未做裁剪或放大。
 
+`thumbs/` 中是背景选择器使用的同名 320 × 180 缩略图，由上述 JPEG 经 `sips -Z 320 -s format jpeg -s formatOptions 80` 生成。新增背景时需同时生成缩略图。
+
 实际生成提示词如下。
 
 ## beach.jpg

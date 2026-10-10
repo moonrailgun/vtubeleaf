@@ -50,7 +50,7 @@ export function SceneControls({
               onClick={() => run(() => a.setBackground(background.id))}
             >
               <img
-                src={background.src}
+                src={background.thumb}
                 alt=""
                 loading="lazy"
                 className="aspect-video w-full object-cover"
