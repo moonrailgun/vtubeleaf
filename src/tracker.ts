@@ -8,8 +8,8 @@ import type {
 } from '@mediapipe/tasks-vision';
 import { fromHands, type HandSignals } from './hands.ts';
 import { fromNvidia } from './nvidia.ts';
-import { openTrackingCamera } from './camera-devices';
-import { startFrameLoop } from './frame-loop';
+import { openTrackingCamera } from './camera-devices.ts';
+import { startFrameLoop } from './frame-loop.ts';
 import {
   fromMediaPipe,
   fromPose,
@@ -18,9 +18,43 @@ import {
   type Face,
   type Settings,
   type UpperBody,
-} from './state';
+} from './state.ts';
+
+/** When pose and hand inference are next due, and which goes first when both are due. */
+export type PoseHandDue = { pose: number; hand: number; handFirst: boolean };
+
+// Due times, not run times, set each cadence, so a run deferred by a tick keeps its configured
+// average rate; one that fell a whole interval behind restarts its cadence instead of bursting.
+// When both fall due on one tick and each rate leaves every other tick free, one runs and the
+// other waits a tick (taking turns), so no tick runs face, pose and hand back to back.
+// A rate of 0 means that model is off.
+export function duePoseHand(
+  due: PoseHandDue,
+  now: number,
+  tickFps: number,
+  poseFps: number,
+  handFps: number,
+) {
+  // Slack for a tracking loop whose ticks land slightly early.
+  let pose = poseFps > 0 && now >= due.pose - 4;
+  let hand = handFps > 0 && now >= due.hand - 4;
+  if (pose && hand && Math.max(poseFps, handFps) * 2 <= tickFps) {
+    pose = !due.handFirst;
+    hand = due.handFirst;
+    due.handFirst = !due.handFirst;
+  }
+  const next = (at: number, fps: number) =>
+    at + 1000 / fps > now ? at + 1000 / fps : now + 1000 / fps;
+  if (pose) due.pose = next(due.pose, poseFps);
+  if (hand) due.hand = next(due.hand, handFps);
+  return { pose, hand };
+}
 
 export class Tracker {
+  private video: HTMLVideoElement;
+  private receive: (face: Partial<Face>) => void;
+  private fail: (message: string) => void;
+  private preview?: HTMLCanvasElement;
   private stream?: MediaStream;
   private landmarker?: FaceLandmarker;
   private pose?: PoseLandmarker;
@@ -29,9 +63,9 @@ export class Tracker {
   private hands?: HandSignals;
   private poseLandmarks: NormalizedLandmark[] = [];
   private handLandmarks: NormalizedLandmark[][] = [];
-  private lastPoseAt = -Infinity;
-  private lastHandAt = -Infinity;
+  private due: PoseHandDue = { pose: -Infinity, hand: -Infinity, handFirst: false };
   private trackingFps = 24;
+  private cameraFps = Infinity;
   private bodyFps = 10;
   private handFps = 10;
   bodyStatus = '上半身待识别';
@@ -49,12 +83,18 @@ export class Tracker {
   private nativeOperation: Promise<unknown> = Promise.resolve();
   private drawPreview?: (landmarks: NormalizedLandmark[]) => void;
 
+  // Plain fields rather than parameter properties keep this module loadable by Node's type stripping.
   constructor(
-    private video: HTMLVideoElement,
-    private receive: (face: Partial<Face>) => void,
-    private fail: (message: string) => void,
-    private preview?: HTMLCanvasElement,
-  ) {}
+    video: HTMLVideoElement,
+    receive: (face: Partial<Face>) => void,
+    fail: (message: string) => void,
+    preview?: HTMLCanvasElement,
+  ) {
+    this.video = video;
+    this.receive = receive;
+    this.fail = fail;
+    this.preview = preview;
+  }
 
   async start(s: Settings) {
     const stopped = this.stop();
@@ -138,6 +178,9 @@ export class Tracker {
       } else {
         if (!navigator.mediaDevices?.getUserMedia)
           throw new Error('此运行环境没有摄像头接口。请使用桌面应用，并检查系统权限。');
+        // Load the models while the camera opens; a camera failure still wins over a model one.
+        const loading = this.loadMediaPipe(s, generation);
+        loading.catch(() => {});
         const [width, height] =
           s.cameraResolution === '1080p'
             ? [1920, 1080]
@@ -162,6 +205,7 @@ export class Tracker {
         const videoTrack = stream.getVideoTracks()[0];
         this.cameraLabel = videoTrack.label || '摄像头名称不可用';
         const actual = videoTrack.getSettings();
+        this.cameraFps = actual.frameRate ? Math.round(actual.frameRate) : Infinity;
         this.cameraSettings = [
           actual.width && actual.height ? `${actual.width}×${actual.height}` : '',
           actual.frameRate ? `${Math.round(actual.frameRate)} FPS` : '',
@@ -177,79 +221,62 @@ export class Tracker {
         });
         await this.video.play();
         if (generation !== this.generation) return false;
-        const { FaceLandmarker, HandLandmarker, PoseLandmarker, FilesetResolver, DrawingUtils } =
-          await import('@mediapipe/tasks-vision');
-        const vision = await FilesetResolver.forVisionTasks('/runtime/mediapipe/wasm');
+        const { FaceLandmarker, HandLandmarker } = await loading;
         if (generation !== this.generation) return false;
-        const landmarker = await FaceLandmarker.createFromOptions(vision, {
-          baseOptions: {
-            modelAssetPath: '/runtime/mediapipe/face_landmarker.task',
-            delegate: s.trackingDelegate,
-          },
-          runningMode: 'VIDEO',
-          numFaces: 1,
-          outputFaceBlendshapes: true,
-          outputFacialTransformationMatrixes: true,
-        });
-        if (generation !== this.generation) {
-          landmarker.close();
-          return false;
-        }
-        this.landmarker = landmarker;
-        if (s.upperBody) {
-          try {
-            const pose = await PoseLandmarker.createFromOptions(vision, {
-              baseOptions: {
-                modelAssetPath: '/runtime/mediapipe/pose_landmarker_lite.task',
-                delegate: 'CPU',
-              },
-              runningMode: 'VIDEO',
-              numPoses: 1,
-              minPoseDetectionConfidence: 0.6,
-              minPosePresenceConfidence: 0.6,
-              minTrackingConfidence: 0.6,
-              outputSegmentationMasks: false,
-            });
-            if (generation !== this.generation) {
-              pose.close();
-              return false;
-            }
-            this.pose = pose;
-          } catch {
-            if (generation !== this.generation) return false;
-            this.bodyStatus = '上半身资源加载失败 · 仅面捕，请重新准备跟踪资源';
-          }
-        }
-        if (s.handTracking) {
-          try {
-            const hand = await HandLandmarker.createFromOptions(vision, {
-              baseOptions: {
-                modelAssetPath: '/runtime/mediapipe/hand_landmarker.task',
-                delegate: 'CPU',
-              },
-              runningMode: 'VIDEO',
-              numHands: 2,
-              minHandDetectionConfidence: 0.6,
-              minHandPresenceConfidence: 0.6,
-              minTrackingConfidence: 0.6,
-            });
-            if (generation !== this.generation) {
-              hand.close();
-              return false;
-            }
-            this.hand = hand;
-          } catch {
-            if (generation !== this.generation) return false;
-            this.handStatus = '手部资源加载失败 · 面捕继续，请重新准备跟踪资源';
-          }
-        }
         const canvas = this.preview;
         const context = canvas?.getContext('2d');
         if (canvas && context) {
-          const drawing = new DrawingUtils(context);
+          // The mesh lists each inner edge once per triangle, so twice. Stroked one by one, the
+          // two 0x66 layers added up to 0xa3; one path draws each edge once at that alpha instead.
+          const mesh = [
+            ...new Map(
+              FaceLandmarker.FACE_LANDMARKS_TESSELATION.map((edge) => [
+                Math.min(edge.start, edge.end) * 1000 + Math.max(edge.start, edge.end),
+                edge,
+              ]),
+            ).values(),
+          ];
+          // One path per set rather than ~2,700 separate strokes a frame.
+          const lines = (
+            points: NormalizedLandmark[],
+            connections: { start: number; end: number }[],
+            color: string,
+            lineWidth: number,
+          ) => {
+            context.beginPath();
+            for (const { start, end } of connections) {
+              const from = points[start];
+              const to = points[end];
+              if (!from || !to) continue;
+              context.moveTo(from.x * canvas.width, from.y * canvas.height);
+              context.lineTo(to.x * canvas.width, to.y * canvas.height);
+            }
+            context.strokeStyle = color;
+            context.lineWidth = lineWidth;
+            context.stroke();
+          };
+          // Filled and outlined at 1px, as MediaPipe's DrawingUtils draws landmarks.
+          const dots = (points: NormalizedLandmark[], color: string, radius: number) => {
+            context.beginPath();
+            for (const { x, y } of points) {
+              context.moveTo(x * canvas.width + radius, y * canvas.height);
+              context.arc(x * canvas.width, y * canvas.height, radius, 0, 2 * Math.PI);
+            }
+            context.fillStyle = context.strokeStyle = color;
+            context.lineWidth = 1;
+            context.fill();
+            context.stroke();
+          };
+          let shown = false;
           this.drawPreview = (landmarks) => {
+            // A hidden preview skips each frame's work but is still left blank for when it shows.
+            if (!canvas.getClientRects().length) {
+              if (shown) this.clearPreview();
+              shown = false;
+              return;
+            }
+            shown = true;
             this.clearPreview();
-            if (!canvas.getClientRects().length) return;
             if (
               canvas.width !== this.video.videoWidth ||
               canvas.height !== this.video.videoHeight
@@ -257,15 +284,9 @@ export class Tracker {
               canvas.width = this.video.videoWidth;
               canvas.height = this.video.videoHeight;
             }
-            drawing.drawConnectors(landmarks, FaceLandmarker.FACE_LANDMARKS_TESSELATION, {
-              color: '#a7f3d066',
-              lineWidth: 1,
-            });
-            drawing.drawConnectors(landmarks, FaceLandmarker.FACE_LANDMARKS_CONTOURS, {
-              color: '#6ee7b7',
-              lineWidth: 2,
-            });
-            drawing.drawLandmarks(landmarks, { color: '#ffffff', radius: 1, lineWidth: 0 });
+            lines(landmarks, mesh, '#a7f3d0a3', 1);
+            lines(landmarks, FaceLandmarker.FACE_LANDMARKS_CONTOURS, '#6ee7b7', 2);
+            dots(landmarks, '#ffffff', 1);
             const body = this.poseLandmarks;
             const connections = [
               [11, 12],
@@ -281,17 +302,15 @@ export class Tracker {
               .filter(
                 ({ start, end }) => visiblePosePoint(body[start]) && visiblePosePoint(body[end]),
               );
-            drawing.drawConnectors(body, connections, { color: '#fbbf24', lineWidth: 3 });
-            drawing.drawLandmarks(
+            lines(body, connections, '#fbbf24', 3);
+            dots(
               [11, 12, 13, 14, 15, 16, 23, 24].map((id) => body[id]).filter(visiblePosePoint),
-              { color: '#fef3c7', radius: 3, lineWidth: 0 },
+              '#fef3c7',
+              3,
             );
             for (const hand of this.handLandmarks) {
-              drawing.drawConnectors(hand, HandLandmarker.HAND_CONNECTIONS, {
-                color: '#60a5fa',
-                lineWidth: 3,
-              });
-              drawing.drawLandmarks(hand, { color: '#dbeafe', radius: 3, lineWidth: 0 });
+              lines(hand, HandLandmarker.HAND_CONNECTIONS, '#60a5fa', 3);
+              dots(hand, '#dbeafe', 3);
             }
           };
         }
@@ -331,6 +350,76 @@ export class Tracker {
     }
   }
 
+  // Creates the enabled landmarkers together. Each belongs to this tracker, so stop() closes it,
+  // only while its start is current; one that finishes after a stop or restart closes itself.
+  private async loadMediaPipe(s: Settings, generation: number) {
+    const vision = await import('@mediapipe/tasks-vision');
+    const { FaceLandmarker, HandLandmarker, PoseLandmarker, FilesetResolver } = vision;
+    const fileset = await FilesetResolver.forVisionTasks('/runtime/mediapipe/wasm');
+    if (generation !== this.generation) return vision;
+    const current = (landmarker: { close(): void }) => {
+      if (generation === this.generation) return true;
+      landmarker.close();
+      return false;
+    };
+    await Promise.all([
+      FaceLandmarker.createFromOptions(fileset, {
+        baseOptions: {
+          modelAssetPath: '/runtime/mediapipe/face_landmarker.task',
+          delegate: s.trackingDelegate,
+        },
+        runningMode: 'VIDEO',
+        numFaces: 1,
+        outputFaceBlendshapes: true,
+        outputFacialTransformationMatrixes: true,
+      }).then((landmarker) => {
+        if (current(landmarker)) this.landmarker = landmarker;
+      }),
+      s.upperBody &&
+        PoseLandmarker.createFromOptions(fileset, {
+          baseOptions: {
+            modelAssetPath: '/runtime/mediapipe/pose_landmarker_lite.task',
+            delegate: 'CPU',
+          },
+          runningMode: 'VIDEO',
+          numPoses: 1,
+          minPoseDetectionConfidence: 0.6,
+          minPosePresenceConfidence: 0.6,
+          minTrackingConfidence: 0.6,
+          outputSegmentationMasks: false,
+        }).then(
+          (pose) => {
+            if (current(pose)) this.pose = pose;
+          },
+          () => {
+            if (generation === this.generation)
+              this.bodyStatus = '上半身资源加载失败 · 仅面捕，请重新准备跟踪资源';
+          },
+        ),
+      s.handTracking &&
+        HandLandmarker.createFromOptions(fileset, {
+          baseOptions: {
+            modelAssetPath: '/runtime/mediapipe/hand_landmarker.task',
+            delegate: 'CPU',
+          },
+          runningMode: 'VIDEO',
+          numHands: 2,
+          minHandDetectionConfidence: 0.6,
+          minHandPresenceConfidence: 0.6,
+          minTrackingConfidence: 0.6,
+        }).then(
+          (hand) => {
+            if (current(hand)) this.hand = hand;
+          },
+          () => {
+            if (generation === this.generation)
+              this.handStatus = '手部资源加载失败 · 面捕继续，请重新准备跟踪资源';
+          },
+        ),
+    ]);
+    return vision;
+  }
+
   private tick(generation: number) {
     if (generation !== this.generation) return;
     // ponytail: inference stays synchronous; move it to workers only if profiling justifies it.
@@ -354,9 +443,15 @@ export class Tracker {
         const result = this.landmarker.detectForVideo(input.canvas, started);
         const matrix = result.facialTransformationMatrixes[0]?.data;
         const face = matrix && fromMediaPipe(result.faceBlendshapes[0]?.categories ?? [], matrix);
-        // Slack (here and for hands) for a tracking loop whose ticks land slightly early.
-        if (this.pose && started - this.lastPoseAt >= 1000 / this.bodyFps - 4) {
-          this.lastPoseAt = started;
+        // A camera slower than the tracking rate leaves fewer ticks to spread pose and hand over.
+        const due = duePoseHand(
+          this.due,
+          started,
+          Math.min(this.trackingFps, this.cameraFps),
+          this.pose ? this.bodyFps : 0,
+          this.hand ? this.handFps : 0,
+        );
+        if (this.pose && due.pose) {
           try {
             const pose = this.pose.detectForVideo(input.canvas, started);
             this.body = fromPose(pose.landmarks[0] ?? [], pose.worldLandmarks[0] ?? []);
@@ -375,8 +470,7 @@ export class Tracker {
             this.bodyStatus = '上半身识别中断 · 仅面捕，停止后重试';
           }
         }
-        if (this.hand && started - this.lastHandAt >= 1000 / this.handFps - 4) {
-          this.lastHandAt = started;
+        if (this.hand && due.hand) {
           try {
             const result = this.hand.detectForVideo(input.canvas, started);
             this.hands = fromHands(result.landmarks, result.worldLandmarks, result.handedness);
@@ -414,9 +508,8 @@ export class Tracker {
       this.body = {};
       this.hands = undefined;
       this.poseLandmarks = [];
-      this.lastPoseAt = -Infinity;
       this.handLandmarks = [];
-      this.lastHandAt = -Infinity;
+      this.due.pose = this.due.hand = -Infinity;
     }
   }
 
@@ -450,8 +543,7 @@ export class Tracker {
     this.hands = undefined;
     this.poseLandmarks = [];
     this.handLandmarks = [];
-    this.lastPoseAt = -Infinity;
-    this.lastHandAt = -Infinity;
+    this.due.pose = this.due.hand = -Infinity;
     const engine = this.engine;
     this.engine = undefined;
     if (engine && engine !== 'mediapipe')
