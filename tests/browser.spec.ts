@@ -360,6 +360,8 @@ test('bundled Haru, Hiyori and Mao render previews, and models can be pinned, se
   ]);
   const maoCard = page.getByRole('button', { name: '切换到 Mao', exact: true });
   await expect(maoCard).toContainText('已置顶');
+  await expect(maoCard.locator('.model-pin')).toBeVisible();
+  await expect(page.locator('.model-pin')).toHaveCount(1);
   await maoCard.click({ button: 'right' });
   await page.keyboard.press('Home');
   await expect(page.getByRole('menuitem', { name: '取消置顶', exact: true })).toBeFocused();

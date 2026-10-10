@@ -1226,6 +1226,11 @@ export function App() {
                           ) : (
                             <UserRound aria-hidden="true" />
                           )}
+                          {pinned && (
+                            <span className="model-pin" aria-hidden="true">
+                              <Pin />
+                            </span>
+                          )}
                         </span>
                         <span className="model-card-name">{entry.name}</span>
                         <small>
