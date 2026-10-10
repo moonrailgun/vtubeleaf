@@ -130,9 +130,9 @@ export default {
   'app.upperBodyNote': '肩が映ると自動で有効',
   'app.upperBodyIdle': '開始後に肩・胴体・腕を認識します',
   'app.faceOnly': '顔のみ認識',
-  'app.handTracking': '両手と指を認識',
-  'app.handTrackingNote': '手の入力をキャラクターのパラメーターにマッピングする必要があります',
-  'app.showTrackingPreview': 'トラッキングプレビューを表示',
+  'app.handTracking': '手と指を認識',
+  'app.handTrackingNote': 'パラメーターへのマッピングが必要',
+  'app.showTrackingPreview': 'プレビューを表示',
   'app.thisWindowOnly': 'このウィンドウのみ',
   'app.meshLabel': '顔メッシュと上半身のキーポイント',
   'app.trackingPausedCaption': 'トラッキング一時停止中',
@@ -581,6 +581,16 @@ export default {
   'sceneRenderer.imageTooLarge': '画像サイズが大きすぎます',
   'sceneRenderer.propMissing':
     'Live2D アイテム「{name}」がライブラリにありません。もう一度インポートしてください',
+  'app.language': '表示言語',
+  'app.languageSystem': 'システムに合わせる',
+  'app.languageRestartHint': '再起動後に反映されます',
+  'app.restartNow': '今すぐ再起動',
+  'studio.restartRecording':
+    'モーションを録画中です。録画を停止して保存してから、再起動してください。',
+  'studio.restartUnsavedRecording':
+    '未保存のモーション録画があります。キャラクター操作で保存してから、再起動してください。',
+  'studio.restartBusy':
+    'キャラクターまたはシーンを読み込み中です。しばらくしてから再起動してください。',
   'app.trackingDelegate': 'トラッキング処理デバイス',
   'app.trackingDelegateGpu': 'GPU · 既定',
   'app.trackingDelegateHint':

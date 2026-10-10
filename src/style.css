@@ -825,6 +825,16 @@ h1 {
   line-height: 1.85;
   margin: 12px 0 0;
 }
+.language-restart {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-top: 8px;
+}
+.language-restart .hint {
+  margin: 0;
+}
 .label-row {
   display: flex;
   align-items: center;

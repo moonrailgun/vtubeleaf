@@ -576,6 +576,15 @@ export default {
   'sceneRenderer.gifEmpty': 'GIF has no frames to show',
   'sceneRenderer.imageTooLarge': 'Image is too large',
   'sceneRenderer.propMissing': 'Live2D prop “{name}” is not in the Library. Import it again',
+  'app.language': 'Language',
+  'app.languageSystem': 'Match system',
+  'app.languageRestartHint': 'Takes effect after a restart',
+  'app.restartNow': 'Restart now',
+  'studio.restartRecording':
+    'A motion recording is in progress. Stop and save it before restarting.',
+  'studio.restartUnsavedRecording':
+    'You have an unsaved motion recording. Save it in Avatar controls before restarting.',
+  'studio.restartBusy': 'An avatar or scene is loading. Try restarting again in a moment.',
   'app.trackingDelegate': 'Tracking processor',
   'app.trackingDelegateGpu': 'GPU · Default',
   'app.trackingDelegateHint': 'Only affects face detection. Switch to CPU if the GPU is unstable.',

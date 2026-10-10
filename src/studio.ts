@@ -109,18 +109,27 @@ export function createStudio(
       publish();
       sendUpdateState();
     },
-    async () => {
-      if (recording.active) throw new Error(t('studio.updateRecording'));
-      if (recording.duration > 0 && savedRecordingRevision !== recording.revision)
-        throw new Error(t('studio.updateUnsavedRecording'));
-      if (modelLoading || sceneBusy) throw new Error(t('studio.updateBusy'));
-      await save(true);
+    () => prepareRestart(true),
+  );
+  // Installing an update and switching the language both relaunch the app.
+  async function prepareRestart(update: boolean) {
+    if (recording.active)
+      throw new Error(t(update ? 'studio.updateRecording' : 'studio.restartRecording'));
+    if (recording.duration > 0 && savedRecordingRevision !== recording.revision)
+      throw new Error(
+        t(update ? 'studio.updateUnsavedRecording' : 'studio.restartUnsavedRecording'),
+      );
+    if (modelLoading || sceneBusy)
+      throw new Error(t(update ? 'studio.updateBusy' : 'studio.restartBusy'));
+    await save(true);
+    // The browser preview has no native outputs or output window to stop.
+    if (native) {
       await virtualCamera.stop(true);
       await obsOutput.setEnabled(false);
-      await stop();
-      await (await WebviewWindow.getByLabel('output'))?.close();
-    },
-  );
+    }
+    await stop();
+    if (native) await (await WebviewWindow.getByLabel('output'))?.close();
+  }
   function sendUpdateState() {
     if (native && !disposed)
       void emitTo('about', 'update-state', {
@@ -1382,6 +1391,11 @@ export function createStudio(
         link.click();
         setTimeout(() => URL.revokeObjectURL(url), 1000);
       }
+    },
+    async restartApp() {
+      await prepareRestart(false);
+      if (native) await invoke('restart_app');
+      else location.reload();
     },
     async resetAll() {
       if (native) await obsOutput.setEnabled(false);

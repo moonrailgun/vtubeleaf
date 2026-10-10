@@ -14,12 +14,25 @@ fn detect(locales: impl IntoIterator<Item = String>) -> usize {
         .unwrap_or(0)
 }
 
+/// A saved language from settings wins; "system" or anything unknown follows the OS.
+fn choose(saved: Option<&str>, locales: impl IntoIterator<Item = String>) -> usize {
+    saved
+        .and_then(|saved| LANGS.iter().position(|lang| *lang == saved))
+        .unwrap_or_else(|| detect(locales))
+}
+
+static INDEX: OnceLock<usize> = OnceLock::new();
+
+/// Fixes the UI language for this run from the saved setting; call before building menus.
+pub fn init(saved: Option<&str>) {
+    let _ = INDEX.set(choose(saved, sys_locale::get_locales()));
+}
+
 fn index() -> usize {
     // Unit tests assert the Chinese messages regardless of the machine's language.
     if cfg!(test) {
         return 1;
     }
-    static INDEX: OnceLock<usize> = OnceLock::new();
     *INDEX.get_or_init(|| detect(sys_locale::get_locales()))
 }
 
@@ -30,13 +43,13 @@ pub fn text(messages: [&'static str; 5]) -> &'static str {
 
 /// Lets every window render in the same language as the native menus and errors.
 #[tauri::command]
-pub fn system_language() -> &'static str {
+pub fn ui_language() -> &'static str {
     LANGS[index()]
 }
 
 #[cfg(test)]
 mod tests {
-    use super::detect;
+    use super::{choose, detect};
 
     #[test]
     fn picks_first_supported_language_or_english() {
@@ -46,5 +59,8 @@ mod tests {
         assert_eq!(detect(tags(&["fr"])), 4);
         assert_eq!(detect(tags(&["de-DE", "ko-KR"])), 0);
         assert_eq!(detect(tags(&[])), 0);
+        assert_eq!(choose(Some("ja"), tags(&["zh-CN"])), 2);
+        assert_eq!(choose(Some("system"), tags(&["zh-CN"])), 1);
+        assert_eq!(choose(None, tags(&["de-DE"])), 0);
     }
 }

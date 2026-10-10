@@ -6,7 +6,7 @@
 
 VTubeLeaf 是一款适用于 **Windows 和 macOS** 的免费虚拟形象软件，提供 **Linux x64 实验支持**。用摄像头，让 Live2D 角色跟着你眨眼、说话和转头，用于直播、录屏或视频聊天。
 
-摄像头画面在你的电脑上处理，不会上传。应用内置三个角色，安装后就可以开始体验。界面支持中文、英语、日语、西班牙语和法语，跟随系统语言自动切换。
+摄像头画面在你的电脑上处理，不会上传。应用内置三个角色，安装后就可以开始体验。界面支持中文、英语、日语、西班牙语和法语，默认跟随系统语言，也可以在「接入 → 画质与通用设置 → 界面语言」中手动选择。
 
 **[前往官网下载](https://vtubeleaf.vercel.app/) · [查看版本与下载](https://github.com/moonrailgun/vtubeleaf/releases/latest) · [反馈问题](https://github.com/moonrailgun/vtubeleaf/issues)**
 

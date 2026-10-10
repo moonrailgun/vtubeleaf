@@ -990,3 +990,10 @@ test('eye smile follows the smile input by default and ignores frowns', () => {
   assert.equal(mapper.map({ ...NEUTRAL }, p, s, 1 / 30).ParamEyeLSmile, 0);
   assert.equal(t(state.parameterNames.ParamEyeLSmile), '左眼微笑');
 });
+
+test('UI language keeps a supported choice and otherwise follows the system', () => {
+  assert.equal(readSettings({}).language, 'system');
+  assert.equal(readSettings({ language: 'ja' }).language, 'ja');
+  for (const language of ['de', 'zh-CN', 'system', 1, null])
+    assert.equal(readSettings({ language }).language, 'system');
+});

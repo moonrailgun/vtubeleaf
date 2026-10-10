@@ -331,6 +331,10 @@ export function App() {
   const draggable = !!(view.model || view.selectedItem) && !busy;
   const set = <K extends keyof Settings>(key: K, value: Settings[K]) => a?.setSetting(key, value);
   const whatsNew = view.ready ? releasesSince(releases, version, s.lastSeenVersion) : [];
+  // The language is applied at startup, so remember the one this run started with.
+  const startLanguage = useRef<Settings['language']>(undefined);
+  if (view.ready) startLanguage.current ??= s.language;
+  const languagePending = view.ready && s.language !== startLanguage.current;
   const range = (key: keyof Settings, label: string, min: number, max: number, step: number) => (
     <Range
       key={key}
@@ -1603,6 +1607,31 @@ export function App() {
               </Tabs.Content>
             </Tabs.Root>
             <Fold title={t('app.qualityAndGeneral')}>
+              <label htmlFor="ui-language">{t('app.language')}</label>
+              <Select
+                value={s.language}
+                onValueChange={(value) => set('language', value as Settings['language'])}
+              >
+                <SelectTrigger id="ui-language">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="system">{t('app.languageSystem')}</SelectItem>
+                  {languageNames.map(([value, name]) => (
+                    <SelectItem key={value} value={value} lang={value}>
+                      {name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              {languagePending && (
+                <div className="language-restart">
+                  <p className="hint">{t('app.languageRestartHint')}</p>
+                  <Button size="sm" onClick={() => run(() => a?.restartApp())}>
+                    {t('app.restartNow')}
+                  </Button>
+                </div>
+              )}
               <label htmlFor="render-fps">{t('app.renderFps')}</label>
               <Select
                 value={String(s.renderFps)}
@@ -1684,6 +1713,15 @@ export function App() {
     </div>
   );
 }
+
+// Each language is listed in its own name, so it can be found from any UI language.
+const languageNames = [
+  ['en', 'English'],
+  ['zh', '简体中文'],
+  ['ja', '日本語'],
+  ['es', 'Español'],
+  ['fr', 'Français'],
+] as const;
 
 function hotkeyLabel(binding = '') {
   return binding.replace(/\b(?:Key|Digit)(?=[A-Z0-9]\b)/g, '');
