@@ -638,12 +638,16 @@ pub fn run() {
         .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(camera::init())
         .setup(|app| {
+            let data_dir = app.path().app_data_dir()?;
+            // Native menus and errors are built in the saved language, so read it before anything else.
+            let saved = settings::load(&data_dir).ok().flatten();
+            locale::init(saved.as_ref().and_then(|value| value["language"].as_str()));
             #[cfg(any(target_os = "linux", windows))]
             media::configure_media(&app.get_webview_window("main").expect("工作台窗口未创建"))?;
             app.manage(Mutex::new(obs::Output::default()));
             app.manage(Mutex::new(texture::Output::default()));
             app.manage(AppState {
-                data_dir: app.path().app_data_dir()?,
+                data_dir,
                 models: Registry::default(),
                 settings: Mutex::default(),
                 tracker: Mutex::default(),
@@ -701,7 +705,7 @@ pub fn run() {
             }
         })
         .invoke_handler(tauri::generate_handler![
-            locale::system_language,
+            locale::ui_language,
             load_settings,
             save_settings,
             save_motion,

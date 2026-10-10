@@ -8,7 +8,7 @@
 
 ## 多语言
 
-- 界面支持英语、中文、日语、西班牙语、法语，按系统语言自动选择，未匹配时用英语。语言由 Rust 端检测（`src-tauri/src/locale.rs`），前端启动时读取。
+- 界面支持英语、中文、日语、西班牙语、法语。语言在启动时由 Rust 端确定（`src-tauri/src/locale.rs`）：优先用设置里的 `language`，为 `system` 时按系统语言选择，未匹配时用英语；前端启动时读取同一结果，所以切换语言需要重启应用。
 - 前端用户可见文案不要硬编码，使用 `src/i18n.ts` 的 `t('命名空间.key', { 变量 })`；新增文案需在 `src/locales/` 五个语言文件里同时添加同名 key，缺任何一种 `tsc` 都会报错。不要在模块顶层调用 `t()`，标签表里存 key，渲染时再翻译。
 - Rust 端用户可见文案使用 `locale::text([英, 中, 日, 西, 法])`；macOS 摄像头宿主桥接（`native/macos-camera/Host.swift`）使用其中的 `tr(...)`。
 - 测试断言中文文案：Playwright 已固定 `zh-CN`；Node 测试在导入后调用 `setLang('zh')`。

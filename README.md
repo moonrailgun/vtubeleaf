@@ -6,7 +6,7 @@
 
 VTubeLeaf is free avatar software for **Windows and macOS**, with **experimental Linux x64 support**. Using your webcam, it makes a Live2D character blink, talk and turn its head along with you — for streaming, screen recording or video calls.
 
-Your camera feed is processed on your computer and never uploaded. Three characters are built in, so you can try it right after installing. The interface is available in English, Chinese, Japanese, Spanish and French and follows your system language.
+Your camera feed is processed on your computer and never uploaded. Three characters are built in, so you can try it right after installing. The interface is available in English, Chinese, Japanese, Spanish and French. It follows your system language by default, or pick one under “Connect → Quality and general → Language”.
 
 **[Download from the website](https://vtubeleaf.vercel.app/) · [Releases and downloads](https://github.com/moonrailgun/vtubeleaf/releases/latest) · [Report an issue](https://github.com/moonrailgun/vtubeleaf/issues)**
 

@@ -1,7 +1,7 @@
 import { readComposition, readScenes, type Composition, type Scene } from './scenes.ts';
 import type { VoiceFrame, VoiceTemplates } from './lipsync.ts';
 import { handSources, type HandSignals } from './hands.ts';
-import type { Key } from './i18n.ts';
+import { langs, type Key, type Lang } from './i18n.ts';
 
 export type UpperBody = {
   bodyYaw?: number;
@@ -141,6 +141,8 @@ export type ModelProfile = {
 };
 
 export type Settings = ModelProfile & {
+  // Applied at startup, so a change takes effect after a restart.
+  language: 'system' | Lang;
   autoCheckUpdates: boolean;
   skippedUpdateVersion: string;
   lastSeenVersion: string;
@@ -194,6 +196,7 @@ export const NEUTRAL: Face = {
 };
 
 export const defaults: Settings = {
+  language: 'system',
   autoCheckUpdates: true,
   skippedUpdateVersion: '',
   lastSeenVersion: '',
@@ -542,6 +545,7 @@ export function readSettings(value: unknown): Settings {
     'nvidiaModelDir',
   ] as const)
     if (typeof v[key] === 'string' && v[key].length < 4096) s[key] = v[key];
+  if (langs.includes(v.language as Lang)) s.language = v.language as Lang;
   if (typeof v.autoCheckUpdates === 'boolean') s.autoCheckUpdates = v.autoCheckUpdates;
   if (typeof v.autoStartVirtualCamera === 'boolean')
     s.autoStartVirtualCamera = v.autoStartVirtualCamera;

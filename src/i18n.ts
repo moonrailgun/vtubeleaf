@@ -10,6 +10,7 @@ export type Lang = 'en' | 'zh' | 'ja' | 'es' | 'fr';
 
 // Every locale must define every key; tsc fails on a missing translation.
 const messages: Record<Lang, Record<Key, string>> = { en, zh, ja, es, fr };
+export const langs = Object.keys(messages) as Lang[];
 
 /** Picks the first supported language from the system preference list, else English. */
 export function detectLang(languages: readonly string[]): Lang {
@@ -27,9 +28,18 @@ export function setLang(value: Lang) {
   if (typeof document !== 'undefined') document.documentElement.lang = value;
 }
 
-/** Follows the OS language Rust reports, matching native menus and errors; browsers keep navigator.languages. */
+/** Uses the language Rust picked at startup (saved choice, else the OS), matching native menus and errors. */
 export async function initLang() {
-  setLang((isTauri() && (await invoke<Lang>('system_language').catch(() => undefined))) || lang);
+  if (isTauri()) {
+    setLang((await invoke<Lang>('ui_language').catch(() => undefined)) || lang);
+    return;
+  }
+  // Browser preview keeps its settings in localStorage; without a saved choice, navigator.languages wins.
+  let saved: unknown;
+  try {
+    saved = JSON.parse(localStorage.getItem('vtubeleaf-preview') ?? 'null')?.language;
+  } catch {}
+  setLang(langs.includes(saved as Lang) ? (saved as Lang) : lang);
 }
 
 /** Translates `key`, replacing `{name}` placeholders with `vars.name`. */

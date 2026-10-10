@@ -588,6 +588,16 @@ export default {
   'sceneRenderer.imageTooLarge': 'Image trop grande',
   'sceneRenderer.propMissing':
     'L’accessoire Live2D « {name} » n’est pas dans la bibliothèque. Réimportez-le',
+  'app.language': 'Langue',
+  'app.languageSystem': 'Langue du système',
+  'app.languageRestartHint': 'Prend effet au redémarrage',
+  'app.restartNow': 'Redémarrer',
+  'studio.restartRecording':
+    'Un enregistrement de mouvement est en cours. Arrêtez-le et enregistrez-le avant de redémarrer.',
+  'studio.restartUnsavedRecording':
+    'Un enregistrement de mouvement n’est pas sauvegardé. Enregistrez-le dans Contrôles de l’avatar avant de redémarrer.',
+  'studio.restartBusy':
+    'Un avatar ou une scène est en cours de chargement. Réessayez de redémarrer dans un instant.',
   'app.trackingDelegate': 'Processeur de suivi',
   'app.trackingDelegateGpu': 'GPU · Par défaut',
   'app.trackingDelegateHint':
