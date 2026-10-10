@@ -1,4 +1,5 @@
 import { type FaceKey, type HotkeyOptions, type Mapping, type ModelProfile } from './state.ts';
+import { t } from './i18n.ts';
 
 export type VtsImportResult = {
   profile: Partial<ModelProfile>;
@@ -91,7 +92,7 @@ function key(v: unknown): string | undefined {
 export function importVtsConfig(raw: unknown, model: Model): VtsImportResult {
   let nodes = 0;
   const validate = (v: unknown, depth = 0): void => {
-    if (++nodes > 20000 || depth > 16) throw new Error('VTS 配置过于复杂');
+    if (++nodes > 20000 || depth > 16) throw new Error(t('vts.tooComplex'));
     if (
       (typeof v === 'string' && v.length <= 2048) ||
       typeof v === 'boolean' ||
@@ -105,12 +106,12 @@ export function importVtsConfig(raw: unknown, model: Model): VtsImportResult {
     }
     if (record(v) && Object.keys(v).length <= 256) {
       for (const [k, value] of Object.entries(v)) {
-        if (!safe(k)) throw new Error('VTS 配置包含危险或过长的字段名');
+        if (!safe(k)) throw new Error(t('vts.unsafeField'));
         validate(value, depth + 1);
       }
       return;
     }
-    throw new Error('VTS 配置包含无效值或超出大小限制');
+    throw new Error(t('vts.invalidValue'));
   };
   validate(raw);
   if (
@@ -119,8 +120,8 @@ export function importVtsConfig(raw: unknown, model: Model): VtsImportResult {
     !Array.isArray(raw.ParameterSettings) ||
     !Array.isArray(raw.Hotkeys)
   )
-    throw new Error('不是受支持的 Version 1 .vtube.json 模型配置');
-  if (raw.Hotkeys.length > 128) throw new Error('VTS 快捷键超过 128 个');
+    throw new Error(t('vts.unsupportedVersion'));
+  if (raw.Hotkeys.length > 128) throw new Error(t('vts.tooManyHotkeys'));
   const warnings: string[] = [];
   const warn = (s: string) => {
     if (!warnings.includes(s)) warnings.push(s);
@@ -146,9 +147,9 @@ export function importVtsConfig(raw: unknown, model: Model): VtsImportResult {
     return matches.length === 1 ? matches[0].id : undefined;
   };
   for (const [i, item] of raw.ParameterSettings.entries()) {
-    const label = `映射 ${i + 1}`;
+    const label = t('vts.mappingLabel', { index: i + 1 });
     if (!record(item) || !safe(item.OutputLive2D)) {
-      warn(`${label}：无效输出参数`);
+      warn(t('vts.invalidOutput', { label }));
       continue;
     }
     if (
@@ -156,7 +157,7 @@ export function importVtsConfig(raw: unknown, model: Model): VtsImportResult {
         (k) => item[k] !== undefined && typeof item[k] !== 'boolean',
       )
     ) {
-      warn(`${label}：开关字段类型无效，已跳过`);
+      warn(t('vts.invalidSwitch', { label }));
       continue;
     }
     const id = item.OutputLive2D;
@@ -164,30 +165,24 @@ export function importVtsConfig(raw: unknown, model: Model): VtsImportResult {
       (p) => p.id === id && safe(p.id) && number(p.min) && number(p.max) && p.min <= p.max,
     );
     if (!p) {
-      warn(`${label}：当前模型不存在输出参数 ${id}`);
+      warn(t('vts.missingOutput', { label, id }));
       continue;
     }
-    if (item.UseBlinking === true)
-      warn(`${id}：VTS 逐参数自动眨眼无法等同于全局自动眨眼，仅导入追踪映射`);
+    if (item.UseBlinking === true) warn(t('vts.blinking', { id }));
     if (
       item.UseBreathing !== true &&
       (typeof item.Input !== 'string' || !Object.hasOwn(sources, item.Input))
     ) {
-      warn(`${id}：不支持输入源 ${String(item.Input).slice(0, 80)}`);
+      warn(t('vts.unsupportedInput', { id, input: String(item.Input).slice(0, 80) }));
       continue;
     }
     const [source, divisor, offset = 0] =
       item.UseBreathing === true ? ['breath' as const, 1] : sources[item.Input as string];
-    if (source === 'gazeX' || source === 'gazeY')
-      warn('视线输入：当前追踪使用双眼合并视线，左右眼独立方向按合并信号近似');
-    if (source === 'brows' || source === 'browLeft' || source === 'browRight')
-      warn('眉毛输入：按当前追踪的眉毛升降归一化，需校准中立姿态，非 VTS 原算法');
-    if (source === 'cheekPuff')
-      warn('CheekPuff：当前仅 NVIDIA 引擎提供鼓嘴信号；其他引擎可用参数固定值手动控制');
-    if (source === 'tongueOut')
-      warn('TongueOut：当前追踪引擎未提供吐舌信号；已保留映射，可用参数固定值手动控制');
-    if (source === 'breath')
-      warn('自动呼吸：忽略原输入源，使用当前运行时的周期曲线，节奏可能与 VTS 不同');
+    if (source === 'gazeX' || source === 'gazeY') warn(t('vts.gaze'));
+    if (source === 'brows' || source === 'browLeft' || source === 'browRight') warn(t('vts.brows'));
+    if (source === 'cheekPuff') warn(t('vts.cheekPuff'));
+    if (source === 'tongueOut') warn(t('vts.tongueOut'));
+    if (source === 'breath') warn(t('vts.breath'));
     const inputLo = source === 'breath' ? 0 : item.InputRangeLower;
     const inputHi = source === 'breath' ? 1 : item.InputRangeUpper;
     if (
@@ -198,7 +193,7 @@ export function importVtsConfig(raw: unknown, model: Model): VtsImportResult {
       (item.Smoothing as number) < 0 ||
       (item.Smoothing as number) > 100
     ) {
-      warn(`${id}：无效范围或平滑值`);
+      warn(t('vts.invalidRange', { id }));
       continue;
     }
     let lo = ((inputLo as number) - offset) / divisor,
@@ -210,15 +205,15 @@ export function importVtsConfig(raw: unknown, model: Model): VtsImportResult {
       [outLo, outHi] = [outHi, outLo];
     }
     if (Math.abs(lo) > 1000 || Math.abs(hi) > 1000) {
-      warn(`${id}：输入范围超出映射限制，已跳过`);
+      warn(t('vts.inputOutOfRange', { id }));
       continue;
     }
     if (Object.hasOwn(mappings, id)) {
-      warn(`${id}：重复输出映射，保留第一项`);
+      warn(t('vts.duplicateOutput', { id }));
       continue;
     }
     // ponytail: slider proportion only; exact VTS smoothing needs its unpublished algorithm.
-    if (item.Smoothing !== 0) warn(`${id}：平滑滑杆按 0–100 → 0–0.5 秒近似，非 VTS 原算法`);
+    if (item.Smoothing !== 0) warn(t('vts.smoothing', { id }));
     mappings[id] = {
       source,
       inputMin: lo,
@@ -249,37 +244,31 @@ export function importVtsConfig(raw: unknown, model: Model): VtsImportResult {
       if (inputMin >= -1000) {
         legacyMappings[id] = mappings[id];
         mappings[id] = { ...mappings[id], inputMin };
-        warn(
-          `${id}：微笑输入的中立位置已对齐模型默认值，避免静止时嘴形落到变形端点；非 VTS 原算法`,
-        );
+        warn(t('vts.smileNeutral', { id }));
       }
     }
   }
-  if (Object.keys(mappings).length)
-    warn(
-      '追踪范围按当前输入源归一化，保留作者输出范围及外推设置；最终值受模型本身范围限制，灵敏度、镜像、校准仍生效，需在预览中校准方向和幅度',
-    );
+  if (Object.keys(mappings).length) warn(t('vts.rangeNote'));
   const refs = record(raw.FileReferences) ? raw.FileReferences : {};
   for (const [field, target, label] of [
-    ['IdleAnimation', 'idleMotion', '待机动画'],
-    ['IdleAnimationWhenTrackingLost', 'lostIdleMotion', '追踪丢失待机动画'],
+    ['IdleAnimation', 'idleMotion', 'vts.idleMotion'],
+    ['IdleAnimationWhenTrackingLost', 'lostIdleMotion', 'vts.lostIdleMotion'],
   ] as const) {
     if (!refs[field]) continue;
     const id = resolve(refs[field], model.motions);
     if (id) profile[target] = id;
     else
       warn(
-        `${label}「${String(refs[field]).slice(0, 160)}」：文件缺失或存在同名歧义，未导入。请从原模型包重新导入，并检查同名文件。`,
+        t('vts.missingMotionFile', { label: t(label), file: String(refs[field]).slice(0, 160) }),
       );
   }
-  if (profile.lostIdleMotion)
-    warn('追踪丢失待机动画：使用应用的追踪丢失延迟，VTS 的等待时长未转换');
+  if (profile.lostIdleMotion) warn(t('vts.lostIdleDelay'));
   if (raw.SavedActiveExpressions !== undefined) {
     const saving = record(raw.GeneralSettings)
       ? raw.GeneralSettings.EnableExpressionSaving
       : undefined;
     if (saving !== undefined && typeof saving !== 'boolean') {
-      warn('SavedActiveExpressions：EnableExpressionSaving 开关类型无效，未导入默认表情');
+      warn(t('vts.expressionSavingInvalid'));
     } else if (saving === false) {
       profile.defaultExpressions = [];
     } else if (Array.isArray(raw.SavedActiveExpressions)) {
@@ -289,30 +278,28 @@ export function importVtsConfig(raw: unknown, model: Model): VtsImportResult {
         if (id) {
           if (!profile.defaultExpressions.includes(id)) profile.defaultExpressions.push(id);
         } else {
-          warn(
-            `默认表情「${String(file).slice(0, 160)}」：文件缺失、引用无效或存在同名歧义，未导入。请从原模型包重新导入，并检查同名文件。`,
-          );
+          warn(t('vts.missingDefaultExpression', { file: String(file).slice(0, 160) }));
         }
       }
       if (profile.defaultExpressions.length > 128) {
         profile.defaultExpressions.length = 128;
-        warn('默认表情超过 128 个，仅导入前 128 个');
+        warn(t('vts.tooManyDefaultExpressions'));
       }
     } else {
-      warn('SavedActiveExpressions：应为表情文件列表，未导入默认表情');
+      warn(t('vts.savedExpressionsInvalid'));
     }
   }
   if (record(raw.PhysicsSettings)) {
     if (raw.PhysicsSettings.Use === false) profile.physicsStrength = 0;
-    warn('物理设置：仅支持 Use=false 关闭物理；强度滑杆、风、帧率枚举及旧版算法未转换');
+    warn(t('vts.physics'));
   }
   profile.useKeyboardHotkeys = !(
     record(raw.HotkeySettings) && raw.HotkeySettings.UseKeyboardHotkeys === false
   );
   for (const [i, item] of raw.Hotkeys.entries()) {
-    const label = `快捷键 ${i + 1}`;
+    const label = t('vts.hotkeyLabel', { index: i + 1 });
     if (!record(item)) {
-      warn(`${label}：无效配置`);
+      warn(t('vts.invalidHotkey', { label }));
       continue;
     }
     if (
@@ -324,26 +311,25 @@ export function importVtsConfig(raw: unknown, model: Model): VtsImportResult {
         'DeactivateAfterSeconds',
       ].some((k) => item[k] !== undefined && typeof item[k] !== 'boolean')
     ) {
-      warn(`${label}：开关字段类型无效，已跳过`);
+      warn(t('vts.invalidSwitch', { label }));
       continue;
     }
     if (item.IsActive === false) {
-      warn(`${label}：VTS 已禁用，未导入`);
+      warn(t('vts.hotkeyDisabled', { label }));
       continue;
     }
     const gesture = record(item.HandGestureSettings) ? item.HandGestureSettings : {};
-    if (gesture.GestureLeft || gesture.GestureRight) warn(`${label}：手势触发不支持`);
-    if (record(item.TwitchTriggers) && item.TwitchTriggers.Active)
-      warn(`${label}：Twitch 触发不支持`);
+    if (gesture.GestureLeft || gesture.GestureRight) warn(t('vts.gesture', { label }));
+    if (record(item.TwitchTriggers) && item.TwitchTriggers.Active) warn(t('vts.twitch', { label }));
     if (gesture.DeactivateExpWhenGestureNotDetected) {
-      warn(`${label}：手势停用不支持，整项跳过`);
+      warn(t('vts.gestureDeactivate', { label }));
       continue;
     }
     if (
       item.Action !== 'ToggleExpression' &&
       (item.DeactivateAfterKeyUp || item.DeactivateAfterSeconds)
     ) {
-      warn(`${label}：当前仅表情支持松键或定时停用，整项跳过`);
+      warn(t('vts.deactivateExpressionOnly', { label }));
       continue;
     }
     if (
@@ -352,7 +338,7 @@ export function importVtsConfig(raw: unknown, model: Model): VtsImportResult {
         item.DeactivateAfterSecondsAmount <= 0 ||
         item.DeactivateAfterSecondsAmount > 3600)
     ) {
-      warn(`${label}：定时停用秒数无效（范围 0–3600，不含 0），整项跳过`);
+      warn(t('vts.invalidDeactivateSeconds', { label }));
       continue;
     }
     let action: string | undefined;
@@ -362,20 +348,23 @@ export function importVtsConfig(raw: unknown, model: Model): VtsImportResult {
       if (id) action = `${expression ? 'expression' : 'motion'}:${id}`;
       else {
         warn(
-          `${label}${safe(item.Name) ? `「${item.Name.slice(0, 80)}」` : ''}：表情/动作文件「${String(item.File).slice(0, 160)}」缺失或存在同名歧义，未导入。请从原模型包重新导入，并检查同名文件。`,
+          t('vts.missingHotkeyFile', {
+            label: safe(item.Name)
+              ? t('vts.namedHotkey', { label, name: item.Name.slice(0, 80) })
+              : label,
+            file: String(item.File).slice(0, 160),
+          }),
         );
         continue;
       }
     } else if (item.Action === 'RemoveAllExpressions') action = 'clear-expressions';
     else {
-      warn(
-        `${label}：不支持动作 ${String(item.Action).slice(0, 80)}（场景/道具缺少对应目标，停止/重置无已验证的 VTS 枚举）`,
-      );
+      warn(t('vts.unsupportedAction', { label, action: String(item.Action).slice(0, 80) }));
       continue;
     }
     const triggers = record(item.Triggers) ? item.Triggers : {};
     if (number(triggers.ScreenButton) && triggers.ScreenButton >= 0)
-      warn(`${label}：屏幕按钮触发不支持`);
+      warn(t('vts.screenButton', { label }));
     const rawKeys = [triggers.Trigger1, triggers.Trigger2, triggers.Trigger3].filter(
       (k) => k !== '' && k !== undefined,
     );
@@ -383,14 +372,14 @@ export function importVtsConfig(raw: unknown, model: Model): VtsImportResult {
     if (
       rawKeys.some((k) => typeof k === 'string' && /^(Left|Right)(Control|Shift|Windows)$/.test(k))
     )
-      warn(`${label}：左右修饰键合并为 Control/Shift/Super，无法区分按键所在侧`);
+      warn(t('vts.sideModifiers', { label }));
     const modifiers = ['Control', 'Alt', 'Shift', 'Super'];
     if (
       !converted.length ||
       converted.some((k) => !k) ||
       converted.filter((k) => !modifiers.includes(k!)).length !== 1
     ) {
-      warn(`${label}：按键枚举不支持或不是“修饰键 + 单个按键”，未导入`);
+      warn(t('vts.unsupportedKeys', { label }));
       continue;
     }
     const shortcut = [
@@ -398,7 +387,7 @@ export function importVtsConfig(raw: unknown, model: Model): VtsImportResult {
       converted.find((k) => !modifiers.includes(k!))!,
     ].join('+');
     if (Object.hasOwn(hotkeys, action) || Object.values(hotkeys).includes(shortcut)) {
-      warn(`${label}：动作或按键重复，保留第一项`);
+      warn(t('vts.duplicateHotkey', { label }));
       continue;
     }
     hotkeys[action] = shortcut;
@@ -410,7 +399,7 @@ export function importVtsConfig(raw: unknown, model: Model): VtsImportResult {
         item.FadeSecondsAmount <= 10
       )
         options.fadeSeconds = item.FadeSecondsAmount;
-      else warn(`${label}：淡入淡出秒数无效（范围 0–10），使用运行时默认值`);
+      else warn(t('vts.invalidFade', { label }));
     }
     if (item.Action === 'ToggleExpression') {
       if (item.DeactivateAfterKeyUp) options.release = true;
@@ -419,10 +408,7 @@ export function importVtsConfig(raw: unknown, model: Model): VtsImportResult {
     }
     if (item.Action === 'TriggerAnimation') {
       options.motionMode = item.StopsOnLastFrame ? 'hold' : 'once';
-      if (item.StopsOnLastFrame)
-        warn(
-          `${label}：停留末帧使用当前运行时；再次按键停止，但已映射参数也会保持，和 VTS 的追踪参数回退不同`,
-        );
+      if (item.StopsOnLastFrame) warn(t('vts.holdLastFrame', { label }));
     }
     hotkeyOptions[action] = options;
   }
@@ -437,9 +423,7 @@ export function importVtsConfig(raw: unknown, model: Model): VtsImportResult {
   ])
     if (raw[field] !== undefined)
       warn(
-        field === 'GeneralSettings'
-          ? 'GeneralSettings：仅处理表情保存开关，其他 VTS 专用设置未转换'
-          : `${field}：VTS 专用配置未导入`,
+        field === 'GeneralSettings' ? t('vts.generalSettings') : t('vts.vtsOnlyField', { field }),
       );
   const known = [
     'Version',
@@ -462,12 +446,16 @@ export function importVtsConfig(raw: unknown, model: Model): VtsImportResult {
     'SavedActiveExpressions',
   ];
   for (const field of Object.keys(raw))
-    if (!known.includes(field)) warn(`${field}：未知 VTS 配置字段，未导入`);
+    if (!known.includes(field)) warn(t('vts.unknownField', { field }));
   return {
     profile,
     warnings,
     legacyMappings,
-    summary: `导入 ${Object.keys(mappings).length} 个映射、${Object.keys(hotkeys).length} 个快捷键${profile.idleMotion ? '、待机动画' : ''}；${warnings.length} 条兼容性提示`,
+    summary: t(profile.idleMotion ? 'vts.summaryWithIdle' : 'vts.summary', {
+      mappings: Object.keys(mappings).length,
+      hotkeys: Object.keys(hotkeys).length,
+      warnings: warnings.length,
+    }),
   };
 }
 
@@ -481,6 +469,7 @@ export function repairVtsMappings(
   for (const [id, repaired] of Object.entries(result.profile.mappings ?? {})) {
     const legacy = result.legacyMappings[id];
     const current = Object.hasOwn(mappings, id) ? mappings[id] : undefined;
+    // Legacy report lines were persisted by Chinese-only releases; match them verbatim.
     const skipped = `${id}：范围超出当前模型或映射限制，已跳过`;
     if (!current && repaired.source === 'mouthOpen' && report.includes(skipped)) {
       mappings[id] = { ...repaired };

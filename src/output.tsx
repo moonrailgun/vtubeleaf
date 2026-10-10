@@ -7,6 +7,7 @@ import { defaults, readSettings, type Settings } from './state';
 import type { SceneFrames } from './scene-renderer';
 import { Hotkeys } from './hotkeys';
 import { startFrameLoop } from './frame-loop';
+import { t } from './i18n.ts';
 
 export type OutputState = {
   model: ModelInfo | null;
@@ -49,11 +50,7 @@ export function Output() {
     const unlisteners: UnlistenFn[] = [];
     const report = () => {
       if (native && !disposed)
-        void emitTo(
-          'main',
-          'output-error',
-          '输出渲染失败。请关闭输出窗口后重试，并检查模型。',
-        ).catch(() => {});
+        void emitTo('main', 'output-error', t('output.renderError')).catch(() => {});
     };
     const own = async (subscription: Promise<UnlistenFn>) => {
       const unlisten = await subscription;
@@ -189,5 +186,5 @@ export function Output() {
       document.title = previousTitle;
     };
   }, []);
-  return <div id="stage" ref={container} aria-label="角色输出" />;
+  return <div id="stage" ref={container} aria-label={t('output.stageLabel')} />;
 }

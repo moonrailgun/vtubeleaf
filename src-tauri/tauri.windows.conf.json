@@ -12,6 +12,7 @@
     "windows": {
       "nsis": {
         "installMode": "currentUser",
+        "languages": ["English", "SimpChinese", "Japanese", "Spanish", "French"],
         "installerHooks": "../native/windows-camera/installer.nsh"
       }
     }

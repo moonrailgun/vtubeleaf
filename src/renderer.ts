@@ -6,6 +6,7 @@ import { clamp, describeParameters, type Parameter, type Settings } from './stat
 import { SceneLayers, type SceneFrames } from './scene-renderer';
 import { physicsGroupsFromJson, wrapPhysics, type PhysicsGroup } from './physics';
 import { layoutMasks, maskBufferSize } from './masks';
+import { t } from './i18n';
 
 install(PIXI);
 // Deformed meshes minify unevenly; without this the mip level follows the blurrier axis.
@@ -78,6 +79,9 @@ const record = (snapshot?: Snapshot): Record<string, number> =>
 
 let coreReady: Promise<void> | undefined;
 
+/** A missing or incompatible Cubism Core, reported as-is instead of as a generic render failure. */
+class CoreError extends Error {}
+
 async function runtime() {
   coreReady ??= new Promise<void>((resolve, reject) => {
     const script = document.createElement('script');
@@ -86,7 +90,7 @@ async function runtime() {
     script.onerror = () => {
       script.remove();
       coreReady = undefined;
-      reject(new Error('缺少 Live2D Core。请按构建说明安装官方 Cubism SDK 运行资源。'));
+      reject(new CoreError(t('renderer.coreMissing')));
     };
     document.head.append(script);
   });
@@ -249,7 +253,7 @@ export class AvatarStage {
       const expressionDefinitions = (json.FileReferences.Expressions ?? []).map(
         (entry: { Name: string; File: string }, index: number) => ({
           id: String(index),
-          name: entry.Name || `表情 ${index + 1}`,
+          name: entry.Name || t('renderer.expressionFallback', { index: index + 1 }),
           file: entry.File,
         }),
       );
@@ -282,7 +286,7 @@ export class AvatarStage {
       const resolved = new Map<string, string>();
       for (const path of paths) {
         const resource = path.replace(/^\.\//, '');
-        if (!info.files.includes(resource)) throw new Error('模型包含未经验证的资源引用。');
+        if (!info.files.includes(resource)) throw new Error(t('renderer.unverifiedResource'));
         const data = await invoke<ArrayBuffer>('read_model_resource', { id: info.id, resource });
         if (/\.(motion3|exp3)\.json$/i.test(path))
           documents.set(path, JSON.parse(new TextDecoder().decode(data)));
@@ -310,7 +314,8 @@ export class AvatarStage {
       const textures = await Promise.allSettled(
         settings.textures.map((path) => PIXI.Texture.fromURL(path)),
       );
-      if (textures.some((result) => result.status === 'rejected')) throw new Error('纹理加载失败');
+      if (textures.some((result) => result.status === 'rejected'))
+        throw new Error(t('renderer.textureFailed'));
       const options = {
         autoUpdate: false,
         autoInteract: false,
@@ -326,10 +331,7 @@ export class AvatarStage {
       }
       const internal = candidate.internalModel as Cubism4InternalModel;
       const core = internal.coreModel.getModel();
-      if (!core.drawables.renderOrders)
-        throw new Error(
-          'Cubism Core 版本不兼容：当前渲染库请使用官方 Cubism 5 SDK for Web R4 的 Core。',
-        );
+      if (!core.drawables.renderOrders) throw new CoreError(t('renderer.coreIncompatible'));
       const renderer = internal.renderer as unknown as {
         _clippingManager: { _clippingContextListForMask: unknown[] };
         setClippingMaskBufferSize(size: number): void;
@@ -536,12 +538,8 @@ export class AvatarStage {
         PIXI.utils.TextureCache[url]?.destroy(true);
         URL.revokeObjectURL(url);
       }
-      if (
-        error instanceof Error &&
-        /^(缺少 Live2D Core|Cubism Core 版本不兼容)/.test(error.message)
-      )
-        throw error;
-      throw new Error('模型渲染失败：请检查 moc3 版本、纹理和官方 Cubism Core 是否兼容。');
+      if (error instanceof CoreError) throw error;
+      throw new Error(t('renderer.renderFailed'));
     }
   }
 
@@ -606,7 +604,7 @@ export class AvatarStage {
   ): PIXI.RenderTexture {
     const renderer = this.app.renderer as PIXI.Renderer;
     // A lost context renders and reads nothing, which would republish the previous frame.
-    if (renderer.gl.isContextLost()) throw new Error('显卡上下文已丢失');
+    if (renderer.gl.isContextLost()) throw new Error(t('renderer.contextLost'));
     const resolution = supersampled ? 2 : 1;
     if (
       target.texture?.width !== width ||
@@ -747,7 +745,7 @@ export class AvatarStage {
   }
 
   thumbnail() {
-    if (!this.model) throw new Error('角色尚未加载');
+    if (!this.model) throw new Error(t('renderer.notLoaded'));
     const model = this.model;
     const scale = model.scale.clone(),
       position = model.position.clone(),
@@ -790,7 +788,7 @@ export class AvatarStage {
         top = Math.min(top, y);
         bottom = Math.max(bottom, y);
       }
-      if (right <= left || bottom <= top) throw new Error('角色预览为空');
+      if (right <= left || bottom <= top) throw new Error(t('renderer.emptyPreview'));
       // ponytail: without a head hit area, frame the upper visible body; use a supplied icon for unusual poses.
       let side = Math.min(bottom - top, Math.max(right - left, (bottom - top) * 0.45));
       let x = (left + right - side) / 2,
@@ -910,7 +908,7 @@ export class AvatarStage {
       void audio.play().catch(() => {
         if (this.motionAudio === audio) {
           this.stopMotionAudio();
-          this.onWarning?.('动作音效播放失败。请检查音频文件，或点击动作按钮重试。');
+          this.onWarning?.(t('renderer.motionSoundFailed'));
         }
       });
     }
@@ -939,7 +937,7 @@ export class AvatarStage {
   }
 
   captureHeldParameters() {
-    if (this.playing?.mode === 'hold') throw new Error('请等保持动作播放结束后，再保存默认外观。');
+    if (this.playing?.mode === 'hold') throw new Error(t('renderer.holdMotionPlaying'));
     return { ...this.held };
   }
 

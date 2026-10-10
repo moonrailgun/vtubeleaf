@@ -1,0 +1,3 @@
+"NSCameraUsageDescription" = "VTubeLeaf utilise la caméra sur ce Mac pour suivre vos expressions et animer votre avatar. Les images de la caméra ne sont jamais envoyées.";
+"NSMicrophoneUsageDescription" = "Uniquement lorsque vous activez la synchro labiale audio, VTubeLeaf analyse le son du microphone sur ce Mac pour la synchro labiale. Aucun son n’est enregistré ni envoyé.";
+"NSSystemExtensionUsageDescription" = "Fournit le canevas de l’avatar VTubeLeaf comme caméra virtuelle aux applis de visioconférence.";

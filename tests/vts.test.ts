@@ -3,6 +3,9 @@ import { readFileSync } from 'node:fs';
 import test from 'node:test';
 import { importVtsConfig, repairVtsMappings } from '../src/vts.ts';
 import { FaceMapper, NEUTRAL, readSettings } from '../src/state.ts';
+import { setLang } from '../src/i18n.ts';
+
+setLang('zh');
 
 const fixture = () =>
   JSON.parse(

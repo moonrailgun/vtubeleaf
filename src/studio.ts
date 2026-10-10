@@ -34,6 +34,7 @@ import { readComposition, snapshotScene, type Composition, type SceneItem } from
 import type { OutputFrame, OutputState } from './output';
 import { AppUpdater } from './updater';
 import { version } from '../package.json';
+import { lang, t } from './i18n';
 
 export function createStudio(
   container: HTMLElement,
@@ -56,7 +57,7 @@ export function createStudio(
     supported: false,
     installed: false,
     active: false,
-    message: '原生虚拟摄像头需要 macOS 桌面应用',
+    message: t('studio.cameraNeedsMac'),
   };
   const previews: Record<string, string> = {};
   let previewStage: AvatarStage | undefined;
@@ -92,10 +93,10 @@ export function createStudio(
   } | null = null;
   let calibrationTimer = 0;
   let inputFrames = 0;
-  let renderStatus = '画面预览';
-  let faceStatus = '点击开始后才会采集';
+  let renderStatus = t('studio.renderPreview');
+  let faceStatus = t('studio.faceIdle');
   let faceInput: Partial<Face> = {};
-  let notice = { message: '画面与跟踪数据仅在本机处理；麦克风需单独开启。', error: false };
+  let notice = { message: t('studio.privacyNotice'), error: false };
   const events: string[] = [];
   const unlisteners: UnlistenFn[] = [];
   const mapper = new FaceMapper();
@@ -109,10 +110,10 @@ export function createStudio(
       sendUpdateState();
     },
     async () => {
-      if (recording.active) throw new Error('正在录制动作，请先停止录制并保存，再安装更新。');
+      if (recording.active) throw new Error(t('studio.updateRecording'));
       if (recording.duration > 0 && savedRecordingRevision !== recording.revision)
-        throw new Error('有未保存的动作录制，请先在角色控制中保存，再安装更新。');
-      if (modelLoading || sceneBusy) throw new Error('正在加载角色或场景，请稍后再安装。');
+        throw new Error(t('studio.updateUnsavedRecording'));
+      if (modelLoading || sceneBusy) throw new Error(t('studio.updateBusy'));
       await save(true);
       await virtualCamera.stop(true);
       await obsOutput.setEnabled(false);
@@ -205,7 +206,7 @@ export function createStudio(
     if (disposed) return;
     notice = { message, error };
     if (error) {
-      events.unshift(`${new Date().toLocaleTimeString('zh-CN')} · ${message}`);
+      events.unshift(`${new Date().toLocaleTimeString(lang)} · ${message}`);
       events.length = Math.min(events.length, 8);
       if (native) void emitTo('about', 'about-events', [...events]).catch(() => {});
     }
@@ -217,7 +218,7 @@ export function createStudio(
         ? error
         : error instanceof Error
           ? error.message
-          : '操作失败，请重试。',
+          : t('studio.failed'),
       true,
     );
   const audio = new AudioLipSync((message) => {
@@ -258,7 +259,7 @@ export function createStudio(
           if (native) await invoke('save_settings', { settings: value });
           else localStorage.setItem('vtubeleaf-preview', JSON.stringify(value));
         } catch {
-          const message = '设置保存失败。请检查磁盘空间和应用配置目录权限。';
+          const message = t('studio.saveFailed');
           notify(message, true);
           if (requireSuccess) throw new Error(message);
         }
@@ -434,7 +435,7 @@ export function createStudio(
     trackingOperation++;
     tracking = 'stopped';
     lastFace = null;
-    faceStatus = '跟踪已停止';
+    faceStatus = t('studio.trackingStopped');
     faceInput = {};
     cancelCalibration();
     micStarting = false;
@@ -454,7 +455,13 @@ export function createStudio(
     if (disposed) return;
     library = result.models;
     libraryDirectory = result.directory;
-    if (result.errors.length) notify(`部分角色暂不可用：${result.errors.join('；')}`, true);
+    if (result.errors.length)
+      notify(
+        t('studio.someModelsUnavailable', {
+          errors: result.errors.join(t('studio.errorSeparator')),
+        }),
+        true,
+      );
     publish();
     // Icons decode in the background, a few at a time, so they never delay restoring the model.
     const queue = [...library];
@@ -487,7 +494,7 @@ export function createStudio(
   async function savePreview(entry: ModelInfo, thumbnail: HTMLCanvasElement) {
     const png = await new Promise<Blob>((resolve, reject) =>
       thumbnail.toBlob(
-        (blob) => (blob ? resolve(blob) : reject(new Error('角色预览生成失败'))),
+        (blob) => (blob ? resolve(blob) : reject(new Error(t('studio.previewFailed')))),
         'image/png',
       ),
     );
@@ -562,6 +569,7 @@ export function createStudio(
           p.default < Math.max(m.outputMin, m.outputMax)
         );
       });
+    // Legacy report lines were persisted by Chinese-only releases; match them verbatim.
     const needsMouthRepair = existingProfile?.vtsImportReport.some(
       (line) =>
         line.includes('范围超出当前模型或映射限制，已跳过') ||
@@ -574,18 +582,20 @@ export function createStudio(
         if (!disposed && operation === modelOperation && raw != null)
           vts = importVtsConfig(raw, target);
       } catch (error) {
-        vtsError = `VTS ${existingProfile ? '旧嘴形修正' : '自动导入'}已跳过：${error instanceof Error ? error.message : String(error)}。可通过“导入 VTube Studio 配置”重试。`;
+        vtsError = t(existingProfile ? 'studio.vtsRepairSkipped' : 'studio.vtsImportSkipped', {
+          error: error instanceof Error ? error.message : String(error),
+        });
       }
     }
     return { vts, vtsError };
   }
   async function useModel(next: ModelInfo, operation: number) {
     if (disposed || operation !== modelOperation) return;
-    if (!stage) throw new Error('WebGL 渲染不可用。请检查显卡驱动或重新启动应用。');
+    if (!stage) throw new Error(t('studio.webglUnavailable'));
     cancelCalibration();
     await stopAudio();
     voiceCalibration = null;
-    notify('正在加载角色资源…');
+    notify(t('studio.loadingModel'));
     updateLibrary(next);
     publish();
     // The icon loads alongside the model; it only decides below whether to save a thumbnail.
@@ -611,7 +621,7 @@ export function createStudio(
       applyVts(vts);
       vtsSummary = vts.summary;
     } else if (vts && repairVtsMappings(settings.mappings, vts, settings.vtsImportReport)) {
-      vtsSummary = '已修正旧 VTS 嘴部映射，保留作者开合幅度并对齐微笑中立位置。';
+      vtsSummary = t('studio.vtsRepaired');
       settings.vtsImportReport.push(vtsSummary);
     } else if (vtsError && !existingProfile) settings.vtsImportReport = [vtsError];
     settings.parameterOverrides = { ...settings.defaultParameterOverrides };
@@ -632,13 +642,15 @@ export function createStudio(
       try {
         await savePreview(next, stage.thumbnail());
       } catch {
-        notify('角色已加载，但预览保存失败。请检查磁盘空间和目录权限。', true);
+        notify(t('studio.previewSaveFailed'), true);
         return;
       }
     }
     if (operation === modelOperation)
       notify(
-        `角色已就位。${vtsError || vtsSummary || '开始跟踪后，保持自然姿态并校准。'}`,
+        t('studio.modelReady', {
+          detail: vtsError || vtsSummary || t('studio.modelReadyHint'),
+        }),
         !!vtsError,
       );
     return vtsError;
@@ -675,8 +687,7 @@ export function createStudio(
         : invoke<unknown>('choose_vts_config'));
       if (disposed || revision !== profileRevision || modelLoading || sceneBusy) return;
       if (raw == null) {
-        if (source === 'model')
-          throw new Error('未找到随模型保存的 VTS 配置，请手动选择 .vtube.json 导入。');
+        if (source === 'model') throw new Error(t('studio.noModelVts'));
         return;
       }
       const result = importVtsConfig(raw, stage);
@@ -696,12 +707,12 @@ export function createStudio(
     setObsOutput(enabled: boolean) {
       // The frame loop submits nothing while rendering is broken, so OBS would stay blank.
       if (enabled && (!stage || failedRevision === modelRevision))
-        throw new Error('画面渲染失败，无法启动透明输出。请重新加载角色后再试。');
+        throw new Error(t('studio.obsRenderFailed'));
       return obsOutput.setEnabled(enabled, settings.obsOutput);
     },
     async copyObsUrl() {
       await navigator.clipboard.writeText(obsOutput.state.url);
-      notify('OBS 浏览器源地址已复制。');
+      notify(t('studio.obsUrlCopied'));
     },
     selectItem(id: string) {
       selectedItem = id;
@@ -731,10 +742,10 @@ export function createStudio(
       changed();
     },
     async importAsset(background = false) {
-      if (!native) return notify('素材导入需要桌面应用。');
+      if (!native) return notify(t('studio.assetNeedsDesktop'));
       if (sceneBusy) return;
       if (!background && settings.composition.items.length >= 32)
-        throw new Error('每个场景最多 32 个道具');
+        throw new Error(t('studio.tooManyItems'));
       sceneBusy = true;
       publish();
       try {
@@ -768,7 +779,7 @@ export function createStudio(
         settings.composition.items.length >= 32 ||
         settings.composition.items.filter((i) => i.kind === 'live2d').length >= 4
       )
-        throw new Error('每个场景最多 32 个道具，其中最多 4 个 Live2D 道具');
+        throw new Error(t('studio.tooManyLive2dItems'));
       const entry = library.find((m) => m.path === path);
       if (!entry) return;
       sceneBusy = true;
@@ -802,7 +813,7 @@ export function createStudio(
     },
     saveScene(name: string, id = '') {
       if (sceneBusy || !name.trim()) return;
-      if (!id && settings.scenes.length >= 32) throw new Error('最多保存 32 个场景');
+      if (!id && settings.scenes.length >= 32) throw new Error(t('studio.tooManyScenes'));
       const scene = snapshotScene(
         id || crypto.randomUUID(),
         name.trim(),
@@ -845,10 +856,10 @@ export function createStudio(
       const operation = ++modelOperation;
       let candidate: AvatarStage | undefined;
       try {
-        if (!stage) throw new Error('WebGL 渲染不可用');
+        if (!stage) throw new Error(t('studio.webglUnavailableShort'));
         let nextModel = model;
         if (scene.modelPath && scene.modelPath !== model?.path) {
-          if (!native) throw new Error('切换场景角色需要桌面应用');
+          if (!native) throw new Error(t('studio.sceneModelNeedsDesktop'));
           nextModel = await invoke<ModelInfo>('load_model', { path: scene.modelPath });
         } else if (!scene.modelPath) nextModel = null;
         if (disposed || operation !== modelOperation) return;
@@ -876,7 +887,7 @@ export function createStudio(
         settings = sceneSettings();
         let vtsSummary = '';
         if (vts && repairVtsMappings(settings.mappings, vts, settings.vtsImportReport)) {
-          vtsSummary = '已修正旧 VTS 嘴部映射，保留作者开合幅度并对齐微笑中立位置。';
+          vtsSummary = t('studio.vtsRepaired');
           settings.vtsImportReport.push(vtsSummary);
         }
         heldExpressions.clear();
@@ -900,7 +911,10 @@ export function createStudio(
         selectedItem = '';
         changed();
         await bindHotkeys();
-        notify(`已切换到场景「${scene.name}」。${vtsError || vtsSummary}`, !!vtsError);
+        notify(
+          t('studio.sceneRecalled', { name: scene.name, detail: vtsError || vtsSummary }),
+          !!vtsError,
+        );
       } finally {
         candidate?.destroy();
         sceneBusy = false;
@@ -951,11 +965,11 @@ export function createStudio(
         notify(
           settings.engine === 'openseeface'
             ? settings.openseefaceMode === 'external'
-              ? '正在等待外部 OpenSeeFace 数据，请启动外部跟踪程序。'
-              : 'OpenSeeFace 已启动，正在加载模型。识别到面部后请校准。'
+              ? t('studio.osfExternalWaiting')
+              : t('studio.osfStarted')
             : settings.engine === 'nvidia'
-              ? 'NVIDIA RTX（实验中）正在加载模型，首次启动可能需要两分钟。识别到面部后请校准。'
-              : '已开始本地跟踪。建议先校准中立姿态。',
+              ? t('studio.nvidiaStarting')
+              : t('studio.trackingStarted'),
         );
       } catch (error) {
         if (!disposed && operation === trackingOperation) {
@@ -969,8 +983,8 @@ export function createStudio(
       await stop();
       notify(
         settings.engine === 'openseeface' && settings.openseefaceMode === 'external'
-          ? '已停止接收。外部 OpenSeeFace 进程需要单独关闭。'
-          : '跟踪已停止，摄像头已释放。',
+          ? t('studio.osfStopped')
+          : t('studio.cameraReleased'),
       );
     },
     pause() {
@@ -980,23 +994,15 @@ export function createStudio(
       audio.pause(tracking === 'paused');
       cancelCalibration();
       lastFace = null;
-      notify(
-        tracking === 'paused'
-          ? '已暂停跟踪，角色回到中立姿态。点击停止跟踪可释放摄像头。'
-          : '已继续跟踪。',
-      );
+      notify(tracking === 'paused' ? t('studio.paused') : t('studio.resumed'));
     },
     calibrate(mode: 'neutral' | 'eyes' = 'neutral') {
       if (tracking !== 'running' || calibration) return;
       if (!isFace(lastFace) || performance.now() - lastFaceAt > 250)
-        return notify('还没有稳定识别到人脸，请面向摄像头后重试。');
-      if (mode === 'eyes' && !settings.neutral) return notify('请先校准自然睁眼的中立姿态。');
+        return notify(t('studio.noFace'));
+      if (mode === 'eyes' && !settings.neutral) return notify(t('studio.calibrateNeutralFirst'));
       const current = (calibration = { mode, after: performance.now() + 1000, samples: [] });
-      notify(
-        mode === 'eyes'
-          ? '请闭合双眼并保持不动，3 秒后完成。'
-          : '请正视镜头、自然睁眼闭嘴并保持不动，3 秒后完成。',
-      );
+      notify(mode === 'eyes' ? t('studio.calibratingEyes') : t('studio.calibratingNeutral'));
       calibrationTimer = window.setTimeout(
         () =>
           void run(async () => {
@@ -1009,7 +1015,7 @@ export function createStudio(
                 settings.neutral!.eyeLeft - result.eyeLeft < 0.15 ||
                 settings.neutral!.eyeRight - result.eyeRight < 0.15
               )
-                throw new Error('睁眼与闭眼的差距不足，请调整光线后重新校准。');
+                throw new Error(t('studio.eyeGapTooSmall'));
               settings.eyeClosedLeft = result.eyeLeft;
               settings.eyeClosedRight = result.eyeRight;
             } else {
@@ -1025,7 +1031,7 @@ export function createStudio(
     async toggleMic() {
       if (audio.active || micStarting) {
         await stopAudio();
-        return notify('麦克风已关闭并释放。');
+        return notify(t('studio.micOff'));
       }
       micStarting = true;
       const operation = ++micOperation;
@@ -1035,7 +1041,7 @@ export function createStudio(
         if (!disposed && operation === micOperation && audio.active) {
           audio.pause(tracking === 'paused');
           await devices();
-          notify('麦克风已开启；声音只在本机用于口型，不录音。');
+          notify(t('studio.micOn'));
         }
       } finally {
         if (operation === micOperation) {
@@ -1049,7 +1055,7 @@ export function createStudio(
       const revision = profileRevision;
       const operation = ++voiceOperation;
       voiceCalibration = vowel;
-      notify(`请持续发 ${vowel} 音约一秒。`);
+      notify(t('studio.voiceCalibrating', { vowel }));
       try {
         const template = await audio.calibrate();
         if (
@@ -1061,7 +1067,7 @@ export function createStudio(
           return;
         settings.voiceTemplates = { ...settings.voiceTemplates, [vowel]: template };
         await save();
-        notify(`${vowel} 音已校准。`);
+        notify(t('studio.voiceCalibrated', { vowel }));
       } finally {
         if (operation === voiceOperation) {
           voiceCalibration = null;
@@ -1071,14 +1077,11 @@ export function createStudio(
     },
     async importModel(kind: 'directory' | 'file') {
       if (sceneBusy) return;
-      if (!native)
-        return notify(
-          '模型导入需要桌面应用。当前是界面预览，可通过 npm run tauri dev 启动桌面版。',
-        );
+      if (!native) return notify(t('studio.importNeedsDesktop'));
       await loadModel(() => invoke<ModelInfo | null>('choose_model', { kind }));
     },
     async openLibrary() {
-      if (!native) return notify('请在桌面应用中打开角色文件夹。');
+      if (!native) return notify(t('studio.libraryNeedsDesktop'));
       await invoke('open_models_directory');
     },
     async recentModel(path: string) {
@@ -1132,7 +1135,7 @@ export function createStudio(
         await save(true);
         await stage?.compose(settings, library);
         await bindHotkeys();
-        notify(`已移除「${entry.name}」，导入来源文件未改动。`);
+        notify(t('studio.modelRemoved', { name: entry.name }));
       } finally {
         sceneBusy = false;
         publish();
@@ -1140,9 +1143,8 @@ export function createStudio(
     },
     async importPaths(paths: string[]) {
       if (!native || disposed) return;
-      if (!ready || modelLoading || sceneBusy) return notify('角色或场景正在加载，请稍后再拖入。');
-      if (!paths.length || paths.length > 32)
-        return notify('每次可拖入 1 至 32 个模型目录、入口文件或 ZIP 包。', true);
+      if (!ready || modelLoading || sceneBusy) return notify(t('studio.dropBusy'));
+      if (!paths.length || paths.length > 32) return notify(t('studio.dropLimit'), true);
       modelLoading = true;
       const operation = ++modelOperation;
       const errors: string[] = [];
@@ -1155,16 +1157,24 @@ export function createStudio(
             const next = await invoke<ModelInfo>('load_model', { path });
             imported++;
             const warning = await useModel(next, operation);
-            if (warning) errors.push(`${next.name}：${warning}`);
+            if (warning) errors.push(t('studio.namedError', { name: next.name, error: warning }));
           } catch (error) {
             errors.push(
-              `${path.split(/[\\/]/).pop()}：${error instanceof Error ? error.message : String(error)}`,
+              t('studio.namedError', {
+                name: path.split(/[\\/]/).pop() ?? path,
+                error: error instanceof Error ? error.message : String(error),
+              }),
             );
           }
         }
         if (operation === modelOperation)
           notify(
-            `已加入 ${imported} 个角色。${errors.length ? errors.join('；') : '角色已复制到角色库，可随时切换。'}`,
+            t('studio.modelsImported', {
+              count: imported,
+              detail: errors.length
+                ? errors.join(t('studio.errorSeparator'))
+                : t('studio.modelsImportedHint'),
+            }),
             !!errors.length,
           );
       } finally {
@@ -1263,14 +1273,12 @@ export function createStudio(
         mapping.smoothing > 0.5 ||
         [mapping.outputMin, mapping.outputMax].some((v) => Math.abs(v) > 1e6)
       )
-        throw new Error(
-          `请填写有效范围：输入下限小于上限，输出绝对值不超过 1000000，平滑时间为 0 至 0.5 秒。最终参数会限制在模型范围内。`,
-        );
+        throw new Error(t('studio.invalidMapping'));
       settings.mappings[id] = mapping;
       profileRevision++;
       mapper.reset();
       changed();
-      notify('映射已应用，并自动保存到当前模型。');
+      notify(t('studio.mappingSaved'));
     },
     resetMapping(id: string) {
       delete settings.mappings[id];
@@ -1283,7 +1291,7 @@ export function createStudio(
       if (!parameter) return;
       if (value === null) delete settings.parameterOverrides[id];
       else {
-        if (!Number.isFinite(value)) throw new Error('参数值必须是有效数字。');
+        if (!Number.isFinite(value)) throw new Error(t('studio.invalidParameterValue'));
         settings.parameterOverrides[id] = clamp(value, parameter.min, parameter.max);
       }
       changed();
@@ -1294,7 +1302,7 @@ export function createStudio(
       settings.defaultExpressions = [...stage.activeExpressions];
       settings.defaultParameterOverrides = { ...settings.parameterOverrides };
       await save(true);
-      notify('默认外观已保存，下次打开时会自动恢复。');
+      notify(t('studio.defaultAppearanceSaved'));
     },
     restoreDefaultAppearance() {
       settings.parameterOverrides = { ...settings.defaultParameterOverrides };
@@ -1312,7 +1320,7 @@ export function createStudio(
             options.fadeSeconds < 0 ||
             options.fadeSeconds > 10))
       )
-        throw new Error('自动关闭时间须为 0 至 3600 秒，过渡时间须为 0 至 10 秒。');
+        throw new Error(t('studio.invalidHotkeyOptions'));
       const next = readSettings({
         ...settings,
         hotkeyOptions: { ...settings.hotkeyOptions, [id]: options },
@@ -1347,7 +1355,7 @@ export function createStudio(
       profileRevision++;
       await bindHotkeys();
       changed();
-      notify('当前模型的映射、校准、构图、快捷键和待机已重置。');
+      notify(t('studio.profileReset'));
     },
     toggleRecording() {
       if (recording.active) recording.stop();
@@ -1362,7 +1370,7 @@ export function createStudio(
         if (await invoke<boolean>('save_motion', { motion })) {
           if (!recording.active && revision === recording.revision)
             savedRecordingRevision = revision;
-          notify('动作已保存为 .motion3.json。');
+          notify(t('studio.motionSaved'));
         }
       } else {
         const url = URL.createObjectURL(
@@ -1393,7 +1401,7 @@ export function createStudio(
       selectedItem = '';
       changed();
       await devices();
-      notify('已恢复默认设置。');
+      notify(t('studio.settingsReset'));
     },
     async openOutput() {
       if (!native) {
@@ -1417,9 +1425,7 @@ export function createStudio(
         backgroundColor: settings.outputTransparent ? undefined : settings.background,
         backgroundThrottling: 'disabled' as BackgroundThrottlingPolicy,
       });
-      await own(
-        outputWindow.once('tauri://error', () => notify('输出窗口创建失败，请重试。', true)),
-      );
+      await own(outputWindow.once('tauri://error', () => notify(t('studio.outputFailed'), true)));
     },
   };
   const devicechange = () => {
@@ -1438,17 +1444,15 @@ export function createStudio(
         void save();
       }
     } catch {
-      notify('上次设置无法读取，已使用默认设置。请重新选择模型与摄像头。', true);
+      notify(t('studio.settingsUnreadable'), true);
     }
     if (disposed) return;
     try {
-      stage = new AvatarStage(container, () =>
-        notify('显卡上下文已丢失。请重新加载角色；反复失败时重启应用。', true),
-      );
+      stage = new AvatarStage(container, () => notify(t('studio.contextLost'), true));
       stage.onWarning = (message) => notify(message, true);
       stage.display(settings);
     } catch {
-      notify('无法初始化 WebGL。请检查显卡驱动或系统 WebView。', true);
+      notify(t('studio.webglInitFailed'), true);
     }
     if (native) {
       await run(refreshLibrary);
@@ -1544,7 +1548,7 @@ export function createStudio(
       );
       if (disposed) return;
     }
-    await devices().catch(() => notify('暂时无法枚举摄像头。开始时会请求权限。'));
+    await devices().catch(() => notify(t('studio.devicesUnavailable')));
     if (disposed) return;
     navigator.mediaDevices?.addEventListener('devicechange', devicechange);
     if (native && settings.modelPath) {
@@ -1559,7 +1563,9 @@ export function createStudio(
         });
       } catch (error) {
         notify(
-          `上次角色未能恢复。${error instanceof Error ? error.message : String(error)} 请重新导入。`,
+          t('studio.restoreFailed', {
+            error: error instanceof Error ? error.message : String(error),
+          }),
           true,
         );
       }
@@ -1622,7 +1628,7 @@ export function createStudio(
       } catch (error) {
         failedRevision = modelRevision;
         if (obsOutput.state.active) void obsOutput.setEnabled(false).catch(report);
-        report(error instanceof Error ? `模型渲染失败：${error.message}` : error);
+        report(error instanceof Error ? t('studio.renderFailed', { error: error.message }) : error);
       }
     }
     // Camera frames re-render the stage, so a failed model would also fail and stop the camera.
@@ -1650,17 +1656,21 @@ export function createStudio(
     }
     frames++;
     if (now - since > 1000) {
-      renderStatus = `${Math.round((frames * 1000) / (now - since))} FPS 渲染 · ${Math.round((inputFrames * 1000) / (now - since))} FPS 输入 · ${tracker.inferenceMs.toFixed(0)} ms 推理`;
+      renderStatus = t('studio.renderStatus', {
+        render: Math.round((frames * 1000) / (now - since)),
+        input: Math.round((inputFrames * 1000) / (now - since)),
+        inference: tracker.inferenceMs.toFixed(0),
+      });
       faceStatus =
         tracking === 'running'
           ? now - lastFaceAt < settings.lostDelay * 1000 && isFace(lastFace)
-            ? '已识别人脸'
+            ? t('studio.faceDetected')
             : settings.lostMode === 'hold'
-              ? '未识别人脸 · 保持姿态'
-              : '未识别人脸 · 等待 / 回中立'
+              ? t('studio.faceLostHold')
+              : t('studio.faceLostNeutral')
           : tracking === 'paused'
-            ? '采集仍在使用，停止可释放'
-            : '点击开始后才会采集';
+            ? t('studio.facePaused')
+            : t('studio.faceIdle');
       faceInput = face ? normalizedFace(face, settings) : {};
       frames = 0;
       inputFrames = 0;

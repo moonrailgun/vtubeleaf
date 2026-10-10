@@ -1,3 +1,5 @@
+import { t } from './i18n.ts';
+
 export const vowels = ['A', 'I', 'U', 'E', 'O'] as const;
 export type Vowel = (typeof vowels)[number];
 export type VoiceTemplates = Partial<Record<Vowel, number[]>>;
@@ -271,8 +273,7 @@ export class AudioLipSync {
     await stopped;
     if (generation !== this.generation) return;
     this.paused = false;
-    if (!navigator.mediaDevices?.getUserMedia)
-      throw new Error('此运行环境没有麦克风接口。请使用桌面应用，并检查系统权限。');
+    if (!navigator.mediaDevices?.getUserMedia) throw new Error(t('lipsync.noMicApi'));
     try {
       const stream = await navigator.mediaDevices.getUserMedia({
         audio: deviceId ? { deviceId: { exact: deviceId } } : true,
@@ -283,8 +284,8 @@ export class AudioLipSync {
         return;
       }
       this.stream = stream;
-      this.deviceLabel = stream.getAudioTracks()[0]?.label || '麦克风名称不可用';
-      if (typeof AudioContext === 'undefined') throw new Error('此运行环境没有音频分析接口。');
+      this.deviceLabel = stream.getAudioTracks()[0]?.label || t('lipsync.micNameUnavailable');
+      if (typeof AudioContext === 'undefined') throw new Error(t('lipsync.noAudioApi'));
       this.context = new AudioContext();
       this.source = this.context.createMediaStreamSource(stream);
       this.analyser = this.context.createAnalyser();
@@ -298,7 +299,7 @@ export class AudioLipSync {
       stream.getAudioTracks()[0]?.addEventListener('ended', () => {
         if (generation !== this.generation || this.stream !== stream) return;
         void this.stop();
-        this.fail('麦克风已断开。请重新连接或选择其他设备后开始。');
+        this.fail(t('lipsync.micDisconnected'));
       });
       await this.context.resume();
       if (generation !== this.generation) return;
@@ -307,14 +308,13 @@ export class AudioLipSync {
       await this.stop();
       const name = error instanceof Error ? error.name : '';
       const messages: Record<string, string> = {
-        NotAllowedError:
-          '麦克风权限被拒绝。请在系统隐私设置中允许 VTubeLeaf 使用麦克风，然后重试。',
-        NotFoundError: '未找到麦克风。请连接设备并刷新列表。',
-        NotReadableError: '无法打开麦克风。请关闭正在占用它的应用后重试。',
-        OverconstrainedError: '所选麦克风已不可用。请刷新列表并重新选择。',
+        NotAllowedError: t('lipsync.micDenied'),
+        NotFoundError: t('lipsync.micNotFound'),
+        NotReadableError: t('lipsync.micBusy'),
+        OverconstrainedError: t('lipsync.micGone'),
       };
-      if (error instanceof Error && error.message.startsWith('此运行环境')) throw error;
-      throw new Error(messages[name] ?? '麦克风启动失败。请检查设备与系统权限。');
+      if (error instanceof Error && error.message === t('lipsync.noAudioApi')) throw error;
+      throw new Error(messages[name] ?? t('lipsync.micFailed'));
     }
   }
 
@@ -325,7 +325,7 @@ export class AudioLipSync {
     if (calibration) {
       window.clearInterval(calibration.interval);
       window.clearTimeout(calibration.timeout);
-      calibration.reject(new Error('麦克风已停止，校准已取消。'));
+      calibration.reject(new Error(t('lipsync.calibrationStopped')));
     }
     const context = this.context;
     this.context = undefined;
@@ -350,7 +350,7 @@ export class AudioLipSync {
     this.calibration = undefined;
     window.clearInterval(calibration.interval);
     window.clearTimeout(calibration.timeout);
-    calibration.reject(new Error('麦克风已暂停，校准已取消。'));
+    calibration.reject(new Error(t('lipsync.calibrationPaused')));
   }
 
   read(gain: number, noiseGate: number, templates: VoiceTemplates): VoiceFrame {
@@ -368,9 +368,10 @@ export class AudioLipSync {
   }
 
   calibrate(): Promise<number[]> {
-    if (!this.analyser || !this.context) return Promise.reject(new Error('请先启动麦克风。'));
-    if (this.paused) return Promise.reject(new Error('暂停时无法校准麦克风。'));
-    if (this.calibration) return Promise.reject(new Error('麦克风正在校准。'));
+    if (!this.analyser || !this.context)
+      return Promise.reject(new Error(t('lipsync.startMicFirst')));
+    if (this.paused) return Promise.reject(new Error(t('lipsync.cannotCalibratePaused')));
+    if (this.calibration) return Promise.reject(new Error(t('lipsync.calibrating')));
     const analyser = this.analyser,
       context = this.context,
       frames: number[][] = [];
@@ -387,7 +388,7 @@ export class AudioLipSync {
         window.clearInterval(calibration.interval);
         this.calibration = undefined;
         if (!frames.length) {
-          reject(new Error('没有检测到声音。请靠近麦克风并清晰发音。'));
+          reject(new Error(t('lipsync.noSound')));
           return;
         }
         resolve(

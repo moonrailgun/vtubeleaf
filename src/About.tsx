@@ -15,13 +15,14 @@ import { Switch } from './components/ui/switch';
 import { initialUpdateState, type UpdateState } from './updater';
 import { parseNotes } from './changelog';
 import { Notes, ReleaseList, releases } from './ReleaseNotes';
+import { t, type Key } from './i18n.ts';
 
 export function About() {
   const [events, setEvents] = useState<string[]>([]);
   const [error, setError] = useState('');
   useEffect(() => {
     const previousTitle = document.title;
-    document.title = '关于 VTubeLeaf';
+    document.title = t('about.windowTitle');
     document.body.classList.add('about');
     let disposed = false;
     let unlisten: UnlistenFn | undefined;
@@ -35,7 +36,7 @@ export function About() {
       await emitTo('main', 'about-ready');
     }
     void connect().catch(() => {
-      if (!disposed) setError('无法读取运行记录，请关闭此窗口后重试。');
+      if (!disposed) setError(t('about.eventsError'));
     });
     return () => {
       disposed = true;
@@ -56,7 +57,7 @@ export function About() {
       <Updates />
       <details className="about-section">
         <summary>
-          更新记录
+          {t('about.releaseNotes')}
           <ChevronDown aria-hidden="true" />
         </summary>
         <div className="pb-4 text-xs leading-6">
@@ -65,18 +66,18 @@ export function About() {
       </details>
       <details className="about-section">
         <summary>
-          常见问题与运行记录
+          {t('about.faqAndLog')}
           <ChevronDown aria-hidden="true" />
         </summary>
         <div className="space-y-3 px-1 pb-4 text-xs leading-7 text-muted-foreground">
           <p>
-            <b className="font-semibold text-foreground">你的人脸，留在你的电脑。</b>
-            不上传摄像头画面，仅在手动录制时保存角色参数，不采集声音。运行记录只保留本次会话的错误提示。
+            <b className="font-semibold text-foreground">{t('about.privacyTitle')}</b>
+            {t('about.privacyBody')}
           </p>
-          <p>黑屏：检查模型是否成功加载，以及 OBS 捕获的窗口。</p>
-          <p>无表情：检查跟踪状态并重新校准。</p>
-          <p>摄像头不可用：检查系统权限、设备连接与其他应用占用。</p>
-          <h2 className="font-semibold text-foreground">本次会话的运行记录</h2>
+          <p>{t('about.faqBlackScreen')}</p>
+          <p>{t('about.faqNoExpression')}</p>
+          <p>{t('about.faqCamera')}</p>
+          <h2 className="font-semibold text-foreground">{t('about.sessionLog')}</h2>
           {error ? (
             <p role="status">{error}</p>
           ) : events.length ? (
@@ -86,13 +87,13 @@ export function About() {
               ))}
             </ul>
           ) : (
-            <p>本次会话暂无错误记录。</p>
+            <p>{t('about.noEvents')}</p>
           )}
         </div>
       </details>
       <details className="about-section" open>
         <summary>
-          开源与第三方许可
+          {t('about.licenses')}
           <ChevronDown aria-hidden="true" />
         </summary>
         <div className="pb-4">
@@ -127,7 +128,7 @@ function Updates() {
         await emitTo('main', 'about-ready');
       })
       .catch(() => {
-        if (!disposed) setError('无法连接工作台，请关闭此窗口后重试。');
+        if (!disposed) setError(t('about.connectError'));
       });
     return () => {
       disposed = true;
@@ -136,42 +137,42 @@ function Updates() {
   }, []);
   const act = (action: string | boolean) => {
     setError('');
-    void emitTo('main', 'update-action', action).catch(() => setError('操作未发送，请重试。'));
+    void emitTo('main', 'update-action', action).catch(() => setError(t('about.actionError')));
   };
   const busy = ['checking', 'downloading', 'installing'].includes(state.status);
   const downloaded = state.status === 'ready' || state.status === 'installed';
-  const labels: Record<UpdateState['status'], string> = {
-    idle: '可手动检查新版本',
-    checking: '正在检查更新…',
-    current: '当前已是最新版本',
-    available: `发现新版本 v${state.version}`,
-    downloading: `正在下载 v${state.version}…`,
-    ready: `v${state.version} 已下载并通过签名校验`,
-    installing: '正在安装，请稍候…',
-    installed: '更新已安装，等待重启',
+  const labels: Record<UpdateState['status'], Key> = {
+    idle: 'about.statusIdle',
+    checking: 'about.statusChecking',
+    current: 'about.statusCurrent',
+    available: 'about.statusAvailable',
+    downloading: 'about.statusDownloading',
+    ready: 'about.statusReady',
+    installing: 'about.statusInstalling',
+    installed: 'about.statusInstalled',
   };
   return (
     <details className="about-section" open>
       <summary>
-        应用更新
+        {t('about.updates')}
         <ChevronDown aria-hidden="true" />
       </summary>
       <div className="space-y-3 pb-4 text-xs leading-6">
         <p role="status" aria-live="polite">
-          {isTauri() ? labels[state.status] : '请在桌面应用中检查和安装更新。'}
+          {isTauri() ? t(labels[state.status], { version: state.version }) : t('about.desktopOnly')}
         </p>
         {state.status === 'downloading' && (
           <div>
             <progress
-              aria-label="更新下载进度"
+              aria-label={t('about.downloadProgress')}
               className="update-progress"
               value={state.total ? state.received : undefined}
               max={state.total || undefined}
             />
             <p className="text-muted-foreground">
               {(state.received / 1024 / 1024).toFixed(1)} MB
-              {state.total ? ` / ${(state.total / 1024 / 1024).toFixed(1)} MB` : ''} ·
-              下载期间可继续使用
+              {state.total ? ` / ${(state.total / 1024 / 1024).toFixed(1)} MB` : ''} ·{' '}
+              {t('about.keepUsing')}
             </p>
           </div>
         )}
@@ -180,29 +181,27 @@ function Updates() {
             {error || state.error}
           </p>
         )}
-        {downloaded && (
-          <p className="text-muted-foreground">
-            安装会停止跟踪和虚拟摄像头，并重启应用。请先保存动作录制；选择稍后时保持应用打开。
-          </p>
-        )}
+        {downloaded && <p className="text-muted-foreground">{t('about.installWarning')}</p>}
         <div className="flex flex-wrap gap-2">
           {state.status === 'available' && (
             <>
               <Button size="sm" onClick={() => act('download')}>
-                下载更新
+                {t('about.downloadUpdate')}
               </Button>
               <Button size="sm" variant="outline" onClick={() => act('ignore')}>
-                忽略此版本
+                {t('about.skipVersion')}
               </Button>
             </>
           )}
           {downloaded && (
             <>
               <Button size="sm" onClick={() => act('install')}>
-                {state.status === 'installed' ? '重启应用' : '安装并重启'}
+                {state.status === 'installed'
+                  ? t('about.restartApp')
+                  : t('about.installAndRestart')}
               </Button>
               <Button size="sm" variant="outline" onClick={() => act('later')}>
-                稍后
+                {t('about.later')}
               </Button>
             </>
           )}
@@ -213,16 +212,14 @@ function Updates() {
               disabled={!connected || busy}
               onClick={() => act('check')}
             >
-              {state.status === 'checking' ? '检查中…' : '检查更新'}
+              {state.status === 'checking' ? t('about.checking') : t('about.checkUpdates')}
             </Button>
           )}
         </div>
         <div className="flex items-center justify-between gap-4">
           <label htmlFor="auto-check-updates">
-            自动检查更新
-            <span className="block text-muted-foreground">
-              启动后及运行期间每天检查，下载和安装由你决定。
-            </span>
+            {t('about.autoCheck')}
+            <span className="block text-muted-foreground">{t('about.autoCheckHint')}</span>
           </label>
           <Switch
             id="auto-check-updates"
@@ -233,7 +230,7 @@ function Updates() {
         </div>
         {state.notes && (
           <div>
-            <h2 className="font-semibold">v{state.version} 更新说明</h2>
+            <h2 className="font-semibold">{t('about.notesTitle', { version: state.version })}</h2>
             <div className="mt-1 break-words text-muted-foreground">
               <Notes groups={parseNotes(state.notes)} />
             </div>
@@ -249,14 +246,14 @@ function LicenseNotices() {
   const [text, setText] = useState('');
   useEffect(() => {
     const controller = new AbortController();
-    setText('读取中…');
+    setText(t('about.loading'));
     void fetch(file, { signal: controller.signal })
       .then(async (response) => {
         if (
           !response.ok ||
           (!file.endsWith('.html') && response.headers.get('content-type')?.includes('text/html'))
         )
-          throw new Error('许可文件未包含在当前构建中。');
+          throw new Error(t('about.licenseMissing'));
         let body = await response.text();
         if (file.endsWith('.html')) {
           const document = new DOMParser().parseFromString(body, 'text/html');
@@ -271,30 +268,32 @@ function LicenseNotices() {
       })
       .catch((error: unknown) => {
         if (!controller.signal.aborted)
-          setText(error instanceof Error ? error.message : '无法读取许可文件。');
+          setText(error instanceof Error ? error.message : t('about.licenseReadError'));
       });
     return () => controller.abort();
   }, [file]);
   return (
     <>
       <Select value={file} onValueChange={(value) => setFile(value)}>
-        <SelectTrigger aria-label="许可文件">
+        <SelectTrigger aria-label={t('about.licenseFile')}>
           <SelectValue />
         </SelectTrigger>
         <SelectContent>
-          <SelectItem value="/licenses/vtubeleaf.txt">VTubeLeaf（MIT）</SelectItem>
-          <SelectItem value="/licenses/resources.txt">资源来源与许可状态</SelectItem>
-          <SelectItem value="/licenses/npm.txt">JavaScript 依赖许可</SelectItem>
-          <SelectItem value="/licenses/rust.html">Rust 依赖许可</SelectItem>
+          <SelectItem value="/licenses/vtubeleaf.txt">{t('about.licenseApp')}</SelectItem>
+          <SelectItem value="/licenses/resources.txt">{t('about.licenseResources')}</SelectItem>
+          <SelectItem value="/licenses/npm.txt">{t('about.licenseNpm')}</SelectItem>
+          <SelectItem value="/licenses/rust.html">{t('about.licenseRust')}</SelectItem>
           <SelectItem value="/licenses/cubism-framework.md">Cubism Framework</SelectItem>
-          <SelectItem value="/runtime/licenses/Core/LICENSE.md">Cubism Core（已配置时）</SelectItem>
+          <SelectItem value="/runtime/licenses/Core/LICENSE.md">
+            {t('about.licenseCubismCore')}
+          </SelectItem>
           <SelectItem value="/licenses/windows-microsoft.txt">Microsoft BaseClasses</SelectItem>
           <SelectItem value="/licenses/windows-softcam.txt">Softcam BaseClasses</SelectItem>
           <SelectItem value="/licenses/macos-syphon.txt">Syphon</SelectItem>
           <SelectItem value="/licenses/windows-spout.txt">Spout2</SelectItem>
         </SelectContent>
       </Select>
-      <pre aria-label="许可正文" tabIndex={0} className="license-text">
+      <pre aria-label={t('about.licenseText')} tabIndex={0} className="license-text">
         {text}
       </pre>
     </>

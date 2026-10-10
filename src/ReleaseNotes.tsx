@@ -1,5 +1,6 @@
 import changelog from '../CHANGELOG.md?raw';
 import { parseChangelog, type NoteGroup, type Release } from './changelog';
+import { t } from './i18n.ts';
 
 export const releases = parseChangelog(changelog);
 
@@ -31,7 +32,7 @@ export function ReleaseList({ list, current }: { list: Release[]; current?: stri
         {release.version}
         {release.date && <span className="font-normal text-muted-foreground">{release.date}</span>}
         {current && release.version === `v${current}` && (
-          <span className="font-normal text-primary">当前版本</span>
+          <span className="font-normal text-primary">{t('release.currentVersion')}</span>
         )}
       </h3>
       <div className="mt-1 break-words text-muted-foreground">

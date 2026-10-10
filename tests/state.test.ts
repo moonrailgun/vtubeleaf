@@ -2,6 +2,9 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { defaults, readSettings, FaceMapper, NEUTRAL, fromMediaPipe } from '../src/state.ts';
 import * as state from '../src/state.ts';
+import { setLang, t } from '../src/i18n.ts';
+
+setLang('zh');
 
 test('face compute device defaults to GPU and preserves a valid global selection', () => {
   for (const trackingDelegate of [undefined, null, '', 'cpu', 'other', 1])
@@ -985,5 +988,5 @@ test('eye smile follows the smile input by default and ignores frowns', () => {
   // Saving the editor's prefilled mapping keeps rest at the parameter minimum.
   s.mappings.ParamEyeLSmile = state.defaultMapping(p[0], s);
   assert.equal(mapper.map({ ...NEUTRAL }, p, s, 1 / 30).ParamEyeLSmile, 0);
-  assert.equal(state.parameterNames.ParamEyeLSmile, '左眼微笑');
+  assert.equal(t(state.parameterNames.ParamEyeLSmile), '左眼微笑');
 });

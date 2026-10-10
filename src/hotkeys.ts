@@ -1,3 +1,5 @@
+import { t } from './i18n.ts';
+
 const keyNames = [
   'Space',
   'Enter',
@@ -53,7 +55,7 @@ const aliases: Record<string, string> = {
 };
 
 function normalize(shortcut: string): string {
-  if (shortcut.length > 100) throw new Error('快捷键过长');
+  if (shortcut.length > 100) throw new Error(t('hotkeys.tooLong'));
   const modifiers = new Set<string>();
   let key = '';
   for (const raw of shortcut.split('+')) {
@@ -71,12 +73,12 @@ function normalize(shortcut: string): string {
       (/^(digit)?[0-9]$/.test(part) ? `Digit${part.at(-1)!}` : undefined) ??
       (/^f([1-9]|1[0-9]|2[0-4])$/.test(part) ? part.toUpperCase() : undefined) ??
       (/^numpad[0-9]$/.test(part) ? `Numpad${part.at(-1)!}` : undefined);
-    if (!name) throw new Error(`无法识别按键“${raw.trim()}”`);
+    if (!name) throw new Error(t('hotkeys.unknownKey', { key: raw.trim() }));
     if (['Control', 'Alt', 'Shift', 'Super'].includes(name)) modifiers.add(name);
-    else if (key) throw new Error('每个快捷键只能包含一个普通按键');
+    else if (key) throw new Error(t('hotkeys.oneKey'));
     else key = name;
   }
-  if (!key) throw new Error('请添加字母、数字或功能键');
+  if (!key) throw new Error(t('hotkeys.needKey'));
   return [
     ...['Control', 'Alt', 'Shift', 'Super'].filter((modifier) => modifiers.has(modifier)),
     key,
@@ -99,7 +101,7 @@ export function validateHotkey(
     } catch {
       continue;
     }
-    if (shortcut === other) throw new Error(`与 ${id} 的快捷键重复：${binding}`);
+    if (shortcut === other) throw new Error(t('hotkeys.duplicate', { action: id, binding }));
   }
 }
 
@@ -204,12 +206,17 @@ export class Hotkeys {
       try {
         shortcut = normalize(raw);
       } catch (error) {
-        this.onError(`${action}：${error instanceof Error ? error.message : String(error)}`);
+        this.onError(
+          t('hotkeys.invalid', {
+            action,
+            message: error instanceof Error ? error.message : String(error),
+          }),
+        );
         continue;
       }
       const previous = this.bindings.get(shortcut);
       if (previous) {
-        this.onError(`${action} 与 ${previous} 的快捷键重复：${raw}`);
+        this.onError(t('hotkeys.conflict', { action, previous, binding: raw }));
         continue;
       }
       this.bindings.set(shortcut, action);

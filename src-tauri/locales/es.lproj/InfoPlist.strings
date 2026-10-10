@@ -1,0 +1,3 @@
+"NSCameraUsageDescription" = "VTubeLeaf usa la cámara en este Mac para seguir tus expresiones y mover tu avatar. Las imágenes de la cámara nunca se suben.";
+"NSMicrophoneUsageDescription" = "Solo cuando activas la sincronización labial por audio, VTubeLeaf analiza el sonido del micrófono en este Mac para la sincronización labial. No se graba ni se sube ningún audio.";
+"NSSystemExtensionUsageDescription" = "Ofrece el lienzo del avatar de VTubeLeaf como cámara virtual para apps de videollamadas.";

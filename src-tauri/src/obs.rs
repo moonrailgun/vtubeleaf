@@ -1,3 +1,4 @@
+use crate::locale;
 use http_body_util::Full;
 use hyper::{body::Bytes, server::conn::http1, service::service_fn, Request, Response, StatusCode};
 use hyper_util::rt::{TokioIo, TokioTimer};
@@ -12,6 +13,14 @@ use tauri::{ipc::InvokeBody, State, WebviewWindow};
 const ADDRESS: &str = "127.0.0.1:18765";
 const URL: &str = "http://127.0.0.1:18765/";
 const STALE: Duration = Duration::from_secs(2);
+
+const OUTPUT_UNAVAILABLE: [&str; 5] = [
+    "OBS output state is unavailable",
+    "OBS 输出状态不可用",
+    "OBS 出力の状態を利用できません",
+    "El estado de la salida para OBS no está disponible",
+    "L’état de la sortie OBS est indisponible",
+];
 
 #[derive(Default)]
 struct Frame {
@@ -30,8 +39,17 @@ pub struct Output {
 impl Output {
     fn start(&mut self) -> Result<(), String> {
         if self.server.is_none() {
-            let listener = TcpListener::bind(ADDRESS)
-                .map_err(|error| format!("无法启动 OBS 透明输出（{ADDRESS}）：{error}"))?;
+            let listener = TcpListener::bind(ADDRESS).map_err(|error| {
+                locale::text([
+                    "Could not start the OBS transparent output ({address}): {error}",
+                    "无法启动 OBS 透明输出（{address}）：{error}",
+                    "OBS 透過出力を開始できません（{address}）：{error}",
+                    "No se pudo iniciar la salida transparente para OBS ({address}): {error}",
+                    "Impossible de démarrer la sortie transparente OBS ({address}) : {error}",
+                ])
+                .replace("{address}", ADDRESS)
+                .replace("{error}", &error.to_string())
+            })?;
             listener
                 .set_nonblocking(true)
                 .map_err(|error| error.to_string())?;
@@ -67,14 +85,20 @@ impl Output {
                 }
             }));
         }
-        let mut frame = self.frame.lock().map_err(|_| "OBS 输出状态不可用")?;
+        let mut frame = self
+            .frame
+            .lock()
+            .map_err(|_| locale::text(OUTPUT_UNAVAILABLE))?;
         frame.latest = None;
         frame.active = true;
         Ok(())
     }
 
     fn stop(&self) -> Result<(), String> {
-        let mut frame = self.frame.lock().map_err(|_| "OBS 输出状态不可用")?;
+        let mut frame = self
+            .frame
+            .lock()
+            .map_err(|_| locale::text(OUTPUT_UNAVAILABLE))?;
         frame.active = false;
         frame.latest = None;
         // Keep the local page reachable so an existing OBS source can reconnect on restart.
@@ -83,7 +107,10 @@ impl Output {
 
     /// Whether an OBS browser source is polling, so PNG frames are worth encoding.
     fn wanted(&self) -> Result<bool, String> {
-        let frame = self.frame.lock().map_err(|_| "OBS 输出状态不可用")?;
+        let frame = self
+            .frame
+            .lock()
+            .map_err(|_| locale::text(OUTPUT_UNAVAILABLE))?;
         Ok(frame.requested.is_some_and(|at| at.elapsed() < STALE))
     }
 
@@ -95,9 +122,19 @@ impl Output {
             || bytes[16..20] != 1280_u32.to_be_bytes()
             || bytes[20..24] != 720_u32.to_be_bytes()
         {
-            return Err("OBS 输出需要 1280×720 PNG 帧".into());
+            return Err(locale::text([
+                "OBS output needs 1280×720 PNG frames",
+                "OBS 输出需要 1280×720 PNG 帧",
+                "OBS 出力には 1280×720 の PNG フレームが必要です",
+                "La salida para OBS necesita fotogramas PNG de 1280×720",
+                "La sortie OBS nécessite des images PNG en 1280×720",
+            ])
+            .into());
         }
-        let mut frame = self.frame.lock().map_err(|_| "OBS 输出状态不可用")?;
+        let mut frame = self
+            .frame
+            .lock()
+            .map_err(|_| locale::text(OUTPUT_UNAVAILABLE))?;
         if frame.active {
             frame.latest = Some((Instant::now(), Bytes::copy_from_slice(bytes)));
         }
@@ -176,20 +213,29 @@ pub fn obs_start(
     output: State<'_, Mutex<Output>>,
 ) -> Result<&'static str, String> {
     super::require_main(&window)?;
-    output.lock().map_err(|_| "OBS 输出状态不可用")?.start()?;
+    output
+        .lock()
+        .map_err(|_| locale::text(OUTPUT_UNAVAILABLE))?
+        .start()?;
     Ok(URL)
 }
 
 #[tauri::command]
 pub fn obs_stop(window: WebviewWindow, output: State<'_, Mutex<Output>>) -> Result<(), String> {
     super::require_main(&window)?;
-    output.lock().map_err(|_| "OBS 输出状态不可用")?.stop()
+    output
+        .lock()
+        .map_err(|_| locale::text(OUTPUT_UNAVAILABLE))?
+        .stop()
 }
 
 #[tauri::command]
 pub fn obs_wanted(window: WebviewWindow, output: State<'_, Mutex<Output>>) -> Result<bool, String> {
     super::require_main(&window)?;
-    output.lock().map_err(|_| "OBS 输出状态不可用")?.wanted()
+    output
+        .lock()
+        .map_err(|_| locale::text(OUTPUT_UNAVAILABLE))?
+        .wanted()
 }
 
 /// Returns whether an OBS page is still polling; the app idles until one is.
@@ -201,11 +247,18 @@ pub fn obs_submit(
 ) -> Result<bool, String> {
     super::require_main(&window)?;
     let InvokeBody::Raw(bytes) = request.body() else {
-        return Err("OBS 帧必须是二进制数据".into());
+        return Err(locale::text([
+            "OBS frames must be binary data",
+            "OBS 帧必须是二进制数据",
+            "OBS フレームはバイナリデータである必要があります",
+            "Los fotogramas para OBS deben ser datos binarios",
+            "Les images OBS doivent être des données binaires",
+        ])
+        .into());
     };
     output
         .lock()
-        .map_err(|_| "OBS 输出状态不可用")?
+        .map_err(|_| locale::text(OUTPUT_UNAVAILABLE))?
         .submit(bytes)
 }
 

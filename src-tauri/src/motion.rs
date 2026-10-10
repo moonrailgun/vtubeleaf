@@ -1,10 +1,25 @@
+use crate::locale;
 use serde_json::Value;
 use std::{collections::HashSet, io::Write, path::Path};
 
 const MAX_MOTION_BYTES: usize = 32 * 1024 * 1024;
 
+const MOTION_TOO_LARGE: [&str; 5] = [
+    "The motion file exceeds the 32 MiB limit",
+    "动作文件超过 32 MiB 限制",
+    "モーションファイルが上限の 32 MiB を超えています",
+    "El archivo de animación supera el límite de 32 MiB",
+    "Le fichier d’animation dépasse la limite de 32 MiB",
+];
+
 pub fn encode(motion: &Value) -> Result<Vec<u8>, String> {
-    let invalid = "动作数据不是有效的 Live2D motion3.json";
+    let invalid = locale::text([
+        "The motion data is not a valid Live2D motion3.json",
+        "动作数据不是有效的 Live2D motion3.json",
+        "モーションデータが有効な Live2D motion3.json ではありません",
+        "Los datos de la animación no son un motion3.json de Live2D válido",
+        "Les données d’animation ne sont pas un motion3.json Live2D valide",
+    ]);
     if motion.get("Version").and_then(Value::as_u64) != Some(3) {
         return Err(invalid.into());
     }
@@ -30,7 +45,14 @@ pub fn encode(motion: &Value) -> Result<Vec<u8>, String> {
         .and_then(Value::as_array)
         .ok_or(invalid)?;
     if curves.is_empty() || curves.len() > 2048 {
-        return Err("动作参数数量无效".into());
+        return Err(locale::text([
+            "Invalid number of motion parameters",
+            "动作参数数量无效",
+            "モーションのパラメーター数が無効です",
+            "Número de parámetros de la animación no válido",
+            "Nombre de paramètres de l’animation invalide",
+        ])
+        .into());
     }
     let mut ids = HashSet::new();
     let mut segment_count = 0_u64;
@@ -50,7 +72,14 @@ pub fn encode(motion: &Value) -> Result<Vec<u8>, String> {
             .and_then(Value::as_array)
             .ok_or(invalid)?;
         if segments.len() < 2 || segments.len() > MAX_MOTION_BYTES / 2 {
-            return Err("动作曲线大小无效".into());
+            return Err(locale::text([
+                "Invalid motion curve size",
+                "动作曲线大小无效",
+                "モーションカーブのサイズが無効です",
+                "Tamaño de curva de la animación no válido",
+                "Taille de courbe de l’animation invalide",
+            ])
+            .into());
         }
         let number = |index: usize| -> Result<f64, &str> {
             segments
@@ -92,36 +121,81 @@ pub fn encode(motion: &Value) -> Result<Vec<u8>, String> {
         ("TotalPointCount", point_count),
     ] {
         if meta.get(name).and_then(Value::as_u64) != Some(expected) {
-            return Err("动作曲线计数不一致".into());
+            return Err(locale::text([
+                "Motion curve counts do not match",
+                "动作曲线计数不一致",
+                "モーションカーブの数が一致しません",
+                "Los recuentos de curvas de la animación no coinciden",
+                "Les nombres de courbes de l’animation ne correspondent pas",
+            ])
+            .into());
         }
     }
-    let bytes = serde_json::to_vec(motion).map_err(|_| "动作无法序列化")?;
+    let bytes = serde_json::to_vec(motion).map_err(|_| {
+        locale::text([
+            "Could not serialize the motion",
+            "动作无法序列化",
+            "モーションをシリアライズできません",
+            "No se pudo serializar la animación",
+            "Impossible de sérialiser l’animation",
+        ])
+    })?;
     if bytes.len() > MAX_MOTION_BYTES {
-        return Err("动作文件超过 32 MiB 限制".into());
+        return Err(locale::text(MOTION_TOO_LARGE).into());
     }
     Ok(bytes)
 }
 
 pub fn save(path: &Path, bytes: &[u8]) -> Result<(), String> {
     if bytes.len() > MAX_MOTION_BYTES {
-        return Err("动作文件超过 32 MiB 限制".into());
+        return Err(locale::text(MOTION_TOO_LARGE).into());
     }
     let parent = path
         .parent()
         .filter(|path| !path.as_os_str().is_empty())
-        .ok_or("动作导出路径无效")?;
-    let mut temporary =
-        tempfile::NamedTempFile::new_in(parent).map_err(|_| "无法创建动作临时文件")?;
-    temporary
-        .write_all(bytes)
-        .map_err(|_| "写入动作失败，原有文件已保留")?;
-    temporary
-        .as_file()
-        .sync_all()
-        .map_err(|_| "同步动作失败，原有文件已保留")?;
-    temporary
-        .persist(path)
-        .map_err(|_| "保存动作失败，原有文件已保留")?;
+        .ok_or(locale::text([
+            "Invalid motion export path",
+            "动作导出路径无效",
+            "モーションのエクスポート先が無効です",
+            "Ruta de exportación de la animación no válida",
+            "Chemin d’exportation de l’animation invalide",
+        ]))?;
+    let mut temporary = tempfile::NamedTempFile::new_in(parent).map_err(|_| {
+        locale::text([
+            "Could not create a temporary motion file",
+            "无法创建动作临时文件",
+            "モーションの一時ファイルを作成できません",
+            "No se pudo crear un archivo temporal de la animación",
+            "Impossible de créer un fichier temporaire pour l’animation",
+        ])
+    })?;
+    temporary.write_all(bytes).map_err(|_| {
+        locale::text([
+            "Failed to write the motion; the existing file was kept",
+            "写入动作失败，原有文件已保留",
+            "モーションの書き込みに失敗しました。元のファイルはそのまま残っています",
+            "Error al escribir la animación; se conservó el archivo existente",
+            "Échec de l’écriture de l’animation ; le fichier existant a été conservé",
+        ])
+    })?;
+    temporary.as_file().sync_all().map_err(|_| {
+        locale::text([
+            "Failed to sync the motion; the existing file was kept",
+            "同步动作失败，原有文件已保留",
+            "モーションの同期に失敗しました。元のファイルはそのまま残っています",
+            "Error al sincronizar la animación; se conservó el archivo existente",
+            "Échec de la synchronisation de l’animation ; le fichier existant a été conservé",
+        ])
+    })?;
+    temporary.persist(path).map_err(|_| {
+        locale::text([
+            "Failed to save the motion; the existing file was kept",
+            "保存动作失败，原有文件已保留",
+            "モーションの保存に失敗しました。元のファイルはそのまま残っています",
+            "Error al guardar la animación; se conservó el archivo existente",
+            "Échec de l’enregistrement de l’animation ; le fichier existant a été conservé",
+        ])
+    })?;
     Ok(())
 }
 

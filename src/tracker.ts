@@ -8,6 +8,7 @@ import type {
 } from '@mediapipe/tasks-vision';
 import { fromHands, type HandSignals } from './hands.ts';
 import { fromNvidia } from './nvidia.ts';
+import { t } from './i18n.ts';
 import { openTrackingCamera } from './camera-devices.ts';
 import { startFrameLoop } from './frame-loop.ts';
 import {
@@ -68,8 +69,8 @@ export class Tracker {
   private cameraFps = Infinity;
   private bodyFps = 10;
   private handFps = 10;
-  bodyStatus = '上半身待识别';
-  handStatus = '手部识别已关闭';
+  bodyStatus = t('tracker.bodyPending');
+  handStatus = t('tracker.handOff');
   cameraLabel = '';
   cameraSettings = '';
   private unlisten: UnlistenFn[] = [];
@@ -105,16 +106,16 @@ export class Tracker {
     this.paused = false;
     this.bodyStatus =
       s.engine !== 'mediapipe'
-        ? '当前引擎仅支持面部'
+        ? t('tracker.bodyFaceOnly')
         : s.upperBody
-          ? '上半身待识别'
-          : '上半身识别已关闭';
+          ? t('tracker.bodyPending')
+          : t('tracker.bodyOff');
     this.handStatus =
       s.engine !== 'mediapipe'
-        ? '当前引擎不支持手部'
+        ? t('tracker.handUnsupported')
         : s.handTracking
-          ? '手部待识别'
-          : '手部识别已关闭';
+          ? t('tracker.handPending')
+          : t('tracker.handOff');
     this.trackingFps = s.trackingFps;
     this.bodyFps = s.bodyFps;
     this.handFps = s.handFps;
@@ -140,10 +141,13 @@ export class Tracker {
           void this.stop().catch(() => {});
           this.fail(
             engine === 'nvidia'
-              ? `NVIDIA RTX（实验中）：${typeof event.payload === 'string' ? event.payload : '跟踪进程异常，请检查 SDK 与摄像头。'}`
+              ? t('tracker.nvidiaError', {
+                  message:
+                    typeof event.payload === 'string' ? event.payload : t('tracker.nvidiaCrashed'),
+                })
               : typeof event.payload === 'string'
                 ? event.payload
-                : 'OpenSeeFace 跟踪进程已退出，请检查摄像头后重试。',
+                : t('tracker.openSeeFaceExited'),
           );
         });
         if (generation !== this.generation) {
@@ -176,8 +180,7 @@ export class Tracker {
           });
         await this.nativeOperation;
       } else {
-        if (!navigator.mediaDevices?.getUserMedia)
-          throw new Error('此运行环境没有摄像头接口。请使用桌面应用，并检查系统权限。');
+        if (!navigator.mediaDevices?.getUserMedia) throw new Error(t('tracker.noCameraApi'));
         // Load the models while the camera opens; a camera failure still wins over a model one.
         const loading = this.loadMediaPipe(s, generation);
         loading.catch(() => {});
@@ -203,7 +206,7 @@ export class Tracker {
         }
         this.stream = stream;
         const videoTrack = stream.getVideoTracks()[0];
-        this.cameraLabel = videoTrack.label || '摄像头名称不可用';
+        this.cameraLabel = videoTrack.label || t('tracker.cameraNameUnavailable');
         const actual = videoTrack.getSettings();
         this.cameraFps = actual.frameRate ? Math.round(actual.frameRate) : Infinity;
         this.cameraSettings = [
@@ -216,7 +219,7 @@ export class Tracker {
         videoTrack.addEventListener('ended', () => {
           if (generation === this.generation) {
             void this.stop();
-            this.fail('摄像头已断开。请重新连接或选择其他设备后开始。');
+            this.fail(t('tracker.cameraDisconnected'));
           }
         });
         await this.video.play();
@@ -326,26 +329,20 @@ export class Tracker {
       await this.stop();
       if (error instanceof DOMException) {
         const messages: Record<string, string> = {
-          NotAllowedError:
-            '摄像头权限被拒绝。请在系统隐私设置中允许 VTubeLeaf 使用摄像头，然后重试。',
-          NotFoundError:
-            '未找到可用于跟踪的摄像头。请连接其他摄像头并刷新列表；VTubeLeaf Camera 仅用于输出。',
-          NotReadableError: '无法打开摄像头。请关闭正在占用它的应用后重试。',
-          OverconstrainedError: '所选摄像头已不可用。请刷新列表并重新选择。',
+          NotAllowedError: t('tracker.cameraDenied'),
+          NotFoundError: t('tracker.cameraNotFound'),
+          NotReadableError: t('tracker.cameraBusy'),
+          OverconstrainedError: t('tracker.cameraGone'),
         };
-        throw new Error(messages[error.name] ?? '摄像头启动失败。请检查设备与系统权限。');
+        throw new Error(messages[error.name] ?? t('tracker.cameraFailed'));
       }
       if (s.engine === 'openseeface')
-        throw new Error(
-          typeof error === 'string'
-            ? error
-            : 'OpenSeeFace 接收失败。请检查本机端口；自定义模式需同时检查 Python 路径。',
-        );
-      if (error instanceof Error && error.message.startsWith('此运行环境')) throw error;
+        throw new Error(typeof error === 'string' ? error : t('tracker.openSeeFaceFailed'));
+      if (error instanceof Error && error.message === t('tracker.noCameraApi')) throw error;
       throw new Error(
         s.engine === 'mediapipe' && s.trackingDelegate === 'GPU'
-          ? '面捕启动失败。请在「跟踪引擎与采集」中将「面捕计算设备」切换为 CPU 后重试；若仍失败，请检查本地面捕资源。'
-          : '面捕资源加载失败。请运行 npm run setup:assets 安装本地 MediaPipe 资源后重试。',
+          ? t('tracker.gpuFailed')
+          : t('tracker.assetsFailed'),
       );
     }
   }
@@ -392,8 +389,7 @@ export class Tracker {
             if (current(pose)) this.pose = pose;
           },
           () => {
-            if (generation === this.generation)
-              this.bodyStatus = '上半身资源加载失败 · 仅面捕，请重新准备跟踪资源';
+            if (generation === this.generation) this.bodyStatus = t('tracker.bodyLoadFailed');
           },
         ),
       s.handTracking &&
@@ -412,8 +408,7 @@ export class Tracker {
             if (current(hand)) this.hand = hand;
           },
           () => {
-            if (generation === this.generation)
-              this.handStatus = '手部资源加载失败 · 面捕继续，请重新准备跟踪资源';
+            if (generation === this.generation) this.handStatus = t('tracker.handLoadFailed');
           },
         ),
     ]);
@@ -458,16 +453,16 @@ export class Tracker {
             this.poseLandmarks = this.body.bodyYaw === undefined ? [] : pose.landmarks[0];
             this.bodyStatus =
               this.body.bodyYaw === undefined
-                ? '未看到双肩 · 身体随头部轻动'
+                ? t('tracker.shouldersNotSeen')
                 : this.body.bodyPitch === undefined
-                  ? '已识别肩膀 · 躯干未完整入镜'
-                  : '已识别上半身';
+                  ? t('tracker.shouldersOnly')
+                  : t('tracker.bodyFound');
           } catch {
             this.pose.close();
             this.pose = undefined;
             this.body = {};
             this.poseLandmarks = [];
-            this.bodyStatus = '上半身识别中断 · 仅面捕，停止后重试';
+            this.bodyStatus = t('tracker.bodyInterrupted');
           }
         }
         if (this.hand && due.hand) {
@@ -476,13 +471,15 @@ export class Tracker {
             this.hands = fromHands(result.landmarks, result.worldLandmarks, result.handedness);
             this.handLandmarks = result.landmarks;
             this.handStatus =
-              this.hands.handLeftFound || this.hands.handRightFound ? '已识别手部' : '未看到手部';
+              this.hands.handLeftFound || this.hands.handRightFound
+                ? t('tracker.handsFound')
+                : t('tracker.handsNotSeen');
           } catch {
             this.hand.close();
             this.hand = undefined;
             this.handLandmarks = [];
             this.hands = fromHands([], [], []);
-            this.handStatus = '手部识别中断 · 面捕继续，停止后重试';
+            this.handStatus = t('tracker.handInterrupted');
           }
         }
         if (face || this.body.bodyYaw !== undefined || this.hands)
@@ -492,7 +489,7 @@ export class Tracker {
       }
     } catch {
       void this.stop();
-      this.fail('面捕运行中断。请停止后重新开始；反复失败时可改用 OpenSeeFace。');
+      this.fail(t('tracker.trackingInterrupted'));
       return;
     }
   }

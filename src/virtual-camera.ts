@@ -1,4 +1,5 @@
 import { invoke, isTauri } from '@tauri-apps/api/core';
+import { t } from './i18n.ts';
 
 export type CameraStatus = {
   supported: boolean;
@@ -26,7 +27,7 @@ export class VirtualCamera {
     supported: false,
     installed: false,
     active: false,
-    message: '原生虚拟摄像头需要 Windows 或 macOS 桌面应用',
+    message: t('camera.unsupported'),
   };
   private lastFrame = -Infinity;
   private pending?: Promise<void>;
@@ -65,7 +66,7 @@ export class VirtualCamera {
       (status.consumers !== undefined && typeof status.consumers !== 'boolean') ||
       typeof status.message !== 'string'
     ) {
-      throw new Error('无法读取摄像头状态');
+      throw new Error(t('camera.statusUnreadable'));
     }
     const previous = this.current;
     this.current = status;

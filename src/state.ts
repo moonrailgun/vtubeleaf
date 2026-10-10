@@ -1,6 +1,7 @@
 import { readComposition, readScenes, type Composition, type Scene } from './scenes.ts';
 import type { VoiceFrame, VoiceTemplates } from './lipsync.ts';
 import { handSources, type HandSignals } from './hands.ts';
+import type { Key } from './i18n.ts';
 
 export type UpperBody = {
   bodyYaw?: number;
@@ -38,40 +39,41 @@ export type Face = UpperBody &
 
 export type FaceKey = keyof Face;
 
-export const faceSources: Record<FaceKey, string> = {
+// Values are i18n keys; render them with t().
+export const faceSources: Record<FaceKey, Key> = {
   ...handSources,
-  yaw: '左右转头',
-  pitch: '上下点头',
-  roll: '头部倾斜',
-  eyeLeft: '左眼开合',
-  eyeRight: '右眼开合',
-  mouthOpen: '嘴部开合',
-  mouthSmile: '微笑',
-  gazeX: '视线左右',
-  gazeY: '视线上下',
-  browLeft: '左眉升降',
-  browRight: '右眉升降',
-  mouthX: '嘴部左右',
-  brows: '双眉升降',
-  cheekPuff: '鼓嘴（NVIDIA）',
-  tongueOut: '吐舌（当前引擎无信号，可手动控制）',
-  breath: '自动呼吸',
-  positionX: '头部左右位移',
-  positionY: '头部上下位移',
-  positionZ: '头部前后位移',
-  bodyYaw: '身体左右转动',
-  bodyPitch: '身体前后倾斜',
-  bodyRoll: '身体左右倾斜',
-  armLeft: '左上臂抬起',
-  armRight: '右上臂抬起',
-  elbowLeft: '左肘弯曲',
-  elbowRight: '右肘弯曲',
-  voiceVolume: '声音音量',
-  voiceA: '声音 A',
-  voiceI: '声音 I',
-  voiceU: '声音 U',
-  voiceE: '声音 E',
-  voiceO: '声音 O',
+  yaw: 'face.yaw',
+  pitch: 'face.pitch',
+  roll: 'face.roll',
+  eyeLeft: 'face.eyeLeft',
+  eyeRight: 'face.eyeRight',
+  mouthOpen: 'face.mouthOpen',
+  mouthSmile: 'face.mouthSmile',
+  gazeX: 'face.gazeX',
+  gazeY: 'face.gazeY',
+  browLeft: 'face.browLeft',
+  browRight: 'face.browRight',
+  mouthX: 'face.mouthX',
+  brows: 'face.brows',
+  cheekPuff: 'face.cheekPuff',
+  tongueOut: 'face.tongueOut',
+  breath: 'face.breath',
+  positionX: 'face.positionX',
+  positionY: 'face.positionY',
+  positionZ: 'face.positionZ',
+  bodyYaw: 'face.bodyYaw',
+  bodyPitch: 'face.bodyPitch',
+  bodyRoll: 'face.bodyRoll',
+  armLeft: 'face.armLeft',
+  armRight: 'face.armRight',
+  elbowLeft: 'face.elbowLeft',
+  elbowRight: 'face.elbowRight',
+  voiceVolume: 'face.voiceVolume',
+  voiceA: 'face.voiceA',
+  voiceI: 'face.voiceI',
+  voiceU: 'face.voiceU',
+  voiceE: 'face.voiceE',
+  voiceO: 'face.voiceO',
 };
 
 export type Mapping = {
@@ -705,12 +707,13 @@ const parameterSources: Record<string, FaceKey> = {
   ParamArmRB: 'elbowRight',
 };
 
-export const parameterNames: Record<string, string> = {
+// Values are i18n keys; render them with t().
+export const parameterNames: Record<string, Key> = {
   ...Object.fromEntries(
     Object.entries(parameterSources).map(([id, source]) => [id, faceSources[source]]),
   ),
-  ParamEyeLSmile: '左眼微笑',
-  ParamEyeRSmile: '右眼微笑',
+  ParamEyeLSmile: 'face.eyeLeftSmile',
+  ParamEyeRSmile: 'face.eyeRightSmile',
 };
 // Eye smile only closes toward a smile; a frown must not push it below rest.
 const eyeSmile = (id: string) => id === 'ParamEyeLSmile' || id === 'ParamEyeRSmile';

@@ -1,0 +1,3 @@
+"NSCameraUsageDescription" = "VTubeLeaf uses the camera on this Mac to track your expressions and drive your avatar. Camera images are never uploaded.";
+"NSMicrophoneUsageDescription" = "Only when you turn on audio lip sync, VTubeLeaf analyzes microphone sound on this Mac to drive lip sync. Audio is never recorded or uploaded.";
+"NSSystemExtensionUsageDescription" = "Provides the VTubeLeaf avatar canvas as a virtual camera for video call apps.";
