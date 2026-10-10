@@ -26,7 +26,7 @@ use tauri_plugin_dialog::DialogExt;
 
 struct AppState {
     data_dir: PathBuf,
-    models: Mutex<Registry>,
+    models: Registry,
     settings: Mutex<()>,
     // Both native engines own their process until dropped; only one may hold the camera.
     tracker: Mutex<Option<Box<dyn Send>>>,
@@ -108,12 +108,7 @@ async fn save_motion(
 
 fn register_model(app: &tauri::AppHandle, path: &Path) -> Result<ModelInfo, String> {
     let state = app.state::<AppState>();
-    let result = state
-        .models
-        .lock()
-        .map_err(|_| "模型状态不可用")?
-        .load(path, &state.data_dir);
-    result
+    state.models.load(path, &state.data_dir)
 }
 
 #[tauri::command]
@@ -164,12 +159,9 @@ async fn list_models(window: WebviewWindow, app: tauri::AppHandle) -> Result<Lib
             .map_err(|_| "无法定位内置角色目录")?
             .join("models");
         let state = app.state::<AppState>();
-        let result = state
+        state
             .models
-            .lock()
-            .map_err(|_| "模型状态不可用")?
-            .list_with_builtins(&state.data_dir, &bundled_dir);
-        result
+            .list_with_builtins(&state.data_dir, &bundled_dir)
     })
     .await
     .map_err(|_| "读取角色库任务中断")?
@@ -184,12 +176,7 @@ async fn remove_model(
     require_main(&window)?;
     tauri::async_runtime::spawn_blocking(move || {
         let state = app.state::<AppState>();
-        let result = state
-            .models
-            .lock()
-            .map_err(|_| "模型状态不可用")?
-            .remove(&id, &state.data_dir);
-        result
+        state.models.remove(&id, &state.data_dir)
     })
     .await
     .map_err(|_| "移除角色任务中断")?
@@ -231,11 +218,7 @@ async fn read_model_preview(
     require_main(&window)?;
     tauri::async_runtime::spawn_blocking(move || {
         let state = app.state::<AppState>();
-        let bytes = state
-            .models
-            .lock()
-            .map_err(|_| "模型状态不可用")?
-            .read_preview(&id, &state.data_dir)?;
+        let bytes = state.models.read_preview(&id, &state.data_dir)?;
         Ok(tauri::ipc::Response::new(bytes))
     })
     .await
@@ -252,12 +235,7 @@ async fn save_model_preview(
     require_main(&window)?;
     tauri::async_runtime::spawn_blocking(move || {
         let state = app.state::<AppState>();
-        let result = state
-            .models
-            .lock()
-            .map_err(|_| "模型状态不可用")?
-            .save_preview(&id, &state.data_dir, &png);
-        result
+        state.models.save_preview(&id, &state.data_dir, &png)
     })
     .await
     .map_err(|_| "保存角色预览任务中断")?
@@ -271,13 +249,7 @@ async fn read_model_vts_config(
 ) -> Result<Option<serde_json::Value>, String> {
     require_main(&window)?;
     tauri::async_runtime::spawn_blocking(move || {
-        let state = app.state::<AppState>();
-        let result = state
-            .models
-            .lock()
-            .map_err(|_| "模型状态不可用")?
-            .read_vts_config(&id);
-        result
+        app.state::<AppState>().models.read_vts_config(&id)
     })
     .await
     .map_err(|_| "VTS 配置读取任务中断")?
@@ -292,12 +264,7 @@ async fn read_model_resource(
 ) -> Result<tauri::ipc::Response, String> {
     require_local_window(&window)?;
     tauri::async_runtime::spawn_blocking(move || {
-        let state = app.state::<AppState>();
-        let bytes = state
-            .models
-            .lock()
-            .map_err(|_| "模型状态不可用")?
-            .read(&id, &resource)?;
+        let bytes = app.state::<AppState>().models.read(&id, &resource)?;
         Ok(tauri::ipc::Response::new(bytes))
     })
     .await
@@ -424,7 +391,7 @@ pub fn run() {
             app.manage(Mutex::new(texture::Output::default()));
             app.manage(AppState {
                 data_dir: app.path().app_data_dir()?,
-                models: Mutex::default(),
+                models: Registry::default(),
                 settings: Mutex::default(),
                 tracker: Mutex::default(),
             });

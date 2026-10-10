@@ -6,6 +6,7 @@ use std::{
     fs::{self, File, OpenOptions},
     io::{self, Read, Write},
     path::{Path, PathBuf},
+    sync::{Arc, Mutex, MutexGuard},
 };
 
 const MAX_FILE_BYTES: u64 = 128 * 1024 * 1024;
@@ -55,13 +56,35 @@ struct Model {
 }
 
 #[derive(Default)]
-pub struct Registry {
-    models: BTreeMap<String, Model>,
+struct State {
+    models: BTreeMap<String, Arc<Model>>,
     next_id: u64,
 }
 
+/// `state` is held only to look up or register models, so reads never wait for disk work.
+#[derive(Default)]
+pub struct Registry {
+    state: Mutex<State>,
+    // ponytail: one lock serializes imports, scans, removals and preview writes so none sees
+    // another's partial work; use per-directory locks if parallel imports ever matter.
+    disk: Mutex<()>,
+}
+
+fn lock<T>(mutex: &Mutex<T>) -> Result<MutexGuard<'_, T>, String> {
+    mutex.lock().map_err(|_| "模型状态不可用".into())
+}
+
 impl Registry {
-    pub fn load(&mut self, path: &Path, data_dir: &Path) -> Result<ModelInfo, String> {
+    fn model(&self, id: &str, missing: &str) -> Result<Arc<Model>, String> {
+        lock(&self.state)?
+            .models
+            .get(id)
+            .cloned()
+            .ok_or_else(|| missing.into())
+    }
+
+    pub fn load(&self, path: &Path, data_dir: &Path) -> Result<ModelInfo, String> {
+        let _disk = lock(&self.disk)?;
         let destination = data_dir.join("models");
         fs::create_dir_all(&destination).map_err(|_| "无法创建角色文件夹")?;
         let destination = destination
@@ -83,14 +106,15 @@ impl Registry {
         self.register(model)
     }
 
-    fn register(&mut self, model: Model) -> Result<ModelInfo, String> {
-        let id = self
+    fn register(&self, model: Model) -> Result<ModelInfo, String> {
+        let mut state = lock(&self.state)?;
+        let id = state
             .models
             .iter()
             .find_map(|(id, existing)| (existing.entry == model.entry).then(|| id.clone()))
             .unwrap_or_else(|| {
-                self.next_id += 1;
-                format!("model-{}", self.next_id)
+                state.next_id += 1;
+                format!("model-{}", state.next_id)
             });
         let entry = model
             .entry
@@ -114,15 +138,16 @@ impl Registry {
                 .is_some_and(|name| name.to_string_lossy().starts_with("builtin-")),
             vts_resources: model.vts_resources.clone(),
         };
-        self.models.insert(id, model);
+        state.models.insert(id, Arc::new(model));
         Ok(info)
     }
 
     pub fn list_with_builtins(
-        &mut self,
+        &self,
         data_dir: &Path,
         bundled_dir: &Path,
     ) -> Result<Library, String> {
+        let _disk = lock(&self.disk)?;
         let directory = data_dir.join("models");
         fs::create_dir_all(&directory).map_err(|_| "无法创建角色文件夹")?;
         let mut errors = Vec::new();
@@ -148,7 +173,8 @@ impl Registry {
         Ok(library)
     }
 
-    pub fn list(&mut self, data_dir: &Path) -> Result<Library, String> {
+    // Callers hold `disk`.
+    fn list(&self, data_dir: &Path) -> Result<Library, String> {
         let directory = data_dir.join("models");
         fs::create_dir_all(&directory).map_err(|_| "无法创建角色文件夹")?;
         let mut library = Library {
@@ -182,8 +208,9 @@ impl Registry {
         Ok(library)
     }
 
-    pub fn remove(&mut self, id: &str, data_dir: &Path) -> Result<(), String> {
-        let model = self.models.get(id).ok_or("角色不在库中")?;
+    pub fn remove(&self, id: &str, data_dir: &Path) -> Result<(), String> {
+        let _disk = lock(&self.disk)?;
+        let model = self.model(id, "角色不在库中")?;
         let directory = data_dir
             .join("models")
             .canonicalize()
@@ -209,14 +236,15 @@ impl Registry {
         }
         let preview = self.preview_path(id, data_dir)?;
         fs::remove_dir_all(&target).map_err(|error| format!("无法移除角色文件夹：{error}"))?;
-        self.models
+        lock(&self.state)?
+            .models
             .retain(|_, model| !model.entry.starts_with(&target));
         let _ = fs::remove_file(preview);
         Ok(())
     }
 
     fn preview_path(&self, id: &str, data_dir: &Path) -> Result<PathBuf, String> {
-        let model = self.models.get(id).ok_or("模型尚未加载")?;
+        let model = self.model(id, "模型尚未加载")?;
         let directory = data_dir
             .join("models")
             .canonicalize()
@@ -234,7 +262,7 @@ impl Registry {
     }
 
     pub fn read_preview(&self, id: &str, data_dir: &Path) -> Result<Vec<u8>, String> {
-        let model = self.models.get(id).ok_or("模型尚未加载")?;
+        let model = self.model(id, "模型尚未加载")?;
         if let Some(icon) = &model.icon {
             if let Ok(bytes) = checked_resource(&model.root, icon)
                 .and_then(|path| read_bounded(&path, MAX_ICON_BYTES))
@@ -263,6 +291,8 @@ impl Registry {
         {
             return Err("角色预览必须是 512 × 512 以内的 PNG 图片".into());
         }
+        // A concurrent removal must not leave this preview behind.
+        let _disk = lock(&self.disk)?;
         let path = self.preview_path(id, data_dir)?;
         let parent = path.parent().ok_or("预览路径无效")?;
         fs::create_dir_all(parent).map_err(|_| "无法创建预览文件夹")?;
@@ -275,7 +305,7 @@ impl Registry {
 
     pub fn read(&self, id: &str, resource: &str) -> Result<Vec<u8>, String> {
         validate_resource(resource)?;
-        let model = self.models.get(id).ok_or("模型尚未加载，请重新导入")?;
+        let model = self.model(id, "模型尚未加载，请重新导入")?;
         if !model.files.iter().any(|file| file == resource) {
             return Err("禁止读取模型未声明的资源".into());
         }
@@ -284,7 +314,7 @@ impl Registry {
     }
 
     pub fn read_vts_config(&self, id: &str) -> Result<Option<Value>, String> {
-        let model = self.models.get(id).ok_or("模型尚未加载")?;
+        let model = self.model(id, "模型尚未加载")?;
         if let Some(warning) = &model.vts_warning {
             return Err(warning.clone());
         }
@@ -299,16 +329,26 @@ fn copy_model(source: &Model, destination: &Path) -> Result<Model, String> {
         .map_err(|_| "无法创建角色目录")?;
     let mut total = 0;
     for resource in &source.files {
+        // Rejects links leaving the model, non-regular files and files over 128 MB.
         let input = checked_resource(&source.root, resource)?;
-        let bytes = read_bounded(&input, MAX_FILE_BYTES)?;
-        total += bytes.len() as u64;
-        if total > MAX_TOTAL_BYTES {
+        let limit = MAX_FILE_BYTES.min(MAX_TOTAL_BYTES - total);
+        let file = File::open(&input).map_err(|_| "无法读取模型资源，请确认文件仍然存在")?;
+        if file.metadata().map_err(|_| "无法检查模型资源")?.len() > limit {
             return Err("模型资源总大小超过 512 MB".into());
         }
         let target = staging.path().join(resource);
         fs::create_dir_all(target.parent().ok_or("资源路径无效")?)
             .map_err(|_| "无法创建角色资源目录")?;
-        fs::write(target, bytes).map_err(|_| "无法复制角色资源，请检查磁盘空间")?;
+        // Streams into a fresh file instead of buffering it. Unlike fs::copy, no source flags
+        // (e.g. Finder's lock) carry over and later block removing the model.
+        let copied = File::create(&target)
+            .and_then(|mut output| io::copy(&mut file.take(limit + 1), &mut output))
+            .map_err(|_| "无法复制角色资源，请检查磁盘空间")?;
+        // The source may have grown since it was checked.
+        if copied > limit {
+            return Err("模型资源超过大小限制".into());
+        }
+        total += copied;
     }
     // Optional VTS data must never prevent an otherwise valid model from loading.
     let vts_warning = (|| -> Result<(), String> {
@@ -378,7 +418,8 @@ fn read_bounded(path: &Path, limit: u64) -> Result<Vec<u8>, String> {
     if !metadata.is_file() || metadata.len() > limit {
         return Err("模型资源不是普通文件或超过大小限制".into());
     }
-    let mut bytes = Vec::new();
+    // `Take` hides the file size from read_to_end; reserving it avoids regrowing large buffers.
+    let mut bytes = Vec::with_capacity(metadata.len() as usize);
     file.take(limit + 1)
         .read_to_end(&mut bytes)
         .map_err(|_| "读取模型资源失败")?;
@@ -943,7 +984,7 @@ mod tests {
         let path = std::env::var_os("VTUBELEAF_MODEL_FIXTURE").expect("model fixture path");
         let source = Path::new(&path).canonicalize().unwrap();
         let data = tempfile::tempdir().unwrap();
-        let mut registry = Registry::default();
+        let registry = Registry::default();
         let model = registry.load(Path::new(&path), data.path()).unwrap();
         assert!(model.files.iter().any(|file| file.ends_with(".moc3")));
         for resource in &model.files {
@@ -1028,7 +1069,7 @@ mod tests {
         .unwrap();
         let display_info = r#"{"Parameters":[{"Id":"Param15","Name":"牌子","GroupId":"Props"}],"ParameterGroups":[{"Id":"Props","Name":"道具"}]}"#;
         fs::write(source.path().join("leaf.cdi3.json"), display_info).unwrap();
-        let mut registry = Registry::default();
+        let registry = Registry::default();
         let imported = registry.load(source.path(), data.path()).unwrap();
         let extras = imported.vts_resources.as_ref().unwrap();
         assert_eq!(extras.expressions.len(), 1);
@@ -1053,7 +1094,7 @@ mod tests {
         let zipped = registry.load(&archive, data.path()).unwrap();
         assert_eq!(zipped.files, imported.files);
         source.close().unwrap();
-        let mut restarted = Registry::default();
+        let restarted = Registry::default();
         let library = restarted.list(data.path()).unwrap();
         assert!(library.errors.is_empty());
         assert_eq!(library.models.len(), 3);
@@ -1098,7 +1139,7 @@ mod tests {
             r#"{"Version":1,"ParameterSettings":[],"Hotkeys":[{"Name":"牌子","Action":"ToggleExpression","File":"牌子.exp3.json"},{"Name":"duplicate","Action":"ToggleExpression","File":".\\expressions\\牌子.exp3.json"},{"Name":"挥手","Action":"TriggerAnimation","File":"wave.motion3.json"}],"FileReferences":{"IdleAnimation":"./idle.motion3.json","IdleAnimationWhenTrackingLost":"motions/lost.motion3.json"}}"#,
         )
         .unwrap();
-        let mut registry = Registry::default();
+        let registry = Registry::default();
         let info = registry.load(source.path(), data.path()).unwrap();
         assert!(info
             .files
@@ -1143,7 +1184,7 @@ mod tests {
             "expressions/牌子.exp3.json"
         );
         source.close().unwrap();
-        let mut restarted = Registry::default();
+        let restarted = Registry::default();
         let library = restarted.list(data.path()).unwrap();
         assert!(library.errors.is_empty());
         assert_eq!(library.models.len(), 3);
@@ -1195,7 +1236,7 @@ mod tests {
             serde_json::to_vec(&config).unwrap(),
         )
         .unwrap();
-        let mut registry = Registry::default();
+        let registry = Registry::default();
         let info = registry.load(source.path(), data.path()).unwrap();
         let extras = info.vts_resources.unwrap();
         assert_eq!(
@@ -1290,7 +1331,7 @@ mod tests {
             br#"{"Version":1,"Hotkeys":[{"Action":"ToggleExpression","File":"hat.exp3.json"}]}"#,
         )
         .unwrap();
-        let mut registry = Registry::default();
+        let registry = Registry::default();
         let info = registry.load(source.path(), data.path()).unwrap();
         let extras = info.vts_resources.unwrap();
         assert_eq!(extras.expressions.len(), 1);
@@ -1324,7 +1365,7 @@ mod tests {
             )
             .unwrap();
         }
-        let mut registry = Registry::default();
+        let registry = Registry::default();
         let info = registry.load(source.path(), data.path()).unwrap();
         let extras = info.vts_resources.unwrap();
         assert_eq!(extras.expressions.len(), 1);
@@ -1372,7 +1413,7 @@ mod tests {
     fn library_lists_newest_imports_first_after_reload() {
         let source = tempfile::tempdir().unwrap();
         let data = tempfile::tempdir().unwrap();
-        let mut registry = Registry::default();
+        let registry = Registry::default();
         let mut paths = Vec::new();
         for name in ["Alpha", "Zulu", "Middle"] {
             let root = source.path().join(name);
@@ -1390,7 +1431,7 @@ mod tests {
         let oldest = registry.load(Path::new(&paths[0]), data.path()).unwrap();
         let png = b"\x89PNG\r\n\x1a\n\0\0\0\x0dIHDR\0\0\x01\0\0\0\x01\0";
         registry.save_preview(&oldest.id, data.path(), png).unwrap();
-        for mut registry in [registry, Registry::default()] {
+        for registry in [registry, Registry::default()] {
             let library = registry.list(data.path()).unwrap();
             assert!(library.errors.is_empty());
             assert_eq!(
@@ -1409,7 +1450,7 @@ mod tests {
         let source = tempfile::tempdir().unwrap();
         let data = tempfile::tempdir().unwrap();
         fixture(source.path());
-        let mut registry = Registry::default();
+        let registry = Registry::default();
         let imported = registry.load(source.path(), data.path()).unwrap();
         let other = registry.load(source.path(), data.path()).unwrap();
         let directory = Path::new(&imported.path).parent().unwrap().to_owned();
@@ -1443,7 +1484,7 @@ mod tests {
         let source = tempfile::tempdir().unwrap();
         let data = tempfile::tempdir().unwrap();
         fixture(source.path());
-        let mut registry = Registry::default();
+        let registry = Registry::default();
         let imported = registry.load(source.path(), data.path()).unwrap();
         let directory = Path::new(&imported.path).parent().unwrap();
         fs::remove_dir_all(directory).unwrap();
@@ -1456,7 +1497,7 @@ mod tests {
     fn bundled_models_populate_the_library_once_and_preserve_user_data() {
         let bundled = Path::new(env!("CARGO_MANIFEST_DIR")).join("../vendor/models");
         let data = tempfile::tempdir().unwrap();
-        let mut registry = Registry::default();
+        let registry = Registry::default();
         let library = registry.list_with_builtins(data.path(), &bundled).unwrap();
         assert!(library.errors.is_empty(), "{:?}", library.errors);
         assert_eq!(
@@ -1497,7 +1538,7 @@ mod tests {
         let source = tempfile::tempdir().unwrap();
         fixture(source.path());
         let imported = registry.load(source.path(), data.path()).unwrap();
-        let mut restarted = Registry::default();
+        let restarted = Registry::default();
         let library = restarted.list_with_builtins(data.path(), &bundled).unwrap();
         assert!(library.errors.is_empty());
         assert_eq!(library.models.len(), 4);
@@ -1534,7 +1575,7 @@ mod tests {
         fixture(source.path());
         fs::write(source.path().join("Avatar.JPG"), b"avatar").unwrap();
         fs::write(source.path().join("ico_leaf.png"), b"icon").unwrap();
-        let mut registry = Registry::default();
+        let registry = Registry::default();
         for path in [
             source.path().to_owned(),
             source.path().join("leaf.model3.json"),
@@ -1547,7 +1588,7 @@ mod tests {
             assert!(info.files.contains(&"ico_leaf.png".to_owned()));
         }
         source.close().unwrap();
-        let mut restarted = Registry::default();
+        let restarted = Registry::default();
         for info in restarted.list(data.path()).unwrap().models {
             let png = b"\x89PNG\r\n\x1a\n\0\0\0\x0dIHDR\0\0\x01\0\0\0\x01\0";
             restarted.save_preview(&info.id, data.path(), png).unwrap();
@@ -1574,7 +1615,7 @@ mod tests {
         fixture(source.path());
         let config = br#"{"Version":1,"ParameterSettings":[],"Hotkeys":[]}"#;
         fs::write(source.path().join("leaf.vtube.json"), config).unwrap();
-        let mut registry = Registry::default();
+        let registry = Registry::default();
         let first = registry.load(source.path(), data.path()).unwrap();
         let second = registry
             .load(&source.path().join("leaf.model3.json"), data.path())
@@ -1597,7 +1638,7 @@ mod tests {
         }
         assert_eq!(registry.read(&first.id, "texture.png").unwrap(), b"texture");
         assert_eq!(registry.read(&second.id, "leaf.moc3").unwrap(), b"MOC3");
-        let mut restarted = Registry::default();
+        let restarted = Registry::default();
         let library = restarted.list(data.path()).unwrap();
         assert_eq!(library.models.len(), 2);
         assert!(library.errors.is_empty());
@@ -1623,7 +1664,7 @@ mod tests {
             .is_err());
         let png = b"\x89PNG\r\n\x1a\n\0\0\0\x0dIHDR\0\0\x01\0\0\0\x01\0";
         restarted.save_preview(&info.id, data.path(), png).unwrap();
-        let mut next_run = Registry::default();
+        let next_run = Registry::default();
         let restored = next_run.load(Path::new(&info.path), data.path()).unwrap();
         assert_eq!(
             next_run.read_preview(&restored.id, data.path()).unwrap(),
@@ -1636,7 +1677,7 @@ mod tests {
         let source = tempfile::tempdir().unwrap();
         let data = tempfile::tempdir().unwrap();
         fixture(source.path());
-        let mut registry = Registry::default();
+        let registry = Registry::default();
         let config = source.path().join("leaf.vtube.json");
         for contents in [
             b"not json".as_slice(),
@@ -1691,7 +1732,7 @@ mod tests {
             1
         );
         source.close().unwrap();
-        let mut restarted = Registry::default();
+        let restarted = Registry::default();
         let info = restarted.load(Path::new(&info.path), data.path()).unwrap();
         assert_eq!(
             restarted.read_vts_config(&info.id).unwrap().unwrap()["Version"],
@@ -1758,7 +1799,7 @@ mod tests {
         let root = tempfile::tempdir().unwrap();
         let data = tempfile::tempdir().unwrap();
         fixture(root.path());
-        let mut registry = Registry::default();
+        let registry = Registry::default();
         let info = registry.load(root.path(), data.path()).unwrap();
         let again = registry.load(Path::new(&info.path), data.path()).unwrap();
         assert_eq!(info.id, again.id);
@@ -1778,7 +1819,7 @@ mod tests {
         let root = tempfile::tempdir().unwrap();
         let outside = tempfile::tempdir().unwrap();
         fixture(root.path());
-        let mut registry = Registry::default();
+        let registry = Registry::default();
         let info = registry.load(root.path(), outside.path()).unwrap();
         fs::write(outside.path().join("secret"), b"private").unwrap();
         fs::remove_file(Path::new(&info.path).parent().unwrap().join("texture.png")).unwrap();
@@ -1815,7 +1856,7 @@ mod tests {
         assert!(first.entry.is_file());
         assert!(first.root.starts_with(destination.canonicalize().unwrap()));
         assert_eq!(fs::read_dir(&destination).unwrap().count(), 2);
-        let mut registry = Registry::default();
+        let registry = Registry::default();
         let imported = registry.register(first).unwrap();
         registry.remove(&imported.id, root.path()).unwrap();
         assert!(!Path::new(&imported.path).exists());
@@ -1861,5 +1902,84 @@ mod tests {
         assert!(import_zip(&archive, &destination).is_err());
         assert_eq!(fs::read_dir(&destination).unwrap().count(), 0);
         assert!(!root.path().join("escape").exists());
+    }
+
+    #[test]
+    fn reads_do_not_wait_for_imports_or_library_scans() {
+        let source = tempfile::tempdir().unwrap();
+        let data = tempfile::tempdir().unwrap();
+        fixture(source.path());
+        let registry = Registry::default();
+        let info = registry.load(source.path(), data.path()).unwrap();
+        let (sender, receiver) = std::sync::mpsc::channel();
+        std::thread::scope(|scope| {
+            // Stands in for a long import, removal or library scan.
+            let disk = registry.disk.lock().unwrap();
+            let (registry, id, data) = (&registry, &info.id, data.path());
+            scope.spawn(move || {
+                let read = (
+                    registry.read(id, "leaf.moc3"),
+                    registry.read_preview(id, data),
+                    registry.read_vts_config(id),
+                );
+                sender.send(read).unwrap();
+            });
+            let read = receiver.recv_timeout(std::time::Duration::from_secs(10));
+            drop(disk);
+            let (resource, preview, config) =
+                read.expect("model reads must not wait for disk work");
+            assert_eq!(resource.unwrap(), b"MOC3");
+            assert!(preview.unwrap().is_empty());
+            assert!(config.unwrap().is_none());
+        });
+    }
+
+    #[test]
+    fn copying_rechecks_resources_changed_after_validation() {
+        let source = tempfile::tempdir().unwrap();
+        let destination = tempfile::tempdir().unwrap();
+        fixture(source.path());
+        let model = validate_model(source.path()).unwrap();
+        #[cfg(unix)]
+        let locked = {
+            use std::os::unix::fs::PermissionsExt;
+            let locked = model.root.join(&model.files[0]);
+            fs::set_permissions(&locked, fs::Permissions::from_mode(0o444)).unwrap();
+            locked
+        };
+        let copy = copy_model(&model, destination.path()).unwrap();
+        for file in &model.files {
+            assert_eq!(
+                fs::read(copy.root.join(file)).unwrap(),
+                fs::read(model.root.join(file)).unwrap()
+            );
+        }
+        // Copies are fresh files, so a locked or read-only source can't block removing the model.
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            let mode = fs::metadata(copy.root.join(&model.files[0]))
+                .unwrap()
+                .permissions()
+                .mode();
+            assert_ne!(mode & 0o200, 0);
+            fs::set_permissions(&locked, fs::Permissions::from_mode(0o644)).unwrap();
+        }
+        let texture = source.path().join("texture.png");
+        File::create(&texture)
+            .unwrap()
+            .set_len(MAX_FILE_BYTES + 1)
+            .unwrap();
+        assert!(copy_model(&model, destination.path()).is_err());
+        #[cfg(unix)]
+        {
+            let outside = tempfile::tempdir().unwrap();
+            fs::write(outside.path().join("secret.png"), b"secret").unwrap();
+            fs::remove_file(&texture).unwrap();
+            std::os::unix::fs::symlink(outside.path().join("secret.png"), &texture).unwrap();
+            assert!(copy_model(&model, destination.path()).is_err());
+        }
+        // Failed copies leave only the successful one behind.
+        assert_eq!(fs::read_dir(destination.path()).unwrap().count(), 1);
     }
 }
