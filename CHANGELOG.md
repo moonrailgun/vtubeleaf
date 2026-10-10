@@ -1,125 +1,125 @@
-# 更新记录
+# Changelog
 
-## 未发布
+## Unreleased
 
 ## v1.2.0 · 2026-10-11
 
-### 新增
+### Added
 
-- 界面支持英语、中文、日语、西班牙语和法语，默认跟随系统语言（系统是其他语言时显示英语），也可以在「接入 → 画质与通用设置」的「界面语言」中手动选择，重启应用后生效。
-- 「面捕 → 跟踪引擎与采集」新增「面捕计算设备」，默认使用 GPU，也可切换为 CPU，重启后会保留选择。
+- The interface is now available in English, Chinese, Japanese, Spanish and French. It follows your system language by default (English if your system uses another language), and you can also pick one under "Language" in "Connect → Quality and general"; the change takes effect after restarting the app.
+- "Tracking → Tracking engine and capture" adds "Tracking processor": GPU by default, or switch to CPU, and your choice is kept after a restart.
 
-### 改进
+### Improved
 
-- 使用 MediaPipe 面捕时，点「开始跟踪」后启动更快：打开摄像头的同时就开始加载识别模型，上半身和手部模型也一起加载。
-- 同时开启「识别上半身」和「识别双手与手指」时，两者不再挤在同一帧里识别，角色画面更流畅。
-- 「内置虚拟摄像头」改由显卡合成画面，人物和场景边缘更清晰、更省 CPU；macOS 上的帧率也更稳定、更接近 30 帧。
-- 用「浏览器源」接入 OBS 时，只要 OBS 没在读取画面就不再编码输出，空闲时的 CPU 占用明显降低。
-- 开启麦克风口型同步时更省 CPU、界面更流畅，第一次开口时的卡顿也更短。
-- 在舞台上拖动或用滚轮缩放角色和道具时更流畅。
-- 鼠标在界面上移动时不再额外占用 CPU，平时的整体占用也更低、更省电。
-- 启动时会先恢复上次使用的角色，不再等「角色库」的预览图全部加载完。
-- 导入角色文件夹更快、更省内存，导入期间正在加载的角色和预览图也不会再被卡住。
-- 打开「画面」页时，背景缩略图显示更快、占用内存更少。
-- 下载更新时主界面更流畅，不再随下载进度频繁刷新。
-- 「关于 VTubeLeaf」窗口和独立输出窗口打开更快。
-- 安装包体积更小；OpenSeeFace 独立启动包只保留默认追踪模型，体积减小约三分之一。
-- 舞台左上角的提示上移到和右上角跟踪状态同一行，不再空出一截。
-- 「角色库」里置顶的角色会在预览图右上角显示图钉标记，一眼就能认出。
+- With MediaPipe tracking, "Start tracking" gets going faster: the tracking models start loading while the camera opens, and the upper-body and hand models load at the same time.
+- With both "Track upper body" and "Track hands and fingers" on, they no longer share the same frame, so the avatar moves more smoothly.
+- The "Built-in virtual camera" now composites on the GPU, giving sharper avatar and scene edges with less CPU use; on macOS the frame rate is also steadier and closer to 30 FPS.
+- When OBS is connected through a "Browser source", nothing is encoded while OBS isn't reading frames, so idle CPU use drops noticeably.
+- Microphone lip sync uses less CPU and keeps the interface smoother, with a shorter hitch the first time you speak.
+- Dragging and scroll-zooming avatars and props on the stage is smoother.
+- Moving the mouse over the interface no longer costs extra CPU, and overall usage is lower and easier on battery.
+- On startup your last avatar comes back first, without waiting for every thumbnail in the "Library" to load.
+- Importing avatar folders is faster and uses less memory, and avatars and thumbnails loading during an import no longer get stuck.
+- Background thumbnails on the "Appearance" tab show up faster and use less memory.
+- The main window stays smoother while an update downloads, instead of redrawing on every bit of progress.
+- The "About VTubeLeaf" window and the output window open faster.
+- Smaller installers; the standalone OpenSeeFace package now ships only the default tracking model and is about a third smaller.
+- The hint in the stage's top-left corner moved up to share a row with the tracking status on the right, leaving no empty gap.
+- Pinned avatars in the "Library" show a pin badge in the top-right corner of their thumbnail, so they're easy to spot.
 
-### 修复
+### Fixed
 
-- 「面部识别帧率」设为 24 或 15 FPS 时，「上半身识别帧率」和「手部识别帧率」不会再比设定值偏低。
+- With "Face tracking FPS" set to 24 or 15 FPS, "Upper body FPS" and "Hand tracking FPS" no longer run below their set values.
 
 ## v1.1.1 · 2026-10-10
 
-### 新增
+### Added
 
-- 「角色库」支持右键「置顶」和「取消置顶」，常用角色会优先显示，重启后也会保留。
+- Right-click an avatar in the "Library" to "Pin to top" or "Unpin" it. Pinned avatars appear first and stay pinned after a restart.
 
-### 改进
+### Improved
 
-- 去掉舞台左上角多余的「角色舞台 LIVE2D」标签。
-- 普通操作提示在 5 秒后自动收起，错误和进行中的校准、加载提示仍会保留。
+- Removed the redundant stage label from the stage's top-left corner.
+- Regular hints now hide after 5 seconds; errors and hints for calibration or loading in progress stay visible.
 
 ## v1.1.0 · 2026-10-09
 
-### 新增
+### Added
 
-- 独立输出窗口可以去掉背景了：在「接入 → 画质与通用设置」打开「独立窗口透明背景」，窗口就不再画背景色和背景图（切换时窗口会重开一次）。
-- 笑的时候眼睛会跟着一起眯起来。模型带左右眼微笑参数时默认就会生效，不用再手动绑定。
-- 「角色缩放」最小可以调到 0.05（以前最小是 0.25），角色能缩得更小。
-- 更新后第一次打开，会弹窗告诉你这次更新了什么；隔了几个版本才更新的话，中间的版本也会一起列出来。
-- 「关于 VTubeLeaf」里新增「更新记录」，可以翻看每个版本的变化。
+- The output window can now drop its background: turn on "Transparent output window" in "Connect → Quality and general" and it no longer draws the background color or image (the window reopens once when you switch it).
+- Your avatar's eyes now narrow when you smile. This works by default for models with left and right eye smile parameters, with no manual binding needed.
+- "Avatar scale" now goes down to 0.05 (previously 0.25), so avatars can be made much smaller.
+- The first launch after an update shows what changed in this version; if you skipped a few versions, the ones in between are listed too.
+- "About VTubeLeaf" adds "Release notes", where you can look back at what changed in every version.
 
-### 改进
+### Improved
 
-- 窗口隐藏且没有面捕、麦克风、录制或输出任务时，自动暂停画面渲染，减少后台占用。
-- macOS 虚拟摄像头在没有软件接收画面时暂停送帧，接入会议或直播软件后自动恢复。
-- 校准时的操作提示移到舞台中央，字号更大、更醒目，完成后自动收起。
-- 设置面板更清爽了：每个页签只把常用的放在上面，不常用的收进可以展开的折叠项，功能一个没少。
-- 渲染帧率、高清渲染、独立窗口透明背景和「恢复默认设置」挪到了「接入」页底部的「画质与通用设置」。
-- 「面捕」页的预览框只在打开「显示面捕预览」后才出现，平时不占位置。
-- 点「重置本模型」会先弹窗确认，避免误点后把这个模型的参数、映射、校准等设置一下子清空。
-- Windows 上开启摄像头或麦克风时不会再弹出“是否允许使用摄像头”的询问窗口。
-- 发现新版本时，「应用更新」里会直接写清这一版改了什么，不再只有一个 GitHub 链接。
+- When the window is hidden and nothing is tracking, using the microphone, recording or sending output, rendering pauses automatically to save background resources.
+- The macOS virtual camera stops sending frames when no app is receiving them, and resumes automatically when a meeting or streaming app connects.
+- Calibration instructions moved to the center of the stage, larger and easier to see, and hide automatically when done.
+- The settings panel is tidier: each tab keeps the common settings up top and tucks the rest into expandable sections, with nothing removed.
+- Render frame rate, HD rendering, transparent output window and "Restore defaults" moved to "Quality and general" at the bottom of the "Connect" tab.
+- The preview box on the "Tracking" tab only appears after you turn on "Show tracking preview", so it takes no space otherwise.
+- "Reset this model" now asks for confirmation first, so a misclick can't wipe that model's parameters, mappings and calibration all at once.
+- On Windows, turning on the camera or microphone no longer pops up a prompt asking to allow camera access.
+- When a new version is available, "App updates" spells out what changed instead of only showing a GitHub link.
 
-### 修复
+### Fixed
 
-- 张嘴说话时，角色不会再像凑近镜头一样忽然变大。
-- 半透明的 Live2D 道具不会再透出里面重叠的部件，淡入淡出时整个道具一起变透明。
+- The avatar no longer suddenly grows, as if leaning into the camera, when you open your mouth to talk.
+- Semi-transparent Live2D props no longer show their overlapping inner parts, and the whole prop fades in and out together.
 
 ## v1.0.7 · 2026-10-03
 
-- 这一版没有功能变化，只是给打包发布用到的几个依赖打了安全补丁。
+- No feature changes in this version; it only patches a few dependencies used for packaging and publishing.
 
 ## v1.0.6 · 2026-10-03
 
-### 新增
+### Added
 
-- OBS 透明输出：在「接入 → OBS 接入」启动后，角色和道具带着透明背景直接送进 OBS，不用再抠色键。macOS 走 Syphon、Windows 走 Spout2，延迟最低；不想装插件也可以用「浏览器」来源。
-- 「高清渲染」开关：用 2 倍超采样画角色，线条和边缘更锐利；显卡吃力时可以关掉。
-- 开始支持 Linux（实验性），提供 `.deb` 和 AppImage 两种安装包。
-- macOS 版 OpenSeeFace 变成了一个带窗口的独立应用「VTubeLeaf OpenSeeFace」：不用开终端，按名字选摄像头，还能自己检查并安装更新。
-- 在「面捕」里选择 OpenSeeFace 时，可以直接下载适合你电脑芯片的启动包。
+- Transparent OBS output: start it in "Connect → OBS" and your avatar and props go straight into OBS with a transparent background, no chroma key needed. macOS uses Syphon and Windows uses Spout2 for the lowest latency; if you'd rather not install a plugin, use a "Browser" source instead.
+- "HD rendering" switch: draws the avatar with 2× supersampling for crisper lines and edges; turn it off if your GPU struggles.
+- Experimental Linux support, with `.deb` and AppImage packages.
+- OpenSeeFace on macOS is now a standalone windowed app, "VTubeLeaf OpenSeeFace": no Terminal needed, pick your camera by name, and it checks for and installs its own updates.
+- When you choose OpenSeeFace under "Tracking", you can download the launcher package for your computer's chip right there.
 
-### 改进
+### Improved
 
-- 渲染质量相关的设置集中到了「画面」页。
-- 角色动画跟着显示器刷新节奏走，帧间隔更均匀，看起来更顺。
-- 独立输出窗口的帧率改为跟随「角色渲染帧率」设置。
+- Rendering quality settings are now gathered on the "Appearance" tab.
+- Avatar animation follows your display's refresh rhythm, so frames are more evenly spaced and motion looks smoother.
+- The output window's frame rate now follows the "Render frame rate" setting.
 
 ## v1.0.5 · 2026-09-27
 
-### 新增
+### Added
 
-- OpenSeeFace 改成单独下载的启动包，里面自带运行环境，不用再自己装 Python。不用 OpenSeeFace 的话不需要下载它。
-- 新增「开始跟踪时自动开启麦克风」选项。
+- OpenSeeFace is now a separate download that bundles its own runtime, so you no longer need to install Python. If you don't use OpenSeeFace, you don't need to download it.
+- New "Turn on mic when tracking starts" option.
 
-### 改进
+### Improved
 
-- 麦克风音量条换上了和应用一致的配色。
+- The microphone level meter now uses colors that match the rest of the app.
 
 ## v1.0.3 · 2026-09-23
 
-### 新增
+### Added
 
-- 虚拟摄像头新增「镜像输出」开关，可以把输出画面左右翻转。
-- macOS 26 上换成了系统原生风格的新应用图标。
+- The virtual camera adds a "Mirror output" switch that flips the output horizontally.
+- A new app icon in the native system style on macOS 26.
 
 ## v1.0.0 · 2026-09-19
 
-- 第一个正式版本，功能和 v0.1.20 相同，从这一版起进入 1.x 版本号。
+- The first stable release, with the same features as v0.1.20; version numbers move to 1.x from here on.
 
 ## v0.1.20 · 2026-09-18
 
-v0.1.1 到 v0.1.20 是早期测试版，这段时间做出了 VTubeLeaf 的主要功能：
+v0.1.1 through v0.1.20 were early test builds, during which VTubeLeaf gained its core features:
 
-- 用摄像头让 Live2D 角色跟着你眨眼、说话、转头，前后移动时角色也会跟着变大变小。
-- 内置 Haru、Hiyori、Mao 三个角色；把模型文件夹或 ZIP 拖进窗口就能导入自己的角色。
-- 可以开启上半身、手指跟踪和麦克风口型，口型自带元音模板，也能自己校准。
-- 用图片、动图、Live2D 道具和内置直播背景布置画面，保存成场景随时切换。
-- 切换角色自带的表情和动作，设置快捷键；能读取 VTube Studio 的模型设置和快捷键。
-- 录下角色动作并导出，不会录到摄像头画面或声音。
-- 用虚拟摄像头把角色接进会议软件，或者用「直播模式」「独立输出窗口」给 OBS 捕获。
-- 应用内检查、下载并安装更新。
+- Use your camera to make a Live2D avatar blink, talk and turn its head with you, growing and shrinking as you move closer or farther away.
+- Three built-in avatars, Haru, Hiyori and Mao; drag a model folder or ZIP into the window to import your own.
+- Turn on upper-body tracking, finger tracking and microphone lip sync; lip sync comes with vowel presets and can also be calibrated yourself.
+- Dress up the scene with images, animated images, Live2D props and built-in stream backgrounds, and save them as scenes to switch any time.
+- Switch the avatar's own expressions and motions and assign hotkeys; VTube Studio model settings and hotkeys can be read in.
+- Record your avatar's movements and export them, without capturing camera footage or sound.
+- Bring your avatar into meeting apps with the virtual camera, or capture it in OBS with "Stream mode" or the "Output window".
+- Check for, download and install updates inside the app.

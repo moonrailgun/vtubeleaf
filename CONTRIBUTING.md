@@ -63,7 +63,7 @@ Windows 的 MSVC、WebView2、PowerShell 命令与 `.exe` 安装包构建见 [Wi
 
 ## 发布版本（维护者）
 
-使用 [release-it](https://github.com/release-it/release-it)，配置集中在根目录 `package.json` 的 `release-it` 字段。以根目录 `package.json` 为版本来源；Tauri 直接读取它，`after:bump` 钩子同步 `src-tauri/Cargo.toml`、`Cargo.lock`，把 `CHANGELOG.md` 的「未发布」改为新版本号，并重新生成许可证清单。首次使用需按[第三方许可文档](docs/THIRD_PARTY.md)安装 `cargo-about 0.9.2`，并运行 `npm ci`。
+使用 [release-it](https://github.com/release-it/release-it)，配置集中在根目录 `package.json` 的 `release-it` 字段。以根目录 `package.json` 为版本来源；Tauri 直接读取它，`after:bump` 钩子同步 `src-tauri/Cargo.toml`、`Cargo.lock`，把 `CHANGELOG.md`（英文）和 `CHANGELOG.zh-CN.md`（中文）的「未发布」改为新版本号，并重新生成许可证清单。首次使用需按[第三方许可文档](docs/THIRD_PARTY.md)安装 `cargo-about 0.9.2`，并运行 `npm ci`。
 
 ```sh
 npm run release:patch      # 0.1.1 → 0.1.2
@@ -75,11 +75,11 @@ npm run release -- patch --dry-run  # 仅预览，不改文件、提交或推送
 
 ### 发布前检查
 
-运行前先提交现有改动（包括 `CHANGELOG.md` 中「未发布」的更新说明，为空时会直接终止），并确保当前分支已设置 upstream、能够推送。release-it 会检查工作区是否干净并执行 `git fetch`；`after:git:init` 前置检查若发现远程分支存在本地未同步的提交（本地落后或双方分叉），会在修改版本号前终止并提示先同步，与远端一致或仅本地领先可以继续。拉取远程失败也会终止；`--dry-run` 会跳过 fetch 和 hook。
+运行前先提交现有改动（包括 `CHANGELOG.md` 和 `CHANGELOG.zh-CN.md` 中「未发布」的更新说明，任一份为空时会直接终止），并确保当前分支已设置 upstream、能够推送。release-it 会检查工作区是否干净并执行 `git fetch`；`after:git:init` 前置检查若发现远程分支存在本地未同步的提交（本地落后或双方分叉），会在修改版本号前终止并提示先同步，与远端一致或仅本地领先可以继续。拉取远程失败也会终止；`--dry-run` 会跳过 fetch 和 hook。
 
 ### 版本提交与打包
 
-检查通过后更新 `package-lock.json`，将 Rust 版本、更新日志和许可证文件纳入同一次 Git 提交（如 `chore(release): bump version to 0.1.2`），创建对应 tag（如 `v0.1.2`），并推送提交和 tag。命令使用 `--ci` 无交互执行，不发布 npm 包；推送 `v*` tag 后自动触发 [Release 工作流](.github/workflows/release.yml)，校验 tag 与应用版本一致，待三端检查和 macOS 签名、公证全部成功后创建 GitHub Release，上传 Windows `.exe`、macOS `.dmg` / `.zip`、Linux `.deb` / `.AppImage`、各平台 OpenSeeFace 独立包与 `SHA256SUMS.txt`；发行说明和应用内更新说明取自 `CHANGELOG.md` 中对应版本的一节。预发布版本（如 `v0.2.0-beta.1`）会标记为 prerelease。命令结束表示 tag 已推送，实际打包和发布进度需在 Actions 查看。
+检查通过后更新 `package-lock.json`，将 Rust 版本、更新日志和许可证文件纳入同一次 Git 提交（如 `chore(release): bump version to 0.1.2`），创建对应 tag（如 `v0.1.2`），并推送提交和 tag。命令使用 `--ci` 无交互执行，不发布 npm 包；推送 `v*` tag 后自动触发 [Release 工作流](.github/workflows/release.yml)，校验 tag 与应用版本一致，待三端检查和 macOS 签名、公证全部成功后创建 GitHub Release，上传 Windows `.exe`、macOS `.dmg` / `.zip`、Linux `.deb` / `.AppImage`、各平台 OpenSeeFace 独立包与 `SHA256SUMS.txt`；发行说明和应用内更新说明由两份更新日志中对应版本的一节拼成英中双语，应用内按界面语言只显示其中一种。预发布版本（如 `v0.2.0-beta.1`）会标记为 prerelease。命令结束表示 tag 已推送，实际打包和发布进度需在 Actions 查看。
 
 ### 中途失败的处理
 
