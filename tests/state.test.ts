@@ -3,6 +3,16 @@ import assert from 'node:assert/strict';
 import { defaults, readSettings, FaceMapper, NEUTRAL, fromMediaPipe } from '../src/state.ts';
 import * as state from '../src/state.ts';
 
+test('face compute device defaults to GPU and preserves a valid global selection', () => {
+  for (const trackingDelegate of [undefined, null, '', 'cpu', 'other', 1])
+    assert.equal(readSettings({ trackingDelegate }).trackingDelegate, 'GPU');
+  for (const trackingDelegate of ['CPU', 'GPU']) {
+    const settings = readSettings({ modelPath: '/a', trackingDelegate });
+    const restored = readSettings(JSON.parse(JSON.stringify(state.switchProfile(settings, '/b'))));
+    assert.equal(restored.trackingDelegate, trackingDelegate);
+  }
+});
+
 test('pinned models are validated and stay global across model changes and reloads', () => {
   for (const value of [undefined, null, '/a', 1])
     assert.deepEqual(readSettings({ pinnedModels: value }).pinnedModels, []);

@@ -8,6 +8,79 @@ async function chooseOption(page: Page, trigger: Locator, name: string | RegExp)
   await page.getByRole('option', { name, exact: true }).click();
 }
 
+test('face compute device defaults to GPU and the CPU choice survives reload', async ({ page }) => {
+  await page.goto('/');
+  await openFold(page, '跟踪引擎与采集');
+  const device = page.getByRole('combobox', { name: '面捕计算设备', exact: true });
+  await expect(device).toHaveText('GPU · 默认');
+  await chooseOption(page, device, 'CPU');
+  await expect
+    .poll(() =>
+      page.evaluate(() => JSON.parse(localStorage.getItem('vtubeleaf-preview')!).trackingDelegate),
+    )
+    .toBe('CPU');
+  await page.reload();
+  await openFold(page, '跟踪引擎与采集');
+  await expect(device).toHaveText('CPU');
+  await chooseOption(page, page.locator('#engine'), 'OpenSeeFace · 备选');
+  await expect(device).toBeHidden();
+  await chooseOption(page, page.locator('#engine'), 'MediaPipe · 默认');
+  await expect(device).toHaveText('CPU');
+});
+
+test('face tracking uses the selected device and allows CPU retry after GPU startup failure', async ({
+  page,
+}) => {
+  await page.route('**/@mediapipe_tasks-vision.js*', (route) =>
+    route.fulfill({
+      contentType: 'application/javascript',
+      body: `
+      export const FilesetResolver = { forVisionTasks: async () => ({}) };
+      export const FaceLandmarker = { createFromOptions: async (_, options) => {
+        window.delegates.push(options.baseOptions.delegate);
+        if (window.rejectGpu && options.baseOptions.delegate === 'GPU') throw new Error('GPU unavailable');
+        return { close() {} };
+      } };
+    `,
+    }),
+  );
+  await page.goto('/?output=1');
+  const result = await page.evaluate(async () => {
+    const { Tracker } = await import('/src/tracker.ts');
+    const { defaults } = await import('/src/state.ts');
+    const w = window as any;
+    w.delegates = [];
+    const video = document.createElement('video');
+    const tracker = new Tracker(
+      video,
+      () => {},
+      () => {},
+    );
+    const settings = { ...defaults, upperBody: false };
+    try {
+      await tracker.start(settings);
+      const stream = video.srcObject as MediaStream;
+      w.rejectGpu = true;
+      let error = '';
+      try {
+        await tracker.start(settings);
+      } catch (e) {
+        error = (e as Error).message;
+      }
+      const released =
+        stream.getTracks().every((track) => track.readyState === 'ended') && !video.srcObject;
+      const restarted = await tracker.start({ ...settings, trackingDelegate: 'CPU' });
+      return { delegates: w.delegates, error, released, restarted };
+    } finally {
+      await tracker.stop();
+    }
+  });
+  expect(result.delegates).toEqual(['GPU', 'GPU', 'CPU']);
+  expect(result.error).toContain('CPU');
+  expect(result.released).toBe(true);
+  expect(result.restarted).toBe(true);
+});
+
 test('keyboard hotkey switch persists and restores existing application bindings', async ({
   page,
 }) => {

@@ -1040,6 +1040,23 @@ export function App() {
                 </SelectContent>
               </Select>
               <div hidden={s.engine !== 'mediapipe'}>
+                <label htmlFor="tracking-delegate">面捕计算设备</label>
+                <Select
+                  disabled={active}
+                  value={s.trackingDelegate}
+                  onValueChange={(value) =>
+                    set('trackingDelegate', value as Settings['trackingDelegate'])
+                  }
+                >
+                  <SelectTrigger id="tracking-delegate">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="GPU">GPU · 默认</SelectItem>
+                    <SelectItem value="CPU">CPU</SelectItem>
+                  </SelectContent>
+                </Select>
+                <p className="hint">仅影响面部识别；GPU 运行不稳定时可切换为 CPU。</p>
                 <label htmlFor="camera-resolution">采集分辨率</label>
                 <Select
                   disabled={active}

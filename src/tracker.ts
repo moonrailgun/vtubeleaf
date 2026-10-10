@@ -184,7 +184,7 @@ export class Tracker {
         const landmarker = await FaceLandmarker.createFromOptions(vision, {
           baseOptions: {
             modelAssetPath: '/runtime/mediapipe/face_landmarker.task',
-            delegate: 'CPU',
+            delegate: s.trackingDelegate,
           },
           runningMode: 'VIDEO',
           numFaces: 1,
@@ -324,7 +324,9 @@ export class Tracker {
         );
       if (error instanceof Error && error.message.startsWith('此运行环境')) throw error;
       throw new Error(
-        '面捕资源加载失败。请运行 npm run setup:assets 安装本地 MediaPipe 资源后重试。',
+        s.engine === 'mediapipe' && s.trackingDelegate === 'GPU'
+          ? '面捕启动失败。请在「跟踪引擎与采集」中将「面捕计算设备」切换为 CPU 后重试；若仍失败，请检查本地面捕资源。'
+          : '面捕资源加载失败。请运行 npm run setup:assets 安装本地 MediaPipe 资源后重试。',
       );
     }
   }

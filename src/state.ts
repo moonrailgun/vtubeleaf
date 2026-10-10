@@ -148,6 +148,7 @@ export type Settings = ModelProfile & {
   virtualCameraMirror: boolean;
   obsOutput: 'native' | 'browser';
   engine: 'mediapipe' | 'openseeface' | 'nvidia';
+  trackingDelegate: 'CPU' | 'GPU';
   deviceId: string;
   previewMirror: boolean;
   previewCamera: boolean;
@@ -200,6 +201,7 @@ export const defaults: Settings = {
   virtualCameraMirror: false,
   obsOutput: 'native',
   engine: 'mediapipe',
+  trackingDelegate: 'GPU',
   deviceId: '',
   previewMirror: true,
   previewCamera: false,
@@ -562,6 +564,8 @@ export function readSettings(value: unknown): Settings {
   if (typeof v.micNoiseGate === 'number' && Number.isFinite(v.micNoiseGate))
     s.micNoiseGate = clamp(v.micNoiseGate, 0, 0.2);
   if (v.engine === 'openseeface' || v.engine === 'nvidia') s.engine = v.engine;
+  if (v.trackingDelegate === 'CPU' || v.trackingDelegate === 'GPU')
+    s.trackingDelegate = v.trackingDelegate;
   if (v.openseefaceMode === 'external' || v.openseefaceMode === 'custom')
     s.openseefaceMode = v.openseefaceMode;
   else if (v.openseefaceMode !== 'bundled' && (s.pythonPath.trim() || s.scriptPath.trim()))
