@@ -680,9 +680,10 @@ h1 {
 }
 .notice {
   position: absolute;
-  top: 156px;
+  top: 112px;
   left: var(--tools-left);
-  max-width: calc(100% - var(--tools-left) - var(--overlay-right));
+  /* Shares the top row with the tracking status on the right. */
+  max-width: calc(100% - var(--tools-left) - var(--overlay-right) - 96px);
   padding: 6px 10px;
   background: #ffffffe6;
   border-radius: 8px;
