@@ -6,8 +6,8 @@
     "scripts/licenses.hbs": "d610eaccb5fa21eda12278ccb82387c024deb4c65ebe64fdfa706c2a06cb620d",
     "scripts/licenses.mjs": "435e51b6bea761c64d7e8cae1e28797db5e12c808595be456f6737bb49e95ee0",
     "scripts/setup-assets.mjs": "266596132d87c5426fb8bb55601155a1c36570a31fdabdde358cb895595c176a",
-    "src-tauri/Cargo.lock": "53fe75073110671694728b27ae86e80374b5ec52da46753a3291ff30a377637b",
-    "src-tauri/Cargo.toml": "d39530a680b6cc690f2587433c767a16f80fda991958e45361c7e293d1ad4e5a",
+    "src-tauri/Cargo.lock": "8981b577fdd2f1cb979f0018884cdb16af2162228ab6be7e4b3ad7ab0486cbf7",
+    "src-tauri/Cargo.toml": "93defd62b5ad35997d0388808e3f9dcf7c8cd4a8631e9b1877efaa3ab09d46b0",
     "src-tauri/about.toml": "5023e7d6d9b2a82666774bce222a7e0c3296f21a90c4461dd2c46117b8f6afa8"
   },
   "outputs": {
@@ -17,7 +17,7 @@
     "public/licenses/npm.txt": "16b590d11df4275c8611a5f750f12ce0f770127a5f9eb9c53a65b9bcb0525d6e",
     "public/licenses/react-remove-scroll-bar.txt": "54b6e5731335b8952a0fe9eeda79bb9d0e1414a724544155f5ac890ab82571f2",
     "public/licenses/resources.txt": "709e3b1e2fe1fdb81983309ddbbfc9b6c9feb3f8ad15779bd78cd4bdfa13b237",
-    "public/licenses/rust.html": "effe7e41e912fae88a8aa7b4dbb9d96afa16e13249bc74285ac133b9e5c2b31b",
+    "public/licenses/rust.html": "187fbe0ba2c0cc61ddda40af18f5763084bd5c5d6363d12a064d0a7638bc7aef",
     "public/licenses/tauri-api.txt": "9dd42ea92cff2ede5cd477cbfcce051b2d0115c0ac7f368ee88cb545055dff1d",
     "public/licenses/vtubeleaf.txt": "dbf5b94233912b21c2d6c30f6bc621c54feb014eb182e6ad8fe9fc3e55781e3d",
     "public/licenses/windows-microsoft.txt": "3645a237b872306e4955bc2ce75783537bd7123bcb57332f8819e4cfbcf50b45",

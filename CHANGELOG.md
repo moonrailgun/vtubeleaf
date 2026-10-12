@@ -4,6 +4,7 @@
 
 ### Added
 
+- "Tracking engine" adds "Phone companion · Same Wi-Fi": after "Start tracking", a QR code appears; scan it with the VTubeLeaf phone app and the phone tracks your face and sends only motion values to the computer, so the computer no longer runs face tracking itself. The panel shows the connected phone, its engine, received frame rate and network round trip, and "Disconnect phone" ends that phone's session and shows a fresh code. Only one phone can be paired at a time; a second phone is told the computer is busy. A phone that drops off the network can come back within 30 seconds without scanning again, and connecting a different phone or engine asks you to calibrate your neutral pose again.
 - "Appearance" adds "Output aspect ratio": pick 16:9, 9:16, 4:3 or 3:4 and an outline on the stage marks exactly what the virtual camera and OBS receive, so the shape of the window no longer decides how the output is framed. "Default (follow window)" keeps the previous behavior.
 
 ### Improved

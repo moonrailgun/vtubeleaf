@@ -919,6 +919,33 @@ h1 {
 .camera-preview .mirrored {
   transform: scaleX(-1);
 }
+.phone-link {
+  margin-top: 12px;
+}
+.phone-qr {
+  display: block;
+  width: 192px;
+  height: 192px;
+  margin: 0 auto;
+  padding: 8px;
+  background: #fff;
+  border: 1px solid #e9e3ec;
+  border-radius: 11px;
+}
+.phone-facts {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 4px 12px;
+  margin: 12px 0;
+  font-size: 12px;
+  line-height: 1.5;
+}
+.phone-facts dt {
+  color: var(--muted-foreground);
+}
+.phone-facts dd {
+  margin: 0;
+}
 .check {
   display: flex;
   align-items: center;

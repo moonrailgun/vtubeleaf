@@ -156,6 +156,34 @@ export default {
     'このプラットフォームは NVIDIA トラッキングに対応していません。MediaPipe に切り替えてください。',
   'app.nvidiaPath': 'NVIDIA トラッキング拡張プログラム',
   'app.nvidiaModelDir': 'NVIDIA モデルフォルダ',
+  'app.enginePhone': 'スマートフォン連携 · 同じ Wi-Fi',
+  'app.phoneIntro':
+    'スマートフォンで VTubeLeaf コンパニオンアプリを起動し、PC と同じ Wi-Fi に接続してください。顔の認識はスマートフォンが行い、動きの数値だけを PC に送ります。カメラ映像がスマートフォンの外に出ることはありません。手、上半身、カメラプレビューは引き続き MediaPipe を使います。',
+  'app.phoneStartHint': '「トラッキング開始」を押すとペアリング用 QR コードが表示されます。',
+  'app.phoneStarting': 'ペアリング用 QR コードを準備しています…',
+  'app.phoneQrAlt': 'VTubeLeaf スマートフォンアプリ用のペアリング QR コード',
+  'app.phoneScanHint':
+    'VTubeLeaf スマートフォンアプリでスキャンしてください。この PC は「{name}」として表示されます。',
+  'app.phoneReconnectHint':
+    'スマートフォンの再接続を待っています。もう一度スキャンすると改めてペアリングします。',
+  'app.phoneAddresses':
+    'この PC：{addresses} · ポート {port}。接続できない場合は、両方が同じ Wi-Fi にあること、ゲストネットワークの分離が無効であること、ファイアウォールが VTubeLeaf を許可していることを確認してください。',
+  'app.phoneNoNetwork': 'Wi-Fi または有線のアドレスが見つかりません',
+  'app.phoneDevice': 'スマートフォン',
+  'app.phoneEngine': 'エンジン',
+  'app.phoneState': '状態',
+  'app.phoneFps': '受信フレームレート',
+  'app.phoneRtt': 'ネットワーク往復時間',
+  'app.phoneStateListening': 'スマートフォンのスキャン待ち',
+  'app.phoneStateConnected': '接続済み · 受信中',
+  'app.phoneStatePaused': '接続済み · スマートフォン側で一時停止中',
+  'app.phoneStateReconnecting': 'スマートフォンが切断 · 再接続待ち',
+  'app.phoneDisconnect': 'スマートフォンを切断',
+  'app.phoneReceiving': '{device} から受信中',
+  'app.phonePaused': '{device} は一時停止中',
+  'app.phoneReconnecting': '{device} の再接続待ち',
+  'app.phoneWaitingScan': 'スマートフォンの接続待ち',
+  'app.phoneDisconnected': 'スマートフォン未接続',
   'app.trackingFps': 'トラッキング FPS',
   'app.cameraResolution': 'カメラ解像度',
   'app.motionTuning': '動きの調整',
@@ -488,6 +516,10 @@ export default {
     'トラッキングプロセスに異常が発生しました。SDK とカメラを確認してください。',
   'tracker.openSeeFaceExited':
     'OpenSeeFace のトラッキングプロセスが終了しました。カメラを確認してもう一度お試しください。',
+  'tracker.phoneStopped':
+    'スマートフォンとの接続が予期せず停止しました。トラッキングをもう一度開始してください。',
+  'tracker.phoneFailed':
+    'スマートフォンとの接続を開けません。ファイアウォールが VTubeLeaf を許可しているか確認して、もう一度お試しください。',
   'tracker.noCameraApi':
     'この環境ではカメラを利用できません。デスクトップアプリを使い、システムの権限を確認してください。',
   'tracker.cameraNameUnavailable': 'カメラ名を取得できません',
@@ -783,6 +815,16 @@ export default {
   'studio.restoreFailed':
     '前回のキャラクターを復元できませんでした。{error} 再度インポートしてください。',
   'studio.renderFailed': 'モデルの描画に失敗しました：{error}',
+  'studio.phoneWaiting':
+    'スマートフォンの接続を待っています。VTubeLeaf スマートフォンアプリで QR コードをスキャンしてください。',
+  'studio.phoneStopped': 'スマートフォンからの受信を停止し、セッションを終了しました。',
+  'studio.phoneConnected':
+    '{device} が接続しました。スマートフォンでトラッキングを開始してから、ニュートラル姿勢をキャリブレーションしてください。',
+  'studio.phoneChanged':
+    '{device} が接続しました。別のスマートフォンまたはエンジンなので、ニュートラル姿勢をもう一度キャリブレーションしてください。',
+  'studio.phoneLost': '{device} との接続が切れました。再接続を待っています…',
+  'studio.phoneLeft':
+    'スマートフォンが切断しました。新しい QR コードをスキャンすると再度ペアリングできます。',
   'studio.renderStatus': '描画 {render} FPS · 入力 {input} FPS · 推論 {inference} ms',
   'studio.faceDetected': '顔を認識中',
   'studio.faceLostHold': '顔未検出 · 姿勢を保持',

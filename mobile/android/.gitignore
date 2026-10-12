@@ -1,0 +1,7 @@
+.gradle/
+build/
+local.properties
+*.iml
+.idea/
+.kotlin/
+app/src/main/assets/face_landmarker.task

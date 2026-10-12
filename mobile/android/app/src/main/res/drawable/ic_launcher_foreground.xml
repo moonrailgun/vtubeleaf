@@ -1,0 +1,47 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The VTubeLeaf leaf mark, from public/brand/mark.svg, inside the adaptive-icon safe zone. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="256"
+    android:viewportHeight="256">
+    <group
+        android:scaleX="0.6"
+        android:scaleY="0.6"
+        android:translateX="51.2"
+        android:translateY="51.2">
+        <group
+            android:scaleX="0.336"
+            android:scaleY="0.336"
+            android:translateX="27.4"
+            android:translateY="16">
+            <group
+                android:translateX="-321"
+                android:translateY="-193">
+                <path
+                    android:fillColor="#E15F7D"
+                    android:pathData="M696 434C683 397 679 364 656 337C621 295 568 275 514 286C521 355 557 401 623 416C637 419 650 423 667 432C660 400 632 367 596 340C639 359 676 393 691 436Z" />
+                <path
+                    android:fillColor="#E15F7D"
+                    android:pathData="M699 435C677 358 695 288 749 248C789 218 851 203 916 194C926 258 920 323 884 370C850 414 792 433 736 454C719 408 767 333 818 292C746 328 710 378 699 435Z" />
+                <path
+                    android:fillColor="#E15F7D"
+                    android:pathData="M694 434C626 407 552 416 494 448C443 477 424 515 399 551C375 588 355 607 326 602C309 597 328 633 351 643C365 650 381 653 394 652C377 716 388 777 430 813C475 852 545 861 618 860C716 861 811 840 868 795C900 770 908 735 890 702C877 680 874 670 872 643C866 558 824 490 736 454Z" />
+                <path
+                    android:fillColor="#F6B5BE"
+                    android:pathData="M421 638C482 622 532 587 558 537C568 584 551 614 521 632C491 651 453 651 421 638Z" />
+                <path
+                    android:fillColor="#FFFFFF"
+                    android:pathData="M527 685a20 42 0 1 0 0.1 0Z" />
+                <path
+                    android:fillColor="#FFFFFF"
+                    android:pathData="M722 649a20 42 0 1 0 0.1 0Z" />
+                <path
+                    android:pathData="M607 756Q632 773 658 746"
+                    android:strokeColor="#FFFFFF"
+                    android:strokeLineCap="round"
+                    android:strokeWidth="14" />
+            </group>
+        </group>
+    </group>
+</vector>

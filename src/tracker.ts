@@ -147,7 +147,9 @@ export class Tracker {
                 })
               : typeof event.payload === 'string'
                 ? event.payload
-                : t('tracker.openSeeFaceExited'),
+                : engine === 'phone'
+                  ? t('tracker.phoneStopped')
+                  : t('tracker.openSeeFaceExited'),
           );
         });
         if (generation !== this.generation) {
@@ -169,13 +171,15 @@ export class Tracker {
                       fps: s.trackingFps,
                       resolution: s.cameraResolution,
                     }
-                  : {
-                      port: s.port,
-                      mode: s.openseefaceMode,
-                      camera: s.camera,
-                      pythonPath: s.pythonPath || null,
-                      scriptPath: s.scriptPath || null,
-                    },
+                  : engine === 'phone'
+                    ? {}
+                    : {
+                        port: s.port,
+                        mode: s.openseefaceMode,
+                        camera: s.camera,
+                        pythonPath: s.pythonPath || null,
+                        scriptPath: s.scriptPath || null,
+                      },
               );
           });
         await this.nativeOperation;
@@ -336,8 +340,12 @@ export class Tracker {
         };
         throw new Error(messages[error.name] ?? t('tracker.cameraFailed'));
       }
-      if (s.engine === 'openseeface')
-        throw new Error(typeof error === 'string' ? error : t('tracker.openSeeFaceFailed'));
+      if (s.engine === 'openseeface' || s.engine === 'phone')
+        throw new Error(
+          typeof error === 'string'
+            ? error
+            : t(s.engine === 'phone' ? 'tracker.phoneFailed' : 'tracker.openSeeFaceFailed'),
+        );
       if (error instanceof Error && error.message === t('tracker.noCameraApi')) throw error;
       throw new Error(
         s.engine === 'mediapipe' && s.trackingDelegate === 'GPU'
@@ -496,6 +504,13 @@ export class Tracker {
 
   get inferenceMs() {
     return this.lastDetection;
+  }
+
+  /** Ends the paired phone's session and issues a new pairing code, keeping the link open. */
+  async relink() {
+    if (this.engine !== 'phone') return;
+    this.nativeOperation = this.nativeOperation.catch(() => {}).then(() => invoke('start_phone'));
+    await this.nativeOperation;
   }
 
   pause(paused: boolean) {

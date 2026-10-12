@@ -168,7 +168,7 @@ export type Settings = ModelProfile & {
   autoStartMic: boolean;
   virtualCameraMirror: boolean;
   obsOutput: 'native' | 'browser';
-  engine: 'mediapipe' | 'openseeface' | 'nvidia';
+  engine: 'mediapipe' | 'openseeface' | 'nvidia' | 'phone';
   trackingDelegate: 'CPU' | 'GPU';
   deviceId: string;
   previewMirror: boolean;
@@ -594,7 +594,8 @@ export function readSettings(value: unknown): Settings {
     s.micGain = clamp(v.micGain, 0.1, 20);
   if (typeof v.micNoiseGate === 'number' && Number.isFinite(v.micNoiseGate))
     s.micNoiseGate = clamp(v.micNoiseGate, 0, 0.2);
-  if (v.engine === 'openseeface' || v.engine === 'nvidia') s.engine = v.engine;
+  if (v.engine === 'openseeface' || v.engine === 'nvidia' || v.engine === 'phone')
+    s.engine = v.engine;
   if (v.trackingDelegate === 'CPU' || v.trackingDelegate === 'GPU')
     s.trackingDelegate = v.trackingDelegate;
   if (v.openseefaceMode === 'external' || v.openseefaceMode === 'custom')

@@ -1,0 +1,3 @@
+"CFBundleDisplayName" = "VTubeLeaf";
+"NSCameraUsageDescription" = "La caméra scanne le code d’appairage et suit votre visage sur ce téléphone. La vidéo ne quitte jamais le téléphone.";
+"NSLocalNetworkUsageDescription" = "VTubeLeaf envoie les valeurs de mouvement du visage à l’ordinateur appairé par votre réseau local.";

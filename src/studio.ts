@@ -27,6 +27,7 @@ import {
 import { Hotkeys, validateHotkey } from './hotkeys';
 import { MotionRecording } from './recording';
 import { sampleCalibration } from './calibration';
+import { isPhoneStatus, type PhoneStatus } from './phone';
 import { AudioLipSync, type Vowel } from './lipsync';
 import { VirtualCamera, type CameraStatus } from './virtual-camera';
 import { ObsOutput } from './obs-output';
@@ -68,6 +69,9 @@ export function createStudio(
   let lastFaceAt = 0;
   let lastDetectedFaceAt = 0;
   let tracking: 'stopped' | 'starting' | 'running' | 'paused' = 'stopped';
+  let phone: PhoneStatus | null = null;
+  let phoneDevice = '';
+  let inputFps = 0;
   let trackingOperation = 0;
   let modelOperation = 0;
   let modelRevision = 0;
@@ -164,6 +168,8 @@ export function createStudio(
     cameraLabel: tracker.cameraLabel,
     cameraSettings: tracker.cameraSettings,
     renderStatus,
+    inputFps,
+    phone,
     faceStatus,
     bodyStatus: tracker.bodyStatus,
     handStatus: tracker.handStatus,
@@ -436,6 +442,7 @@ export function createStudio(
       trackingOperation++;
       tracking = 'stopped';
       lastFace = null;
+      phone = null;
       cancelCalibration();
       notify(error, true);
     },
@@ -447,6 +454,7 @@ export function createStudio(
     lastFace = null;
     faceStatus = t('studio.trackingStopped');
     faceInput = {};
+    phone = null;
     cancelCalibration();
     micStarting = false;
     voiceCalibration = null;
@@ -979,7 +987,9 @@ export function createStudio(
               : t('studio.osfStarted')
             : settings.engine === 'nvidia'
               ? t('studio.nvidiaStarting')
-              : t('studio.trackingStarted'),
+              : settings.engine === 'phone'
+                ? t('studio.phoneWaiting')
+                : t('studio.trackingStarted'),
         );
       } catch (error) {
         if (!disposed && operation === trackingOperation) {
@@ -994,8 +1004,15 @@ export function createStudio(
       notify(
         settings.engine === 'openseeface' && settings.openseefaceMode === 'external'
           ? t('studio.osfStopped')
-          : t('studio.cameraReleased'),
+          : settings.engine === 'phone'
+            ? t('studio.phoneStopped')
+            : t('studio.cameraReleased'),
       );
+    },
+    /** Ends the paired phone's session and shows a new pairing code. */
+    async phoneDisconnect() {
+      if (settings.engine !== 'phone' || tracking === 'stopped') return;
+      await tracker.relink();
     },
     pause() {
       if (!['running', 'paused'].includes(tracking)) return;
@@ -1481,6 +1498,32 @@ export function createStudio(
       );
       if (disposed) return;
       await own(
+        listen<unknown>('phone-status', ({ payload }) => {
+          if (!isPhoneStatus(payload) || tracking === 'stopped') return;
+          const live = (status: PhoneStatus | null) =>
+            status?.state === 'connected' || status?.state === 'paused';
+          const previous = phone;
+          phone = payload;
+          if (live(payload) && !live(previous)) {
+            const device = `${payload.engine}:${payload.device}`;
+            if (phoneDevice && phoneDevice !== device) {
+              // Another phone or engine has its own neutral values, like switching cameras.
+              cancelCalibration();
+              settings.neutral = null;
+              settings.eyeClosedLeft = settings.eyeClosedRight = null;
+              mapper.reset();
+              changed();
+              notify(t('studio.phoneChanged', { device: payload.device }));
+            } else notify(t('studio.phoneConnected', { device: payload.device }));
+            phoneDevice = device;
+          } else if (payload.state === 'reconnecting' && live(previous))
+            notify(t('studio.phoneLost', { device: payload.device }));
+          else if (payload.state === 'listening' && previous && previous.state !== 'listening')
+            notify(t('studio.phoneLeft'));
+          publish();
+        }),
+      );
+      await own(
         listen('about-ready', () => {
           void emitTo('about', 'about-events', [...events]).catch(() => {});
           sendUpdateState();
@@ -1671,9 +1714,10 @@ export function createStudio(
     }
     frames++;
     if (now - since > 1000) {
+      inputFps = Math.round((inputFrames * 1000) / (now - since));
       renderStatus = t('studio.renderStatus', {
         render: Math.round((frames * 1000) / (now - since)),
-        input: Math.round((inputFrames * 1000) / (now - since)),
+        input: inputFps,
         inference: tracker.inferenceMs.toFixed(0),
       });
       faceStatus =

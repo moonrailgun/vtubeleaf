@@ -1,0 +1,3 @@
+"CFBundleDisplayName" = "VTubeLeaf";
+"NSCameraUsageDescription" = "La cámara escanea el código de emparejamiento y sigue tu cara en este teléfono. El vídeo nunca sale del teléfono.";
+"NSLocalNetworkUsageDescription" = "VTubeLeaf envía los valores de movimiento facial al equipo emparejado por tu red local.";

@@ -1,0 +1,58 @@
+name: VTubeLeafPhone
+options:
+  bundleIdPrefix: com.moonrailgun.vtubeleaf
+  deploymentTarget:
+    iOS: '16.0'
+  createIntermediateGroups: true
+  developmentLanguage: en
+settings:
+  base:
+    SWIFT_VERSION: '5.9'
+    MARKETING_VERSION: '0.1.0'
+    CURRENT_PROJECT_VERSION: '1'
+    TARGETED_DEVICE_FAMILY: '1'
+    SWIFT_EMIT_LOC_STRINGS: YES
+targets:
+  VTubeLeafPhone:
+    type: application
+    platform: iOS
+    sources:
+      - path: VTubeLeafPhone
+    info:
+      path: VTubeLeafPhone/Info.plist
+      properties:
+        CFBundleDisplayName: VTubeLeaf
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
+        UILaunchScreen: {}
+        UISupportedInterfaceOrientations: [UIInterfaceOrientationPortrait]
+        UIRequiredDeviceCapabilities: [arkit, front-facing-camera]
+        NSCameraUsageDescription: The camera scans the pairing code and tracks your face on this phone. The video never leaves the phone.
+        NSLocalNetworkUsageDescription: VTubeLeaf sends face motion values to the computer you paired with over your local network.
+        ITSAppUsesNonExemptEncryption: false
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.moonrailgun.vtubeleaf.phone
+        INFOPLIST_KEY_UIApplicationSceneManifest_Generation: YES
+        CODE_SIGN_STYLE: Automatic
+  VTubeLeafPhoneTests:
+    type: bundle.unit-test
+    platform: iOS
+    sources:
+      - path: VTubeLeafPhoneTests
+    dependencies:
+      - target: VTubeLeafPhone
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.moonrailgun.vtubeleaf.phone.tests
+schemes:
+  VTubeLeafPhone:
+    build:
+      targets:
+        VTubeLeafPhone: all
+        VTubeLeafPhoneTests: [test]
+    run:
+      config: Debug
+    test:
+      config: Debug
+      targets: [VTubeLeafPhoneTests]

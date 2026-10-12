@@ -1,0 +1,1944 @@
+{
+  "sourceLanguage": "en",
+  "version": "1.0",
+  "strings": {
+    "bye_disconnected": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The computer disconnected this phone. Scan the new code to pair again."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "电脑已断开这台手机。扫描新的二维码即可重新配对。"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "PC がこのスマートフォンを切断しました。新しい QR コードをスキャンすると再度ペアリングできます。"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "El equipo desconectó este teléfono. Escanea el código nuevo para emparejar otra vez."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "L’ordinateur a déconnecté ce téléphone. Scannez le nouveau code pour appairer à nouveau."
+          }
+        }
+      }
+    },
+    "camera_busy": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The camera is in use by another app or unavailable. Close that app and press Resume."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "摄像头被其他应用占用或不可用。请关闭该应用后点「继续」。"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "カメラが他のアプリで使用中か利用できません。そのアプリを閉じてから「再開」を押してください。"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Otra app está usando la cámara o no está disponible. Cierra esa app y pulsa Reanudar."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "La caméra est utilisée par une autre app ou indisponible. Fermez cette app, puis appuyez sur Reprendre."
+          }
+        }
+      }
+    },
+    "camera_permission_button": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Allow camera"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "允许使用摄像头"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "カメラを許可"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Permitir cámara"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Autoriser la caméra"
+          }
+        }
+      }
+    },
+    "camera_permission_denied": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Camera access is off. Allow it in system settings to scan the code and track your face."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "摄像头权限已关闭。请在系统设置中允许，才能扫码和识别面部。"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "カメラへのアクセスがオフです。QR コードの読み取りと顔の認識には、システム設定で許可してください。"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "El acceso a la cámara está desactivado. Permítelo en los ajustes del sistema para escanear el código y seguir tu cara."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "L’accès à la caméra est désactivé. Autorisez-le dans les réglages système pour scanner le code et suivre votre visage."
+          }
+        }
+      }
+    },
+    "camera_permission_intro": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The camera is used to scan the pairing code and to track your face on this phone. The video never leaves the phone."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "摄像头用于扫描配对二维码，以及在这台手机上识别你的面部。画面不会离开手机。"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "カメラはペアリング用 QR コードの読み取りと、このスマートフォン上での顔の認識に使います。映像がスマートフォンの外に出ることはありません。"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "La cámara se usa para escanear el código de emparejamiento y para seguir tu cara en este teléfono. El vídeo nunca sale del teléfono."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "La caméra sert à scanner le code d’appairage et à suivre votre visage sur ce téléphone. La vidéo ne quitte jamais le téléphone."
+          }
+        }
+      }
+    },
+    "connect_intro": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "On the computer, choose “Phone companion · Same Wi-Fi” as the tracking engine and click “Start tracking”, then scan the code it shows. Both devices must be on the same Wi-Fi."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "在电脑上把跟踪引擎选为「手机伴侣 · 同一 Wi-Fi」并点「开始跟踪」，然后扫描电脑上显示的二维码。两台设备必须连接同一个 Wi-Fi。"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "PC でトラッキングエンジンに「スマートフォン連携 · 同じ Wi-Fi」を選び、「トラッキング開始」を押してから、表示された QR コードをスキャンしてください。両方の端末を同じ Wi-Fi に接続する必要があります。"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "En el equipo, elige “Teléfono acompañante · Misma Wi-Fi” como motor de seguimiento y haz clic en “Iniciar seguimiento”; luego escanea el código que muestra. Ambos dispositivos deben estar en la misma Wi-Fi."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sur l’ordinateur, choisissez « Téléphone compagnon · Même Wi-Fi » comme moteur de suivi et cliquez sur « Démarrer le suivi », puis scannez le code affiché. Les deux appareils doivent être sur le même Wi-Fi."
+          }
+        }
+      }
+    },
+    "connected_to %@": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Connected to “%1$@”"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "已连接「%1$@」"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "「%1$@」に接続済み"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Conectado a “%1$@”"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Connecté à « %1$@ »"
+          }
+        }
+      }
+    },
+    "connecting_to %@": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Connecting to “%1$@”…"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "正在连接「%1$@」…"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "「%1$@」に接続しています…"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Conectando con “%1$@”…"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Connexion à « %1$@ »…"
+          }
+        }
+      }
+    },
+    "disconnect": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Disconnect"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "断开"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "切断"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Desconectar"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Déconnecter"
+          }
+        }
+      }
+    },
+    "face_found": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Face found"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "已找到人脸"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "顔を検出"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Cara detectada"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Visage détecté"
+          }
+        }
+      }
+    },
+    "face_missing": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No face — move into the frame"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "没有人脸，请移到画面中"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "顔が見つかりません。画面内に入ってください"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sin cara: colócate dentro del encuadre"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Aucun visage : placez-vous dans le cadre"
+          }
+        }
+      }
+    },
+    "help_text": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "1. On the computer, choose “Phone companion · Same Wi-Fi” under “Tracking engine” and click “Start tracking”.\n2. Scan the code shown on the computer.\n3. Place the phone where it sees your face and press Start.\n4. Calibrate your neutral pose on the computer.\nLocking the phone, switching apps or a call pauses tracking; press Resume afterwards."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "1. 在电脑的「跟踪引擎」选「手机伴侣 · 同一 Wi-Fi」，点「开始跟踪」。\n2. 扫描电脑上显示的二维码。\n3. 把手机放在能看到你脸的位置，点「开始」。\n4. 在电脑上校准中立姿态。\n锁屏、切换应用或来电会暂停跟踪，之后点「继续」。"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "1. PC の「トラッキングエンジン」で「スマートフォン連携 · 同じ Wi-Fi」を選び、「トラッキング開始」を押します。\n2. PC に表示された QR コードをスキャンします。\n3. 顔が映る位置にスマートフォンを置き、「開始」を押します。\n4. PC でニュートラル姿勢をキャリブレーションします。\n画面ロック、アプリの切り替え、着信があるとトラッキングは一時停止します。その後「再開」を押してください。"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "1. En el equipo, elige “Teléfono acompañante · Misma Wi-Fi” en “Motor de seguimiento” y haz clic en “Iniciar seguimiento”.\n2. Escanea el código que muestra el equipo.\n3. Coloca el teléfono donde vea tu cara y pulsa Iniciar.\n4. Calibra tu pose neutra en el equipo.\nBloquear el teléfono, cambiar de app o una llamada pausan el seguimiento; después pulsa Reanudar."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "1. Sur l’ordinateur, choisissez « Téléphone compagnon · Même Wi-Fi » sous « Moteur de suivi » et cliquez sur « Démarrer le suivi ».\n2. Scannez le code affiché sur l’ordinateur.\n3. Placez le téléphone là où il voit votre visage et appuyez sur Démarrer.\n4. Calibrez votre pose neutre sur l’ordinateur.\nLe verrouillage du téléphone, un changement d’app ou un appel mettent le suivi en pause ; appuyez ensuite sur Reprendre."
+          }
+        }
+      }
+    },
+    "help_title": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Help"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "帮助"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ヘルプ"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ayuda"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Aide"
+          }
+        }
+      }
+    },
+    "hide_preview": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Hide preview"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "隐藏预览"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "プレビューを隠す"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ocultar vista previa"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Masquer l’aperçu"
+          }
+        }
+      }
+    },
+    "language": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Language"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "语言"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "言語"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Idioma"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Langue"
+          }
+        }
+      }
+    },
+    "language_hint": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "iOS keeps the app language in Settings → VTubeLeaf → Language."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "iOS 在「设置 → VTubeLeaf → 语言」中管理应用语言。"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "アプリの言語は iOS の「設定 → VTubeLeaf → 言語」で切り替えます。"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "iOS guarda el idioma de la app en Ajustes → VTubeLeaf → Idioma."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "iOS gère la langue de l’app dans Réglages → VTubeLeaf → Langue."
+          }
+        }
+      }
+    },
+    "link_ended": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Disconnected."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "已断开。"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "切断しました。"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Desconectado."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Déconnecté."
+          }
+        }
+      }
+    },
+    "link_identity": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The computer’s identity did not match the code. Scan the code shown on the computer again."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "电脑身份与二维码不一致。请重新扫描电脑上显示的二维码。"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "PC の識別情報が QR コードと一致しません。PC に表示されている QR コードをもう一度スキャンしてください。"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "La identidad del equipo no coincide con el código. Vuelve a escanear el código que muestra el equipo."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "L’identité de l’ordinateur ne correspond pas au code. Scannez à nouveau le code affiché sur l’ordinateur."
+          }
+        }
+      }
+    },
+    "link_lost": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The connection could not be restored within 30 seconds. Tracking was paused."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "30 秒内没有恢复连接，已暂停跟踪。"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "30 秒以内に接続を復旧できませんでした。トラッキングを一時停止しました。"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No se pudo recuperar la conexión en 30 segundos. El seguimiento se puso en pausa."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "La connexion n’a pas pu être rétablie en 30 secondes. Le suivi a été mis en pause."
+          }
+        }
+      }
+    },
+    "link_unreachable": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Could not reach the computer. Check that both devices are on the same Wi-Fi, that the network does not isolate devices (guest mode), and that the computer’s firewall allows VTubeLeaf."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "无法连上电脑。请确认两台设备在同一个 Wi-Fi、网络没有隔离设备（访客模式），并且电脑的防火墙允许 VTubeLeaf。"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "PC に接続できません。両方の端末が同じ Wi-Fi にあること、ネットワークが端末を分離していないこと（ゲストモード）、PC のファイアウォールが VTubeLeaf を許可していることを確認してください。"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No se pudo llegar al equipo. Comprueba que ambos dispositivos estén en la misma Wi-Fi, que la red no aísle los dispositivos (modo invitado) y que el cortafuegos del equipo permita VTubeLeaf."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Impossible de joindre l’ordinateur. Vérifiez que les deux appareils sont sur le même Wi-Fi, que le réseau n’isole pas les appareils (mode invité) et que le pare-feu de l’ordinateur autorise VTubeLeaf."
+          }
+        }
+      }
+    },
+    "local_network_hint": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Also check Settings → VTubeLeaf → Local Network is allowed; without it the computer can’t be reached."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "另请确认「设置 → VTubeLeaf → 本地网络」已允许，否则无法连上电脑。"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "「設定 → VTubeLeaf → ローカルネットワーク」が許可されているかも確認してください。許可がないと PC に接続できません。"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Comprueba también que Ajustes → VTubeLeaf → Red local esté permitido; sin ello no se puede llegar al equipo."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Vérifiez aussi que Réglages → VTubeLeaf → Réseau local est autorisé ; sans cela l’ordinateur est injoignable."
+          }
+        }
+      }
+    },
+    "nav_connect": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Connect"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "连接"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "接続"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Conectar"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Connexion"
+          }
+        }
+      }
+    },
+    "nav_settings": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Settings"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "设置"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "設定"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ajustes"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Réglages"
+          }
+        }
+      }
+    },
+    "nav_tracking": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tracking"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "跟踪"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "トラッキング"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Seguimiento"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Suivi"
+          }
+        }
+      }
+    },
+    "network_intro": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Only a direct connection on your local network is used — no account, no internet service."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "只会在局域网内直接连接电脑，不需要账号，也不经过互联网。"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ローカルネットワーク内で PC に直接接続するだけです。アカウントもインターネットサービスも使いません。"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Solo se usa una conexión directa en tu red local: sin cuenta y sin servicios de internet."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Seule une connexion directe sur votre réseau local est utilisée : ni compte, ni service internet."
+          }
+        }
+      }
+    },
+    "open_system_settings": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Open system settings"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "打开系统设置"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "システム設定を開く"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Abrir ajustes del sistema"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ouvrir les réglages système"
+          }
+        }
+      }
+    },
+    "pause": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Pause"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "暂停"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "一時停止"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Pausar"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Pause"
+          }
+        }
+      }
+    },
+    "paused_background": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Paused while the app was in the background. Press Resume to continue."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "应用切到后台时已暂停。点「继续」恢复。"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "アプリがバックグラウンドにあったため一時停止しました。「再開」を押して続けてください。"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "En pausa mientras la app estaba en segundo plano. Pulsa Reanudar para continuar."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mis en pause pendant que l’app était en arrière-plan. Appuyez sur Reprendre pour continuer."
+          }
+        }
+      }
+    },
+    "paused_interrupted": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Paused because the camera was interrupted (a call or another app). Press Resume to continue."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "摄像头被系统中断（来电或其他应用），已暂停。点「继续」恢复。"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "カメラが中断されたため（着信や他のアプリ）一時停止しました。「再開」を押して続けてください。"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "En pausa porque la cámara fue interrumpida (una llamada u otra app). Pulsa Reanudar para continuar."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mis en pause car la caméra a été interrompue (un appel ou une autre app). Appuyez sur Reprendre pour continuer."
+          }
+        }
+      }
+    },
+    "preview_hidden": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Preview hidden · the camera is still tracking"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "预览已隐藏 · 摄像头仍在跟踪"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "プレビュー非表示 · カメラは引き続きトラッキング中"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Vista previa oculta · la cámara sigue funcionando"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Aperçu masqué · la caméra continue le suivi"
+          }
+        }
+      }
+    },
+    "privacy_text": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The camera image stays on this phone. Only head rotation, eye, mouth and expression values are sent to your computer over your local network, and only after you scan its pairing code. Nothing is stored or uploaded."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "摄像头画面只留在这台手机上。只有头部转动、眼睛、嘴部和表情数值会通过局域网发到你的电脑，并且只在你扫描电脑的配对二维码之后。不保存、不上传任何内容。"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "カメラ映像はこのスマートフォンの中に留まります。PC に送るのは頭の回転、目、口、表情の数値だけで、PC のペアリング用 QR コードをスキャンした後にローカルネットワーク経由で送ります。保存もアップロードもしません。"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "La imagen de la cámara se queda en este teléfono. Solo se envían a tu equipo, por la red local, los valores de rotación de la cabeza, ojos, boca y expresión, y solo después de escanear su código de emparejamiento. No se guarda ni se sube nada."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "L’image de la caméra reste sur ce téléphone. Seules les valeurs de rotation de la tête, des yeux, de la bouche et des expressions sont envoyées à votre ordinateur par le réseau local, et seulement après avoir scanné son code d’appairage. Rien n’est enregistré ni téléversé."
+          }
+        }
+      }
+    },
+    "privacy_title": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Privacy"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "隐私"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "プライバシー"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Privacidad"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Confidentialité"
+          }
+        }
+      }
+    },
+    "qr_invalid": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "That is not a VTubeLeaf pairing code."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "这不是 VTubeLeaf 的配对二维码。"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "これは VTubeLeaf のペアリングコードではありません。"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Eso no es un código de emparejamiento de VTubeLeaf."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ce n’est pas un code d’appairage VTubeLeaf."
+          }
+        }
+      }
+    },
+    "qr_version %lld %lld": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This code needs another app version (code version %1$lld, this app supports %2$lld). Update the phone app and the desktop app."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "这个二维码需要另一个版本的应用（二维码版本 %1$lld，本应用支持 %2$lld）。请同时更新手机应用和桌面应用。"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "この QR コードには別のバージョンのアプリが必要です（コードのバージョン %1$lld、このアプリの対応バージョン %2$lld）。スマートフォンアプリとデスクトップアプリの両方を更新してください。"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Este código necesita otra versión de la app (versión del código %1$lld; esta app admite %2$lld). Actualiza la app del teléfono y la de escritorio."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ce code nécessite une autre version de l’app (version du code %1$lld, cette app prend en charge %2$lld). Mettez à jour l’app du téléphone et l’app de bureau."
+          }
+        }
+      }
+    },
+    "reconnecting": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Connection lost · reconnecting…"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "连接中断 · 正在重连…"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "接続が切れました · 再接続中…"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Conexión perdida · reconectando…"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Connexion perdue · reconnexion…"
+          }
+        }
+      }
+    },
+    "reject_busy": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The computer already has a phone connected. Click “Disconnect phone” on the computer, then scan the new code."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "电脑已经连接了另一台手机。请在电脑上点「断开手机」，再扫描新的二维码。"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "PC にはすでに別のスマートフォンが接続されています。PC で「スマートフォンを切断」を押してから、新しい QR コードをスキャンしてください。"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "El equipo ya tiene un teléfono conectado. Haz clic en “Desconectar teléfono” en el equipo y escanea el código nuevo."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Un téléphone est déjà connecté à l’ordinateur. Cliquez sur « Déconnecter le téléphone » sur l’ordinateur, puis scannez le nouveau code."
+          }
+        }
+      }
+    },
+    "reject_data": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The computer rejected the data this app sent. Update both apps."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "电脑拒绝了本应用发送的数据，请同时更新两端应用。"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "このアプリが送ったデータを PC が拒否しました。両方のアプリを更新してください。"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "El equipo rechazó los datos que envió esta app. Actualiza ambas apps."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "L’ordinateur a rejeté les données envoyées par cette app. Mettez à jour les deux apps."
+          }
+        }
+      }
+    },
+    "reject_session": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The computer ended this session. Scan the new code to pair again."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "电脑已结束这次连接。扫描新的二维码即可重新配对。"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "PC がこのセッションを終了しました。新しい QR コードをスキャンすると再度ペアリングできます。"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "El equipo cerró esta sesión. Escanea el código nuevo para emparejar otra vez."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "L’ordinateur a terminé cette session. Scannez le nouveau code pour appairer à nouveau."
+          }
+        }
+      }
+    },
+    "reject_token": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This code has expired. Click “Disconnect phone” or restart tracking on the computer and scan the new code."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "这个二维码已失效。请在电脑上点「断开手机」或重新开始跟踪，再扫描新的二维码。"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "この QR コードは期限切れです。PC で「スマートフォンを切断」を押すかトラッキングを再開し、新しい QR コードをスキャンしてください。"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Este código ha caducado. Haz clic en “Desconectar teléfono” o reinicia el seguimiento en el equipo y escanea el código nuevo."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ce code a expiré. Cliquez sur « Déconnecter le téléphone » ou relancez le suivi sur l’ordinateur, puis scannez le nouveau code."
+          }
+        }
+      }
+    },
+    "reject_version": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The desktop app uses another protocol version. Update both apps."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "桌面应用使用的协议版本不同，请同时更新两端应用。"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "デスクトップアプリのプロトコルバージョンが異なります。両方のアプリを更新してください。"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "La app de escritorio usa otra versión del protocolo. Actualiza ambas apps."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "L’app de bureau utilise une autre version du protocole. Mettez à jour les deux apps."
+          }
+        }
+      }
+    },
+    "resume": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Resume"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "继续"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "再開"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Reanudar"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Reprendre"
+          }
+        }
+      }
+    },
+    "retry": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Try again"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "重试"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "再試行"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Reintentar"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Réessayer"
+          }
+        }
+      }
+    },
+    "scan_again": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Scan again"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "重新扫码"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "もう一度スキャン"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Escanear de nuevo"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Scanner à nouveau"
+          }
+        }
+      }
+    },
+    "scan_hint": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Point the camera at the pairing code"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "将摄像头对准配对二维码"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ペアリング用 QR コードにカメラを向けてください"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Apunta la cámara al código de emparejamiento"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Visez le code d’appairage avec la caméra"
+          }
+        }
+      }
+    },
+    "show_preview": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Show preview"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "显示预览"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "プレビューを表示"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mostrar vista previa"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Afficher l’aperçu"
+          }
+        }
+      }
+    },
+    "start": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Start"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "开始"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "開始"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Iniciar"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Démarrer"
+          }
+        }
+      }
+    },
+    "support_text_arkit": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Head turn, nod and tilt; left and right eye openness; mouth open and smile; gaze, brows, mouth shift, cheek puff and tongue from ARKit face tracking. Hands and the upper body are not tracked on the phone. Smoothing, sensitivity and neutral-pose calibration stay on the computer."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "头部左右转、抬头低头、歪头；左右眼睁开程度；张嘴和微笑；以及 ARKit 面部跟踪提供的视线、眉毛、嘴部左右、鼓腮和吐舌。手机不识别双手和上半身。平滑、灵敏度和中立姿态校准都在电脑上完成。"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "頭の左右の向き、上下、傾き。左右の目の開き具合。口の開きと笑顔。ARKit フェイストラッキングによる視線、眉、口の左右移動、頬の膨らみ、舌。手と上半身はスマートフォンでは認識しません。スムージング、感度、ニュートラル姿勢のキャリブレーションは PC 側で行います。"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Giro, inclinación y ladeo de la cabeza; apertura del ojo izquierdo y derecho; boca abierta y sonrisa; mirada, cejas, desplazamiento de la boca, mejillas hinchadas y lengua del seguimiento facial de ARKit. Las manos y la parte superior del cuerpo no se siguen en el teléfono. El suavizado, la sensibilidad y la calibración de la pose neutra se quedan en el equipo."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Rotation, hochement et inclinaison de la tête ; ouverture des yeux gauche et droit ; bouche ouverte et sourire ; regard, sourcils, décalage de la bouche, joues gonflées et langue via le suivi du visage ARKit. Les mains et le haut du corps ne sont pas suivis sur le téléphone. Le lissage, la sensibilité et le calibrage de la pose neutre restent sur l’ordinateur."
+          }
+        }
+      }
+    },
+    "support_title": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "What this app sends"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "本应用发送什么"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "このアプリが送るもの"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Qué envía esta app"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ce que cette app envoie"
+          }
+        }
+      }
+    },
+    "thermal_paused": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tracking paused to protect the phone from overheating. Let it cool down, then press Resume."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "为防止手机过热，已暂停跟踪。等手机降温后点「继续」。"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "過熱を防ぐためトラッキングを一時停止しました。冷えてから「再開」を押してください。"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Seguimiento en pausa para proteger el teléfono del sobrecalentamiento. Deja que se enfríe y pulsa Reanudar."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Suivi mis en pause pour protéger le téléphone de la surchauffe. Laissez-le refroidir, puis appuyez sur Reprendre."
+          }
+        }
+      }
+    },
+    "thermal_warning": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The phone is getting hot and may slow down. A short break or better airflow helps."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "手机正在发热，可能会降速。可以稍作休息或改善散热。"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "スマートフォンが熱くなっており、速度が落ちることがあります。少し休ませるか、放熱を良くしてください。"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "El teléfono se está calentando y puede ir más lento. Un descanso breve o mejor ventilación ayudan."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Le téléphone chauffe et peut ralentir. Une courte pause ou une meilleure aération aide."
+          }
+        }
+      }
+    },
+    "tracker_failed %@": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Face tracking stopped: %1$@"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "面部识别已停止：%1$@"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "顔の認識が停止しました：%1$@"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "El seguimiento facial se detuvo: %1$@"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Le suivi du visage s’est arrêté : %1$@"
+          }
+        }
+      }
+    },
+    "tracker_unsupported": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Face tracking is not available on this device."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "此设备不支持面部识别。"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "この端末では顔の認識を利用できません。"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "El seguimiento facial no está disponible en este dispositivo."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Le suivi du visage n’est pas disponible sur cet appareil."
+          }
+        }
+      }
+    },
+    "tracking_fps %lld": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$lld FPS"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$lld FPS"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$lld FPS"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$lld FPS"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$lld FPS"
+          }
+        }
+      }
+    },
+    "tracking_idle": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ready — press Start"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "就绪，点「开始」"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "準備完了。「開始」を押してください"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Listo: pulsa Iniciar"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Prêt : appuyez sur Démarrer"
+          }
+        }
+      }
+    },
+    "tracking_paused": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Paused"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "已暂停"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "一時停止中"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "En pausa"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "En pause"
+          }
+        }
+      }
+    },
+    "tracking_running": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tracking"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "跟踪中"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "トラッキング中"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Siguiendo"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Suivi en cours"
+          }
+        }
+      }
+    },
+    "version %@": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Version %1$@"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "版本 %1$@"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "バージョン %1$@"
+          }
+        },
+        "es": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Versión %1$@"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Version %1$@"
+          }
+        }
+      }
+    }
+  }
+}

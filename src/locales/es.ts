@@ -155,6 +155,35 @@ export default {
   'app.nvidiaUnsupported': 'Esta plataforma no admite el seguimiento NVIDIA; cambia a MediaPipe.',
   'app.nvidiaPath': 'Extensión de seguimiento NVIDIA',
   'app.nvidiaModelDir': 'Carpeta de modelos NVIDIA',
+  'app.enginePhone': 'Teléfono acompañante · Misma Wi-Fi',
+  'app.phoneIntro':
+    'Abre la app acompañante de VTubeLeaf en tu teléfono y mantén ambos dispositivos en la misma Wi-Fi. El teléfono sigue tu cara y solo envía valores de movimiento; la imagen de su cámara nunca sale del teléfono. Las manos, la parte superior del cuerpo y la vista previa de la cámara siguen con MediaPipe.',
+  'app.phoneStartHint':
+    'Haz clic en “Iniciar seguimiento” para mostrar el código de emparejamiento.',
+  'app.phoneStarting': 'Preparando el código de emparejamiento…',
+  'app.phoneQrAlt': 'Código QR de emparejamiento para la app de VTubeLeaf en el teléfono',
+  'app.phoneScanHint':
+    'Escanéalo con la app de VTubeLeaf en el teléfono; mostrará este equipo como “{name}”.',
+  'app.phoneReconnectHint':
+    'Esperando a que el teléfono vuelva. Escanear de nuevo empareja desde cero.',
+  'app.phoneAddresses':
+    'Este equipo: {addresses} · puerto {port}. Si el teléfono no se conecta, comprueba que ambos estén en la misma Wi-Fi, que el aislamiento de la red de invitados esté desactivado y que el cortafuegos permita VTubeLeaf.',
+  'app.phoneNoNetwork': 'no se encontró ninguna dirección Wi-Fi ni Ethernet',
+  'app.phoneDevice': 'Teléfono',
+  'app.phoneEngine': 'Motor',
+  'app.phoneState': 'Estado',
+  'app.phoneFps': 'Fotogramas recibidos',
+  'app.phoneRtt': 'Ida y vuelta de red',
+  'app.phoneStateListening': 'Esperando a que un teléfono escanee',
+  'app.phoneStateConnected': 'Conectado · recibiendo',
+  'app.phoneStatePaused': 'Conectado · en pausa en el teléfono',
+  'app.phoneStateReconnecting': 'Teléfono desconectado · esperando a que vuelva a conectarse',
+  'app.phoneDisconnect': 'Desconectar teléfono',
+  'app.phoneReceiving': 'Recibiendo de {device}',
+  'app.phonePaused': '{device} en pausa',
+  'app.phoneReconnecting': 'Esperando a que {device} vuelva a conectarse',
+  'app.phoneWaitingScan': 'Esperando un teléfono',
+  'app.phoneDisconnected': 'Teléfono sin conectar',
   'app.trackingFps': 'FPS de seguimiento',
   'app.cameraResolution': 'Resolución de cámara',
   'app.motionTuning': 'Ajustes de movimiento',
@@ -487,6 +516,10 @@ export default {
   'tracker.nvidiaCrashed': 'El proceso de seguimiento falló. Revisa el SDK y la cámara.',
   'tracker.openSeeFaceExited':
     'El proceso de seguimiento de OpenSeeFace se cerró. Revisa la cámara e inténtalo de nuevo.',
+  'tracker.phoneStopped':
+    'El enlace con el teléfono se detuvo de forma inesperada. Inicia el seguimiento otra vez.',
+  'tracker.phoneFailed':
+    'No se pudo abrir el enlace con el teléfono. Comprueba que el cortafuegos permita VTubeLeaf e inténtalo de nuevo.',
   'tracker.noCameraApi':
     'Este entorno no tiene acceso a la cámara. Usa la app de escritorio y revisa los permisos del sistema.',
   'tracker.cameraNameUnavailable': 'Nombre de la cámara no disponible',
@@ -788,6 +821,15 @@ export default {
     'Ahora no se pueden listar las cámaras. Se pedirá permiso al iniciar.',
   'studio.restoreFailed': 'No se pudo restaurar el último avatar. {error} Vuelve a importarlo.',
   'studio.renderFailed': 'Falló el renderizado del modelo: {error}',
+  'studio.phoneWaiting':
+    'Esperando tu teléfono. Escanea el código con la app de VTubeLeaf en el teléfono.',
+  'studio.phoneStopped': 'Se dejó de recibir del teléfono y se cerró su sesión.',
+  'studio.phoneConnected':
+    '{device} conectado. Inicia el seguimiento en el teléfono y luego calibra tu pose neutra.',
+  'studio.phoneChanged':
+    '{device} conectado. Es otro teléfono u otro motor, así que vuelve a calibrar tu pose neutra.',
+  'studio.phoneLost': 'Se perdió la conexión con {device}. Esperando a que vuelva a conectarse…',
+  'studio.phoneLeft': 'El teléfono se desconectó. Escanea el nuevo código para emparejar otra vez.',
   'studio.renderStatus': '{render} FPS render · {input} FPS entrada · {inference} ms inferencia',
   'studio.faceDetected': 'Cara detectada',
   'studio.faceLostHold': 'Sin cara · mantiene la postura',

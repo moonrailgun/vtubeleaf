@@ -8,6 +8,7 @@ mod models;
 mod motion;
 mod nvidia;
 mod obs;
+mod phone;
 mod settings;
 mod texture;
 mod tracker;
@@ -631,6 +632,41 @@ async fn stop_nvidia(window: WebviewWindow, app: tauri::AppHandle) -> Result<(),
     stop_openseeface(window, app).await
 }
 
+/// Opens the LAN receiver for the phone companion and shows a new pairing code. Calling it again
+/// ends the current phone session (its code and credentials) and issues a fresh code.
+#[tauri::command]
+async fn start_phone(window: WebviewWindow, app: tauri::AppHandle) -> Result<(), String> {
+    require_main(&window)?;
+    tauri::async_runtime::spawn_blocking(move || {
+        let state = app.state::<AppState>();
+        let mut active = state
+            .tracker
+            .lock()
+            .map_err(|_| locale::text(TRACKER_UNAVAILABLE))?;
+        active.take();
+        let events = app.clone();
+        *active = Some(Box::new(phone::Receiver::start(move |event, payload| {
+            let _ = events.emit_to("main", event, payload);
+        })?));
+        Ok(())
+    })
+    .await
+    .map_err(|_| {
+        locale::text([
+            "Starting the phone link was interrupted",
+            "手机连接启动任务中断",
+            "スマートフォン接続の開始が中断されました",
+            "Se interrumpió el inicio del enlace con el teléfono",
+            "Le démarrage de la liaison avec le téléphone a été interrompu",
+        ])
+    })?
+}
+
+#[tauri::command]
+async fn stop_phone(window: WebviewWindow, app: tauri::AppHandle) -> Result<(), String> {
+    stop_openseeface(window, app).await
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     let application = tauri::Builder::default()
@@ -729,6 +765,8 @@ pub fn run() {
             stop_openseeface,
             start_nvidia,
             stop_nvidia,
+            start_phone,
+            stop_phone,
             obs::obs_start,
             obs::obs_stop,
             obs::obs_submit,

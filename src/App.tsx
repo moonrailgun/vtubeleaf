@@ -31,6 +31,7 @@ import {
   SelectValue,
 } from './components/ui/select';
 import { isVTubeLeafCamera } from './camera-devices';
+import { phoneEngineName, phoneQrUrl } from './phone';
 import { Switch } from './components/ui/switch';
 import { Slider } from './components/ui/slider';
 import { Fold } from './Fold';
@@ -214,6 +215,8 @@ const initialView = (): StudioView => ({
   cameraLabel: '',
   cameraSettings: '',
   renderStatus: t('studio.renderPreview'),
+  inputFps: 0,
+  phone: null,
   faceStatus: t('studio.faceIdle'),
   bodyStatus: t('tracker.bodyPending'),
   handStatus: t('tracker.handOff'),
@@ -364,18 +367,37 @@ export function App() {
     running: t('app.trackingRunning'),
     paused: t('app.trackingPaused'),
   }[view.tracking];
+  const phone = view.phone;
+  const phoneStateLabel = phone
+    ? {
+        listening: t('app.phoneStateListening'),
+        connected: t('app.phoneStateConnected'),
+        paused: t('app.phoneStatePaused'),
+        reconnecting: t('app.phoneStateReconnecting'),
+      }[phone.state]
+    : '';
   const cameraLabel =
-    s.engine === 'nvidia'
-      ? active
-        ? t('app.nvidiaExperimental')
-        : t('app.nvidiaDisconnected')
-      : s.engine === 'openseeface'
+    s.engine === 'phone'
+      ? !active
+        ? t('app.phoneDisconnected')
+        : phone?.state === 'connected'
+          ? t('app.phoneReceiving', { device: phone.device })
+          : phone?.state === 'paused'
+            ? t('app.phonePaused', { device: phone.device })
+            : phone?.state === 'reconnecting'
+              ? t('app.phoneReconnecting', { device: phone.device })
+              : t('app.phoneWaitingScan')
+      : s.engine === 'nvidia'
         ? active
-          ? t('app.osfReceiving')
-          : t('app.osfDisconnected')
-        : active
-          ? t('app.cameraInUse')
-          : t('app.cameraNotInUse');
+          ? t('app.nvidiaExperimental')
+          : t('app.nvidiaDisconnected')
+        : s.engine === 'openseeface'
+          ? active
+            ? t('app.osfReceiving')
+            : t('app.osfDisconnected')
+          : active
+            ? t('app.cameraInUse')
+            : t('app.cameraNotInUse');
   const openLibraryButton = (
     <Button
       variant="ghost"
@@ -879,6 +901,71 @@ export function App() {
                 </SelectContent>
               </Select>
             </div>
+            <div id="phone-options" hidden={s.engine !== 'phone'}>
+              <p className="hint">{t('app.phoneIntro')}</p>
+              {!active ? (
+                <p className="hint">{t('app.phoneStartHint')}</p>
+              ) : !phone ? (
+                <p className="hint">{t('app.phoneStarting')}</p>
+              ) : (
+                <div className="phone-link" role="status" aria-live="polite">
+                  {phone.qr && (
+                    <>
+                      <img
+                        className="phone-qr"
+                        id="phone-qr"
+                        src={phoneQrUrl(phone.qr)}
+                        alt={t('app.phoneQrAlt')}
+                      />
+                      <p className="hint">
+                        {t(
+                          phone.state === 'reconnecting'
+                            ? 'app.phoneReconnectHint'
+                            : 'app.phoneScanHint',
+                          { name: phone.name },
+                        )}
+                      </p>
+                      <p className="hint">
+                        {t('app.phoneAddresses', {
+                          addresses: phone.addresses.join(', ') || t('app.phoneNoNetwork'),
+                          port: phone.port,
+                        })}
+                      </p>
+                    </>
+                  )}
+                  <dl className="phone-facts">
+                    <dt>{t('app.phoneState')}</dt>
+                    <dd id="phone-state">{phoneStateLabel}</dd>
+                    {phone.device && (
+                      <>
+                        <dt>{t('app.phoneDevice')}</dt>
+                        <dd id="phone-device">{phone.device}</dd>
+                        <dt>{t('app.phoneEngine')}</dt>
+                        <dd>{phoneEngineName(phone.engine)}</dd>
+                        <dt>{t('app.phoneFps')}</dt>
+                        <dd>{view.inputFps} FPS</dd>
+                      </>
+                    )}
+                    {phone.rttMs !== undefined && (
+                      <>
+                        <dt>{t('app.phoneRtt')}</dt>
+                        <dd>{phone.rttMs} ms</dd>
+                      </>
+                    )}
+                  </dl>
+                  {phone.state !== 'listening' && (
+                    <Button
+                      id="phone-disconnect"
+                      variant="outline"
+                      size="sm"
+                      onClick={() => run(() => a?.phoneDisconnect())}
+                    >
+                      {t('app.phoneDisconnect')}
+                    </Button>
+                  )}
+                </div>
+              )}
+            </div>
             <div className="divider" />
             <div className="section-title">
               <h2>{t('app.motionTuning')}</h2>
@@ -1079,6 +1166,7 @@ export function App() {
                 <SelectContent>
                   <SelectItem value="mediapipe">{t('app.engineMediapipe')}</SelectItem>
                   <SelectItem value="openseeface">{t('app.engineOpenSeeFace')}</SelectItem>
+                  <SelectItem value="phone">{t('app.enginePhone')}</SelectItem>
                   {(/Win/.test(navigator.platform) || s.engine === 'nvidia') && (
                     <SelectItem value="nvidia" disabled={!/Win/.test(navigator.platform)}>
                       {t('app.nvidiaExperimental')}
