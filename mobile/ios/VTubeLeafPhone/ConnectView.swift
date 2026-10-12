@@ -57,7 +57,7 @@ struct ConnectView: View {
                     Button("open_system_settings", action: openAppSettings).buttonStyle(.bordered)
                 }
                 Button("scan_again", action: model.retry).buttonStyle(.borderedProminent)
-            } else {
+            } else if model.scanning {
                 if let error = model.codeError { Text(error).foregroundStyle(.red) }
                 Text("scan_hint")
                 QrScanner(onCode: model.scanned)
@@ -65,6 +65,8 @@ struct ConnectView: View {
                     .aspectRatio(3 / 4, contentMode: .fit)
                     .clipShape(RoundedRectangle(cornerRadius: 16))
                     .accessibilityLabel("scan_hint")
+            } else {
+                Button("scan", action: model.scan).buttonStyle(.borderedProminent)
             }
         }
     }

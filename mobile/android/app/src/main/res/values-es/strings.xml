@@ -11,6 +11,7 @@
     <string name="open_system_settings">Abrir ajustes del sistema</string>
     <string name="network_intro">Solo se usa una conexión directa en tu red local: sin cuenta y sin servicios de internet.</string>
     <string name="scan_hint">Apunta la cámara al código de emparejamiento</string>
+    <string name="scan">Escanear el código de emparejamiento</string>
     <string name="qr_invalid">Eso no es un código de emparejamiento de VTubeLeaf.</string>
     <string name="qr_version">Este código necesita otra versión de la app (versión del código %1$d; esta app admite %2$d). Actualiza la app del teléfono y la de escritorio.</string>
     <string name="connecting_to">Conectando con “%1$s”…</string>

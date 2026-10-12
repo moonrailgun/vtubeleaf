@@ -10,7 +10,9 @@ final class AppModel: ObservableObject {
 
     let link = DesktopLink(device: UIDevice.current.name, engine: "arkit")
     let supported = FaceTracker.isSupported
-    @Published var screen: Screen = .connect
+    @Published var screen: Screen = .connect {
+        didSet { if screen != .connect { scanning = false } }
+    }
     @Published private(set) var tracking: Tracking = .idle {
         didSet { UIApplication.shared.isIdleTimerDisabled = tracking == .running }
     }
@@ -22,6 +24,8 @@ final class AppModel: ObservableObject {
     @Published private(set) var codeError: String?
     /// Remounts the scanner after each code so an invalid one can be followed by another.
     @Published private(set) var scanCount = 0
+    /// The scan camera runs only after the user asks for it, and stops when they leave the screen.
+    @Published private(set) var scanning = false
     /// One actionable message at a time: why tracking paused or stopped.
     @Published private(set) var notice: String?
     @Published private(set) var thermalWarning = false
@@ -64,6 +68,12 @@ final class AppModel: ObservableObject {
         }
     }
 
+    func scan() {
+        endReason = nil
+        codeError = nil
+        scanning = true
+    }
+
     func scanned(_ text: String) {
         scanCount += 1
         guard let pairing = Pairing.parse(text) else {
@@ -74,15 +84,15 @@ final class AppModel: ObservableObject {
             codeError = String(localized: "qr_version \(pairing.version) \(protocolVersion)")
             return
         }
+        scanning = false
         codeError = nil
         endReason = nil
         link.connect(pairing)
     }
 
     func retry() {
-        endReason = nil
-        codeError = nil
         link.disconnect()
+        scan()
     }
 
     func start() {
@@ -122,6 +132,7 @@ final class AppModel: ObservableObject {
     }
 
     func background() {
+        scanning = false
         pause(reason: String(localized: "paused_background"))
     }
 

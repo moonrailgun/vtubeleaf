@@ -11,6 +11,7 @@
     <string name="open_system_settings">Ouvrir les réglages système</string>
     <string name="network_intro">Seule une connexion directe sur votre réseau local est utilisée : ni compte, ni service internet.</string>
     <string name="scan_hint">Visez le code d’appairage avec la caméra</string>
+    <string name="scan">Scanner le code d’appairage</string>
     <string name="qr_invalid">Ce n’est pas un code d’appairage VTubeLeaf.</string>
     <string name="qr_version">Ce code nécessite une autre version de l’app (version du code %1$d, cette app prend en charge %2$d). Mettez à jour l’app du téléphone et l’app de bureau.</string>
     <string name="connecting_to">Connexion à « %1$s »…</string>

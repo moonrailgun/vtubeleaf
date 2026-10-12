@@ -104,7 +104,7 @@ fun ConnectScreen(model: AppModel, link: LinkState) {
                 if (reason != null) {
                     Text(stringResource(reason.message()), color = MaterialTheme.colorScheme.error)
                     Button(onClick = model::retry) { Text(stringResource(R.string.scan_again)) }
-                } else {
+                } else if (model.scanning) {
                     model.codeError?.let { Text(it, color = MaterialTheme.colorScheme.error) }
                     Text(stringResource(R.string.scan_hint))
                     key(model.scanCount) {
@@ -113,6 +113,8 @@ fun ConnectScreen(model: AppModel, link: LinkState) {
                             modifier = Modifier.fillMaxWidth().aspectRatio(3f / 4f).clip(RoundedCornerShape(16.dp)),
                         )
                     }
+                } else {
+                    Button(onClick = model::scan) { Text(stringResource(R.string.scan)) }
                 }
             }
         }

@@ -11,6 +11,7 @@
     <string name="open_system_settings">システム設定を開く</string>
     <string name="network_intro">ローカルネットワーク内で PC に直接接続するだけです。アカウントもインターネットサービスも使いません。</string>
     <string name="scan_hint">ペアリング用 QR コードにカメラを向けてください</string>
+    <string name="scan">ペアリングコードをスキャン</string>
     <string name="qr_invalid">これは VTubeLeaf のペアリングコードではありません。</string>
     <string name="qr_version">この QR コードには別のバージョンのアプリが必要です（コードのバージョン %1$d、このアプリの対応バージョン %2$d）。スマートフォンアプリとデスクトップアプリの両方を更新してください。</string>
     <string name="connecting_to">「%1$s」に接続しています…</string>

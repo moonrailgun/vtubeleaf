@@ -11,6 +11,7 @@
     <string name="open_system_settings">打开系统设置</string>
     <string name="network_intro">只会在局域网内直接连接电脑，不需要账号，也不经过互联网。</string>
     <string name="scan_hint">将摄像头对准配对二维码</string>
+    <string name="scan">扫描配对二维码</string>
     <string name="qr_invalid">这不是 VTubeLeaf 的配对二维码。</string>
     <string name="qr_version">这个二维码需要另一个版本的应用（二维码版本 %1$d，本应用支持 %2$d）。请同时更新手机应用和桌面应用。</string>
     <string name="connecting_to">正在连接「%1$s」…</string>

@@ -11,6 +11,7 @@
     <string name="open_system_settings">Open system settings</string>
     <string name="network_intro">Only a direct connection on your local network is used — no account, no internet service.</string>
     <string name="scan_hint">Point the camera at the pairing code</string>
+    <string name="scan">Scan the pairing code</string>
     <string name="qr_invalid">That is not a VTubeLeaf pairing code.</string>
     <string name="qr_version">This code needs another app version (code version %1$d, this app supports %2$d). Update the phone app and the desktop app.</string>
     <string name="connecting_to">Connecting to “%1$s”…</string>

@@ -41,6 +41,10 @@ class AppModel(application: Application) : AndroidViewModel(application) {
     var scanCount by mutableIntStateOf(0)
         private set
 
+    /** The scan camera runs only after the user asks for it, and stops when they leave the screen. */
+    var scanning by mutableStateOf(false)
+        private set
+
     /** One actionable message at a time: why tracking paused or stopped. */
     var notice by mutableStateOf<String?>(null)
         private set
@@ -84,6 +88,13 @@ class AppModel(application: Application) : AndroidViewModel(application) {
 
     fun show(screen: Screen) {
         this.screen = screen
+        if (screen != Screen.Connect) scanning = false
+    }
+
+    fun scan() {
+        endReason = null
+        codeError = null
+        scanning = true
     }
 
     fun scanned(text: String) {
@@ -96,14 +107,14 @@ class AppModel(application: Application) : AndroidViewModel(application) {
             else -> null
         }
         if (pairing == null || codeError != null) return
+        scanning = false
         endReason = null
         link.connect(pairing)
     }
 
     fun retry() {
-        endReason = null
-        codeError = null
         link.disconnect()
+        scan()
     }
 
     fun start(previewView: PreviewView) {
@@ -137,6 +148,7 @@ class AppModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun background() {
+        scanning = false
         if (tracking == Tracking.Running) pause(app.getString(R.string.paused_background))
     }
 
