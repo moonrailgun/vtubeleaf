@@ -1,16 +1,29 @@
 # 手机面捕伴侣
 
-状态：阶段 0/1 实现稿 · 2026-10-12。对应 [手机面捕伴侣 PRD](MOBILE-PRD.md) 的 P0 范围。桌面接收端、协议和两个原生应用的代码已经写出并通过本机编译与自动化测试；**尚未在任何真机上验证面捕效果、动作方向、延迟和长时间运行**，因此本文不声明任何手机型号为"已支持"。
+状态：阶段 0/1 实现稿 · 2026-10-12。对应 [手机面捕伴侣 PRD](MOBILE-PRD.md) 的 P0 范围。桌面接收端、协议和两个原生应用的代码已经写出并通过本机编译与自动化测试；Android 应用已在一台真机上走通安装、配对、开始跟踪和断线恢复（见「真机联调」）。**动作方向、人脸跟踪质量、延迟、发热和长时间运行仍未在真机验证，iOS 应用尚未在真机运行**，因此本文不声明任何手机型号为「已支持」。
 
 ## 组成
 
-| 部分         | 位置                                                                                       | 技术                                                               | 当前验证                                                                 |
-| ------------ | ------------------------------------------------------------------------------------------ | ------------------------------------------------------------------ | ------------------------------------------------------------------------ |
-| 桌面接收端   | `src-tauri/src/phone.rs`、`src/phone.ts`、`src/tracker.ts`、`src/studio.ts`、`src/App.tsx` | Rust：自签名 TLS + WebSocket；前端：现有引擎切换、校准、映射       | 4 项 Rust 测试（配对、校验、重连、断开）、1 项浏览器回归、现有 Node 测试 |
-| Android 应用 | `mobile/android/`                                                                          | Kotlin、Compose、CameraX、MediaPipe Face Landmarker、OkHttp        | `./gradlew assembleDebug testDebugUnitTest`（映射与协议单元测试）        |
-| iOS 应用     | `mobile/ios/`                                                                              | Swift、SwiftUI、ARKit（`ARFaceTrackingConfiguration`）、URLSession | `xcodebuild build/test`（模拟器编译与映射、协议单元测试）                |
+| 部分         | 位置                                                                                       | 技术                                                               | 当前验证                                                                                        |
+| ------------ | ------------------------------------------------------------------------------------------ | ------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------- |
+| 桌面接收端   | `src-tauri/src/phone.rs`、`src/phone.ts`、`src/tracker.ts`、`src/studio.ts`、`src/App.tsx` | Rust：自签名 TLS + WebSocket；前端：现有引擎切换、校准、映射       | 5 项 Rust 测试（配对、校验、重连、断开、地址排序）、1 项浏览器回归、现有 Node 测试              |
+| Android 应用 | `mobile/android/`                                                                          | Kotlin、Compose、CameraX、MediaPipe Face Landmarker、OkHttp        | `./gradlew assembleDebug testDebugUnitTest`（映射与协议单元测试）；真机安装、配对、断线恢复联调 |
+| iOS 应用     | `mobile/ios/`                                                                              | Swift、SwiftUI、ARKit（`ARFaceTrackingConfiguration`）、URLSession | `xcodebuild build/test`（模拟器编译与映射、协议单元测试）                                       |
 
 两个应用共用同一套协议、参数语义、页面结构和五种语言文案；手机只做引擎适配，平滑、灵敏度和中立校准仍在桌面完成。
+
+## 已采用的决策
+
+PRD 第 7 节的待决策项按其建议值定下，真机数据出来后可以推翻：
+
+| 事项         | 决定                                                                                                                       | 依据                                                                                                                                                                        |
+| ------------ | -------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 首发平台     | Android 先行，iOS 为第二平台                                                                                               | 手头可持续使用的真机是 Android，已完成联调；Android 与桌面共用同一 MediaPipe 模型和映射公式，A-02 风险最低。Xcode 里登记的 iPhone 11 / iPhone 15 需开发者团队签名后才能装机 |
+| 最低系统版本 | Android 8.0（API 26）、iOS 16                                                                                              | CameraX 1.6、MediaPipe 0.10、ML Kit 都支持更低版本，取保守值；iOS 16 是所用 SwiftUI 接口的下限，ARKit 人脸跟踪另在运行时检查                                                |
+| 应用名称     | 「VTubeLeaf 手机伴侣」/ "VTubeLeaf Phone"，日、西、法各有译名                                                              | 两端一致，iOS 主屏图标名同样本地化                                                                                                                                          |
+| 分发方式     | Android：APK 附在 GitHub Release，与桌面下载同一渠道；iOS：TestFlight                                                      | 需要先准备 Android 发布签名密钥（放入仓库 secrets）和 Apple Developer Program；在此之前 CI 每次推送产出可安装的 Android 调试包 artifact，iOS 用 Xcode 直装                  |
+| 性能目标     | 采用 PRD 6.2 建议值作为阶段 1 验收：有效面捕 30 FPS（每分钟均值 ≥ 25）、动作到画面 p95 ≤ 150 ms、连续 60 分钟、恢复 ≤ 5 秒 | 尚无基线数据；测得后记入 [VALIDATION](VALIDATION.md) 再决定是否调整或缩小支持范围                                                                                           |
+| 异常时间参数 | 采用 PRD 3.3 的初始建议值                                                                                                  | 已实现：无人脸时每 200 ms 发一帧未跟踪、桌面按 lostDelay 回中立；30 秒重连窗口；15 秒空闲断开                                                                               |
 
 ## 桌面端使用
 
@@ -40,7 +53,7 @@ JSON 文本：
 }
 ```
 
-`a` 最多 4 个 IPv4 地址，私有网段在前；手机按顺序逐个尝试（每个 4 秒）。`p` 是系统分配的端口，每次开启都会变化。`t` 配对成功即作废；桌面断开或手机掉线后都会换新码。
+`a` 最多 4 个 IPv4 地址：默认路由所在的 Wi-Fi/有线地址排第一，其后是其他私有网段；只持有网络地址（x.y.z.0）的虚拟网桥和点对点 VPN 地址不列入。手机按顺序逐个尝试（每个 4 秒）。`p` 是系统分配的端口，每次开启都会变化。`t` 配对成功即作废；桌面断开或手机掉线后都会换新码。
 
 ### 消息
 
@@ -106,15 +119,37 @@ cd mobile/android
 ```sh
 cd mobile/ios
 xcodegen generate
-xcodebuild -project VTubeLeafPhone.xcodeproj -scheme VTubeLeafPhone -destination 'generic/platform=iOS Simulator' build
-xcodebuild -project VTubeLeafPhone.xcodeproj -scheme VTubeLeafPhone -destination 'platform=iOS Simulator,name=iPhone 16' test
+xcodebuild -project VTubeLeafPhone.xcodeproj -scheme VTubeLeafPhone -destination 'generic/platform=iOS Simulator' CODE_SIGNING_ALLOWED=NO build
+simulator=$(xcrun simctl list devices available -j | jq -r '[.devices[][] | select(.deviceTypeIdentifier | test("iPhone"))][0].udid')
+xcodebuild -project VTubeLeafPhone.xcodeproj -scheme VTubeLeafPhone -destination "id=$simulator" CODE_SIGNING_ALLOWED=NO test
 ```
 
 真机运行需要在 Xcode 中选择开发团队。ARKit 人脸跟踪在模拟器不可用，应用会提示设备不支持。
 
+`.github/workflows/check-mobile.yml` 在 `mobile/` 有改动时跑以上两套命令，并把 Android 调试包作为 artifact 上传（每个 runner 用自己的调试密钥签名，升级前要先卸载）。
+
+## 真机联调
+
+桌面侧不必启动整个应用：`phone.rs` 里有一个默认忽略的测试会启动接收端、打印二维码内容，并记录随后 `VTUBELEAF_PHONE_SECONDS`（默认 60）秒内的状态与有效帧：
+
+```sh
+VTUBELEAF_PHONE_SECONDS=120 cargo test --locked --manifest-path src-tauri/Cargo.toml link_a_real_phone -- --ignored --nocapture
+```
+
+输出里 `PAIRING` 后面就是二维码 JSON。Android 调试包额外接受它作为启动参数，免去扫码（发布包不接受）：
+
+```sh
+adb shell am start -S -n com.moonrailgun.vtubeleaf.phone/.MainActivity --es pairing '<二维码 JSON>'
+```
+
+Wi-Fi 有客户端隔离（手机 ping 不通电脑）时，把 JSON 里的 `a` 改成 `["127.0.0.1"]`，再 `adb reverse tcp:<p> tcp:<p>` 走 USB 回环；这只绕过无线链路，证书固定、协议、推理和发送都是真实路径。
+
+2026-10-12 在 Open Doubao（Android 17，前置摄像头）上的记录：调试包安装与启动正常；配对后桌面状态为 `connected`，设备名与引擎正确；点「开始」后前置摄像头与 MediaPipe 启动，镜头朝向天花板时手机显示「没有人脸」、桌面无帧；把接收端进程冻结 12 秒后手机显示「连接中断 · 正在重连…」，恢复后桌面先回到 `reconnecting`，再以同一会话重新 `connected`，往返 4–6 ms（USB 回环）。办公 Wi-Fi 有客户端隔离，手机到电脑的 TCP 和 ping 均不通，手机端给出的正是「无法连上电脑」这条提示；真实无线路径要在家用网络再测。联调中发现并修正：Mac 上有多块虚拟网桥时，二维码曾把真正的 Wi-Fi 地址挤掉，现在默认路由地址排第一。
+
 ## 待真机验证（对应 PRD 第 6 节）
 
-- A-01 首次使用、A-03 来源切换、A-05 配对边界、A-06 隐私（本机自动化已覆盖协议层，仍需真机走一遍）。
-- A-02 动作语义：两端的角度符号与左右眼需按固定动作脚本在真机核对。
-- A-04 异常恢复与 A-07 现有输出：遮脸、断 Wi-Fi、重启桌面、锁屏、拒绝权限、第二台手机。
-- 性能目标（30 FPS / p95 150 ms / 60 分钟 / 5 秒恢复 / 电脑负载收益）尚无任何数据；首发平台、最低系统版本和分发方式仍按 PRD 第 7 节待定。
+- A-01 首次使用、A-05 配对边界、A-06 隐私：协议层由本机自动化覆盖，Android 真机已走通安装、配对、开始、断线恢复（USB 回环），还需在家用 Wi-Fi 上扫码走一遍；iOS 未在真机运行。
+- A-02 动作语义：镜头前还没有人脸，两端的角度符号与左右眼需按固定动作脚本在真机核对。
+- A-03 来源切换、A-07 现有输出：待真机。
+- A-04 异常恢复：断网重连已用冻结接收端模拟通过；遮脸、重启桌面、锁屏、拒绝权限、第二台手机待真机。
+- 性能目标（30 FPS / p95 150 ms / 60 分钟 / 5 秒恢复 / 电脑负载收益）尚无数据；首发平台、最低系统版本和分发方式已按建议定下，见「已采用的决策」。

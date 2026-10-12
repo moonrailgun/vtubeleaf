@@ -155,19 +155,44 @@ fn is_lan(ip: IpAddr) -> bool {
     }
 }
 
+/// Where the default route leaves from: the Wi-Fi or Ethernet address a phone most likely shares.
+/// A UDP connect sends nothing; it only asks the kernel which source address it would use.
+fn primary_address() -> Option<Ipv4Addr> {
+    let socket = std::net::UdpSocket::bind((Ipv4Addr::UNSPECIFIED, 0)).ok()?;
+    socket.connect((Ipv4Addr::new(1, 1, 1, 1), 53)).ok()?;
+    match socket.local_addr().ok()?.ip() {
+        IpAddr::V4(ip) => Some(ip),
+        IpAddr::V6(_) => None,
+    }
+}
+
 fn lan_addresses() -> Vec<String> {
-    let mut addresses: Vec<Ipv4Addr> = if_addrs::get_if_addrs()
+    let candidates = if_addrs::get_if_addrs()
         .unwrap_or_default()
         .into_iter()
-        .filter_map(|interface| match interface.ip() {
-            IpAddr::V4(ip) if !ip.is_loopback() && !ip.is_link_local() && is_lan(ip.into()) => {
-                Some(ip)
-            }
-            _ => None,
+        .filter_map(|interface| match interface.addr {
+            if_addrs::IfAddr::V4(v4) => Some((v4.ip, v4.netmask)),
+            if_addrs::IfAddr::V6(_) => None,
         })
         .collect();
-    // Home and office ranges first, so the phone tries the likeliest address before a VPN one.
-    addresses.sort_by_key(|ip| (!ip.is_private(), *ip));
+    rank_addresses(primary_address(), candidates)
+}
+
+/// Up to four addresses for the QR code: the default route first, then home and office ranges.
+/// Virtual bridges that only hold a network address (x.y.z.0) or a point-to-point VPN address
+/// cannot be reached by a phone, so they are left out before the list is cut.
+fn rank_addresses(primary: Option<Ipv4Addr>, candidates: Vec<(Ipv4Addr, Ipv4Addr)>) -> Vec<String> {
+    let mut addresses: Vec<Ipv4Addr> = candidates
+        .into_iter()
+        .filter(|(ip, netmask)| {
+            !ip.is_loopback()
+                && !ip.is_link_local()
+                && is_lan((*ip).into())
+                && u32::from(*ip) & !u32::from(*netmask) != 0
+        })
+        .map(|(ip, _)| ip)
+        .collect();
+    addresses.sort_by_key(|ip| (Some(*ip) != primary, !ip.is_private(), *ip));
     addresses.dedup();
     addresses.truncate(4);
     addresses.iter().map(ToString::to_string).collect()
@@ -214,9 +239,9 @@ fn tls() -> Result<(TlsAcceptor, String), String> {
 }
 
 /// Issues a fresh one-time token and the QR code that carries it.
-fn rotate_token(state: &mut State) -> Result<(), String> {
-    state.token = random_hex(24)?;
-    let payload = json!({
+/// What the QR code carries; the phone apps parse exactly this.
+fn pairing(state: &State) -> String {
+    json!({
         "v": VERSION,
         "a": state.addresses,
         "p": state.port,
@@ -224,8 +249,12 @@ fn rotate_token(state: &mut State) -> Result<(), String> {
         "f": state.fingerprint,
         "n": state.name,
     })
-    .to_string();
-    state.qr = qrcode::QrCode::new(payload.as_bytes())
+    .to_string()
+}
+
+fn rotate_token(state: &mut State) -> Result<(), String> {
+    state.token = random_hex(24)?;
+    state.qr = qrcode::QrCode::new(pairing(state).as_bytes())
         .map_err(|_| {
             locale::text([
                 "Could not draw the pairing QR code",
@@ -838,6 +867,88 @@ mod tests {
             "eyeLeft": 0.9, "eyeRight": 1.2, "mouthOpen": 0.3, "mouthSmile": 0.1,
             "browLeft": 0.4, "gazeX": 2.0, "cheekPuff": 0.5,
         })
+    }
+
+    /// Device check, not a unit test: prints the QR payload (feed it to the debug app with
+    /// `adb shell am start -S -n com.moonrailgun.vtubeleaf.phone/.MainActivity --es pairing '<json>'`
+    /// or scan it), then logs statuses and tracked frames for `VTUBELEAF_PHONE_SECONDS` (default 60).
+    /// cargo test --locked --manifest-path src-tauri/Cargo.toml link_a_real_phone -- --ignored --nocapture
+    #[test]
+    #[ignore]
+    fn link_a_real_phone() {
+        let harness = start();
+        println!(
+            "PAIRING {}",
+            pairing(&harness._receiver.shared.lock().unwrap())
+        );
+        let seconds = std::env::var("VTUBELEAF_PHONE_SECONDS")
+            .ok()
+            .and_then(|value| value.parse().ok())
+            .unwrap_or(60);
+        let deadline = Instant::now() + Duration::from_secs(seconds);
+        let (mut frames, mut first, mut last) = (0u64, None::<Instant>, Value::Null);
+        while let Ok((event, payload)) = harness
+            .events
+            .recv_timeout(deadline.saturating_duration_since(Instant::now()))
+        {
+            match event.as_str() {
+                "phone-status" => println!("STATUS {payload}"),
+                "phone-frame" => {
+                    frames += 1;
+                    let since = first
+                        .get_or_insert_with(Instant::now)
+                        .elapsed()
+                        .as_secs_f64();
+                    if frames == 1 {
+                        println!("FRAME first {payload}");
+                    } else if frames % 100 == 0 {
+                        println!("FRAME {frames} {:.1} fps {payload}", frames as f64 / since);
+                    }
+                    last = payload;
+                }
+                _ => {}
+            }
+        }
+        let fps = first.map_or(0.0, |start| {
+            frames as f64 / start.elapsed().as_secs_f64().max(0.001)
+        });
+        println!("SUMMARY tracked_frames={frames} fps={fps:.1} last={last}");
+    }
+
+    #[test]
+    fn qr_addresses_lead_with_the_default_route_and_skip_virtual_bridges() {
+        let mask = Ipv4Addr::new(255, 255, 255, 0);
+        let wifi = Ipv4Addr::new(192, 168, 111, 33);
+        let ranked = rank_addresses(
+            Some(wifi),
+            vec![
+                (Ipv4Addr::new(10, 211, 55, 2), mask),
+                (Ipv4Addr::new(192, 168, 97, 0), mask),
+                (Ipv4Addr::new(192, 168, 107, 0), mask),
+                (Ipv4Addr::new(100, 110, 157, 26), Ipv4Addr::BROADCAST),
+                (Ipv4Addr::LOCALHOST, Ipv4Addr::new(255, 0, 0, 0)),
+                (Ipv4Addr::new(10, 37, 129, 2), mask),
+                (
+                    Ipv4Addr::new(192, 168, 139, 3),
+                    Ipv4Addr::new(255, 255, 254, 0),
+                ),
+                (wifi, Ipv4Addr::new(255, 255, 254, 0)),
+                (Ipv4Addr::new(8, 8, 8, 8), mask),
+            ],
+        );
+        assert_eq!(
+            ranked,
+            [
+                "192.168.111.33",
+                "10.37.129.2",
+                "10.211.55.2",
+                "192.168.139.3"
+            ]
+        );
+        assert_eq!(
+            rank_addresses(None, vec![(wifi, mask), (wifi, mask)]),
+            ["192.168.111.33"]
+        );
     }
 
     #[test]

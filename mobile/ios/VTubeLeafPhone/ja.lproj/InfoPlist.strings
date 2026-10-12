@@ -1,3 +1,3 @@
-"CFBundleDisplayName" = "VTubeLeaf";
+"CFBundleDisplayName" = "VTubeLeaf スマホ連携";
 "NSCameraUsageDescription" = "カメラはペアリング用 QR コードの読み取りと、このスマートフォン上での顔の認識に使います。映像がスマートフォンの外に出ることはありません。";
 "NSLocalNetworkUsageDescription" = "VTubeLeaf はペアリングした PC にローカルネットワーク経由で顔の動きの数値を送ります。";

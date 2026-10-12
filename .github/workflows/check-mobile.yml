@@ -1,0 +1,50 @@
+name: Phone app checks
+
+on:
+  push:
+    branches: ['**']
+    paths: ['mobile/**', '.github/workflows/check-mobile.yml']
+  pull_request:
+    paths: ['mobile/**', '.github/workflows/check-mobile.yml']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  android:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    defaults:
+      run:
+        working-directory: mobile/android
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: 17
+          cache: gradle
+      - run: ./gradlew --no-daemon assembleDebug testDebugUnitTest
+      # Installable test build; each runner signs with its own debug key, so upgrades need an uninstall first.
+      - uses: actions/upload-artifact@v7
+        with:
+          name: phone-android-debug
+          path: mobile/android/app/build/outputs/apk/debug/app-debug.apk
+          retention-days: 14
+
+  ios:
+    runs-on: macos-15
+    timeout-minutes: 45
+    defaults:
+      run:
+        working-directory: mobile/ios
+    steps:
+      - uses: actions/checkout@v7
+      - run: brew install xcodegen
+      - run: xcodegen generate
+      - run: xcodebuild -project VTubeLeafPhone.xcodeproj -scheme VTubeLeafPhone -destination 'generic/platform=iOS Simulator' CODE_SIGNING_ALLOWED=NO build
+      - name: Unit tests on the first available iPhone simulator
+        run: |
+          simulator=$(xcrun simctl list devices available -j | jq -r '[.devices[][] | select(.deviceTypeIdentifier | test("iPhone"))][0].udid')
+          xcodebuild -project VTubeLeafPhone.xcodeproj -scheme VTubeLeafPhone -destination "id=$simulator" CODE_SIGNING_ALLOWED=NO test

@@ -21,7 +21,7 @@ targets:
     info:
       path: VTubeLeafPhone/Info.plist
       properties:
-        CFBundleDisplayName: VTubeLeaf
+        CFBundleDisplayName: VTubeLeaf Phone
         CFBundleShortVersionString: $(MARKETING_VERSION)
         CFBundleVersion: $(CURRENT_PROJECT_VERSION)
         UILaunchScreen: {}
