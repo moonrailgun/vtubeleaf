@@ -193,7 +193,7 @@ test('tracking auto-starts camera output only when enabled and tracking starts s
 
   await page.evaluate(() => ((window as any).cameraTest.failTracking = true));
   await tracking.click();
-  await expect(page.locator('#notice')).toContainText('OpenSeeFace 启动失败');
+  await expect(page.locator('#notice')).toContainText('OpenSeeFace 接收失败');
   await expect(status).toHaveText('尚未开始');
   expect(await actions()).toEqual([]);
 
