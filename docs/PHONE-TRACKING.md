@@ -112,7 +112,7 @@ cd mobile/android
 
 依赖固定在 AGP 8.13 / Compose BOM 2026.06.01 这一组；更新的 Compose、core、lifecycle 需要 AGP 9.1 和 compileSdk 37。
 
-正式签名 APK 通过独立的 `npm run release:mobile:patch` 发布，版本来自 `mobile/package.json`，与桌面端分开递增。密钥配置与正式构建见[手机端发布说明](RELEASE-MOBILE.md)。
+正式签名 APK 通过独立的 `npm run release:mobile:patch` 发布，版本来自 `mobile/package.json`，与桌面端分开递增。密钥配置、正式构建和官网下载更新见[手机端发布说明](RELEASE-MOBILE.md)。
 
 ### iOS
 

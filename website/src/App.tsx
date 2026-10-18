@@ -1,7 +1,9 @@
 import { useEffect, useRef, useState, type KeyboardEvent } from 'react';
 import { loadLatestRelease } from './release';
+import { loadLatestMobileRelease } from './mobile-release';
 
 declare const __RELEASE__: Awaited<ReturnType<typeof loadLatestRelease>>;
+declare const __MOBILE_RELEASE__: Awaited<ReturnType<typeof loadLatestMobileRelease>>;
 
 const platforms = ['win', 'mac', 'linux'] as const;
 type Platform = (typeof platforms)[number];
@@ -25,6 +27,7 @@ function initialPlatform(): Platform {
 
 export default function App() {
   const [release, setRelease] = useState(__RELEASE__);
+  const [mobileRelease, setMobileRelease] = useState(__MOBILE_RELEASE__);
   useEffect(() => {
     let active = true;
     loadLatestRelease()
@@ -33,6 +36,13 @@ export default function App() {
       })
       .catch(() => {
         // Keep the prerendered downloads when the release manifest is unavailable or invalid.
+      });
+    loadLatestMobileRelease()
+      .then((latest) => {
+        if (active) setMobileRelease(latest);
+      })
+      .catch(() => {
+        // The last published APK remains downloadable during a manifest outage.
       });
     return () => {
       active = false;
@@ -514,6 +524,32 @@ export default function App() {
                   更新说明与全部安装包
                 </a>
               </p>
+              <div className="phone-download" id="phone-download">
+                <h3>用手机做面捕</h3>
+                <p>
+                  VTubeLeaf Phone 将手机变成面捕摄像头，需要与电脑上的 VTubeLeaf
+                  配合使用。手机与电脑连接同一 Wi-Fi，在手机端扫描电脑上的配对二维码即可连接。
+                </p>
+                {mobileRelease ? (
+                  <>
+                    <a
+                      className="btn btn-primary"
+                      href={mobileRelease.android}
+                      data-tianji-event="download"
+                      data-tianji-event-platform="android"
+                      data-tianji-event-version={mobileRelease.version}
+                    >
+                      下载 Android APK
+                    </a>
+                    <p className="download-note">
+                      Android 8.0 及以上 · v{mobileRelease.version} ·{' '}
+                      <a href={mobileRelease.url}>手机端更新说明</a>
+                    </p>
+                  </>
+                ) : (
+                  <p className="download-note">Android APK 即将发布，支持 Android 8.0 及以上。</p>
+                )}
+              </div>
             </div>
             <aside className="req" data-od-id="install-requirements">
               <h3 style={{ fontSize: '22px', marginBottom: '8px' }}>你需要准备</h3>

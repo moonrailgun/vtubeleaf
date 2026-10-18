@@ -419,6 +419,15 @@ section {
   color: var(--muted);
   margin-top: 18px;
 }
+.phone-download {
+  margin-top: 32px;
+  padding-top: 28px;
+  border-top: 1px solid var(--border);
+}
+.phone-download > p:first-of-type {
+  margin: 12px 0 18px;
+  color: var(--muted);
+}
 .tabs {
   display: inline-flex;
   border: 1px solid var(--border);

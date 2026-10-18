@@ -42,3 +42,16 @@ release-it 检查工作区、拉取并检查远程提交，递增手机端版本
 3. 查看 [Release mobile 工作流](../.github/workflows/release-mobile.yml)。它校验标签、构建和测试正式 APK，核对签名、包名和版本，生成 `SHA256SUMS.txt`，上传后公开 GitHub Release。命令完成只代表标签已推送，不代表打包成功。
 
 手机端 Release 明确设置为 `latest=false`，因此桌面更新器的 `releases/latest/download/latest.json` 仍指向桌面版本。若构建失败，修复问题后重新运行工作流；手动运行时必须选择与版本匹配的 `mobile-v*` 标签。若上传后留下草稿，应先检查并清理该草稿再重新发布，避免同标签冲突。
+
+## 官网下载
+
+发布成功后自动更新 `website/public/mobile-release.json`。官网首屏内置最近一次构建的清单，并在访问时刷新；清单只有在匹配的正式 APK 已上传且非空时才能更新。首次发布前显示「Android APK 即将发布」，不会生成不存在的下载链接。
+
+桌面与手机端使用独立清单；手机端从所有已发布的正式移动版本中选择最高版本，重跑旧版本不会回退下载链接。只有官网更新任务失败时，可单独重跑失败的 job，或在已同步的工作区执行：
+
+```sh
+node scripts/update-website-release.mjs --mobile --dry-run
+node scripts/update-website-release.mjs --mobile
+```
+
+第二条会通过 GitHub API 提交官网清单至 `main`，需要仓库写权限。

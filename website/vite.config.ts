@@ -5,6 +5,7 @@ import { renderToString } from 'react-dom/server';
 import { createServer, defineConfig, type UserConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 import { parseRelease } from './src/release';
+import { parseMobileRelease } from './src/mobile-release';
 
 export default defineConfig(async ({ isPreview }): Promise<UserConfig> => {
   if (isPreview) return {};
@@ -12,7 +13,13 @@ export default defineConfig(async ({ isPreview }): Promise<UserConfig> => {
   const release = parseRelease(
     JSON.parse(await readFile(new URL('./public/release.json', import.meta.url), 'utf8')),
   );
-  const define = { __RELEASE__: JSON.stringify(release) };
+  const mobileRelease = parseMobileRelease(
+    JSON.parse(await readFile(new URL('./public/mobile-release.json', import.meta.url), 'utf8')),
+  );
+  const define = {
+    __RELEASE__: JSON.stringify(release),
+    __MOBILE_RELEASE__: JSON.stringify(mobileRelease),
+  };
   let root: string;
   let outDir: string;
 

@@ -77,3 +77,23 @@ jobs:
             --draft --verify-tag --latest=false --title "VTubeLeaf Phone $RELEASE_TAG" \
             --notes-file ../mobile/RELEASE_NOTES.md
           gh release edit "$RELEASE_TAG" --draft=false --latest=false
+
+  website:
+    needs: publish
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    concurrency:
+      group: website-release-manifest
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+      - name: Update website mobile download
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: node scripts/update-website-release.mjs --mobile

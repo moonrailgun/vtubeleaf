@@ -6,6 +6,11 @@ import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { test } from 'node:test';
 import { checkAndroidVersionCode } from '../scripts/check-mobile-version.mjs';
+import {
+  createMobileReleaseManifest,
+  latestMobileRelease,
+} from '../scripts/update-website-release.mjs';
+import { parseMobileRelease } from '../website/src/mobile-release.ts';
 
 test('Android upgrade codes are positive integers within the publishing limit', () => {
   assert.equal(checkAndroidVersionCode(1), 1);
@@ -13,6 +18,59 @@ test('Android upgrade codes are positive integers within the publishing limit', 
   for (const code of [undefined, null, '1', 0, -1, 1.5, NaN, Infinity, 2_100_000_001]) {
     assert.throws(() => checkAndroidVersionCode(code));
   }
+});
+
+const version = '0.2.3';
+const url = `https://github.com/moonrailgun/vtubeleaf/releases/download/mobile-v${version}/VTubeLeaf-Phone-${version}-android.apk`;
+const published = {
+  tag_name: `mobile-v${version}`,
+  draft: false,
+  prerelease: false,
+  assets: [
+    { name: url.split('/').at(-1), browser_download_url: url, state: 'uploaded', size: 100 },
+  ],
+};
+
+test('mobile downloads require a published stable release and its uploaded APK', () => {
+  const manifest = createMobileReleaseManifest(published);
+  assert.equal(manifest.android, url);
+  assert.deepEqual(parseMobileRelease(manifest), manifest);
+  assert.equal(parseMobileRelease(null), null);
+  for (const changed of [
+    { draft: true },
+    { prerelease: true },
+    { tag_name: 'v1.0.0' },
+    { assets: [] },
+    { assets: [{ ...published.assets[0], size: 0 }] },
+  ]) {
+    assert.throws(() => createMobileReleaseManifest({ ...published, ...changed }));
+  }
+  for (const changed of [
+    { android: 'https://example.com/app.apk' },
+    { version: '0.2.3-beta.1' },
+    { url: 'https://example.com' },
+  ]) {
+    assert.throws(() => parseMobileRelease({ ...manifest, ...changed }));
+  }
+  assert.equal(
+    latestMobileRelease([
+      { ...published, tag_name: 'v99.0.0' },
+      { ...published, tag_name: 'mobile-v0.2.10', draft: true },
+      { ...published, tag_name: 'mobile-v0.2.10' },
+      published,
+      { ...published, tag_name: 'mobile-v0.2.9' },
+    ]).tag_name,
+    'mobile-v0.2.10',
+  );
+  assert.throws(() => latestMobileRelease([]));
+  assert.equal(
+    latestMobileRelease([
+      { ...published, tag_name: 'mobile-v1.0.1000' },
+      { ...published, tag_name: 'mobile-v1.0.999' },
+      { ...published, tag_name: 'mobile-v0.999.999' },
+    ]).tag_name,
+    'mobile-v1.0.1000',
+  );
 });
 
 test('mobile release-it bumps and tags only mobile, and rejects invalid versions before editing', () => {

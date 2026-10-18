@@ -2,6 +2,8 @@ import { expect, test } from '@playwright/test';
 
 const latestReleaseApi =
   'https://raw.githubusercontent.com/moonrailgun/vtubeleaf/main/website/public/release.json';
+const mobileReleaseApi =
+  'https://raw.githubusercontent.com/moonrailgun/vtubeleaf/main/website/public/mobile-release.json';
 const latestRelease = {
   version: '99.98.97',
   url: 'https://github.com/moonrailgun/vtubeleaf/releases/tag/v99.98.97',
@@ -12,6 +14,59 @@ const latestRelease = {
 
 test.beforeEach(async ({ page }) => {
   await page.route(latestReleaseApi, (route) => route.fulfill({ json: latestRelease }));
+  await page.route(mobileReleaseApi, (route) => route.fulfill({ json: null }));
+});
+
+test('phone downloads appear only after a valid mobile APK is published', async ({ page }) => {
+  await page.goto('/');
+  const phone = page.locator('#phone-download');
+  await expect(phone).toContainText('Android APK 即将发布');
+  await expect(phone.getByRole('link', { name: '下载 Android APK' })).toHaveCount(0);
+  const mobile = {
+    version: '0.1.1',
+    url: 'https://github.com/moonrailgun/vtubeleaf/releases/tag/mobile-v0.1.1',
+    android:
+      'https://github.com/moonrailgun/vtubeleaf/releases/download/mobile-v0.1.1/VTubeLeaf-Phone-0.1.1-android.apk',
+  };
+  await page.route(mobileReleaseApi, (route) => route.fulfill({ json: mobile }));
+  await page.reload();
+  await expect(phone.getByRole('link', { name: '下载 Android APK' })).toHaveAttribute(
+    'href',
+    mobile.android,
+  );
+  await expect(phone).toContainText('Android 8.0 及以上 · v0.1.1');
+  await expect(phone).toContainText('配合使用');
+  await expect(page.locator('.hero-note')).toContainText(latestRelease.version);
+  await phone.scrollIntoViewIfNeeded();
+  await page.screenshot({ path: 'test-results/mobile-download-desktop.png' });
+  await page.setViewportSize({ width: 375, height: 812 });
+  await phone.scrollIntoViewIfNeeded();
+  expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(375);
+  await page.screenshot({ path: 'test-results/mobile-download-phone.png' });
+  for (const response of [
+    { status: 503, json: {} },
+    { json: { ...mobile, android: 'https://example.com/unverified.apk' } },
+  ]) {
+    await page.route(mobileReleaseApi, (route) => route.fulfill(response));
+    const refreshed = page.waitForResponse(mobileReleaseApi);
+    const document = await page.reload();
+    const fallback = await page.evaluate(
+      (html) =>
+        new DOMParser()
+          .parseFromString(html, 'text/html')
+          .querySelector('#phone-download a.btn')
+          ?.getAttribute('href') ?? null,
+      await document!.text(),
+    );
+    await (await refreshed).finished();
+    const download = phone.getByRole('link', { name: '下载 Android APK' });
+    if (fallback) {
+      await expect(download).toHaveAttribute('href', fallback);
+    } else {
+      await expect(phone).toContainText('Android APK 即将发布');
+      await expect(download).toHaveCount(0);
+    }
+  }
 });
 
 test('Linux downloads require published assets and tabs cycle through all platforms', async ({
