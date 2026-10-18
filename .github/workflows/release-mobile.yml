@@ -1,0 +1,79 @@
+name: Release mobile
+
+on:
+  push:
+    tags: ['mobile-v*']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-mobile-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+      - name: Verify mobile version tag
+        id: version
+        run: node scripts/check-mobile-version.mjs --ci
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: 17
+          cache: gradle
+      - name: Restore signing key and build APK
+        working-directory: mobile/android
+        env:
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          ANDROID_KEYSTORE_PATH: ${{ runner.temp }}/vtubeleaf-phone.jks
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          umask 077
+          test -n "$ANDROID_KEYSTORE_BASE64"
+          printf '%s' "$ANDROID_KEYSTORE_BASE64" | base64 --decode > "$ANDROID_KEYSTORE_PATH"
+          ./gradlew --no-daemon assembleRelease testReleaseUnitTest
+      - name: Remove signing key
+        if: always()
+        run: rm -f "$RUNNER_TEMP/vtubeleaf-phone.jks"
+      - name: Verify signature and package version
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+          VERSION_CODE: ${{ steps.version.outputs.version-code }}
+        run: |
+          sdkmanager 'build-tools;36.0.0' > /dev/null
+          apk=mobile/android/app/build/outputs/apk/release/app-release.apk
+          "$ANDROID_HOME/build-tools/36.0.0/apksigner" verify --verbose --print-certs "$apk" > "$RUNNER_TEMP/apk-signature.txt"
+          cat "$RUNNER_TEMP/apk-signature.txt"
+          grep -F "Signer #1 certificate SHA-256 digest: $(cat mobile/android/signing-certificate.sha256)" "$RUNNER_TEMP/apk-signature.txt"
+          "$ANDROID_HOME/build-tools/36.0.0/aapt" dump badging "$apk" > "$RUNNER_TEMP/apk-badging.txt"
+          grep -F "package: name='com.moonrailgun.vtubeleaf.phone' versionCode='$VERSION_CODE' versionName='$VERSION'" "$RUNNER_TEMP/apk-badging.txt"
+          mkdir packages
+          cp "$apk" "packages/VTubeLeaf-Phone-$VERSION-android.apk"
+          cd packages
+          sha256sum ./*.apk > SHA256SUMS.txt
+          sha256sum --check SHA256SUMS.txt
+      - name: Publish Android release
+        working-directory: packages
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: |
+          gh release create "$RELEASE_TAG" ./*.apk SHA256SUMS.txt \
+            --draft --verify-tag --latest=false --title "VTubeLeaf Phone $RELEASE_TAG" \
+            --notes-file ../mobile/RELEASE_NOTES.md
+          gh release edit "$RELEASE_TAG" --draft=false --latest=false

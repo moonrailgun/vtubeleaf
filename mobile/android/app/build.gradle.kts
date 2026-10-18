@@ -30,9 +30,18 @@ android {
         versionName = mobileVersion
     }
 
+    signingConfigs {
+        create("release") {
+            storeFile = System.getenv("ANDROID_KEYSTORE_PATH")?.let { file(it) }
+            storePassword = System.getenv("ANDROID_KEYSTORE_PASSWORD")
+            keyAlias = System.getenv("ANDROID_KEY_ALIAS")
+            keyPassword = System.getenv("ANDROID_KEY_PASSWORD")
+        }
+    }
     buildTypes {
         release {
             isMinifyEnabled = false
+            signingConfig = signingConfigs.getByName("release")
         }
     }
     compileOptions {
@@ -97,3 +106,15 @@ val downloadFaceModel by tasks.registering {
     }
 }
 tasks.named("preBuild") { dependsOn(downloadFaceModel) }
+
+val checkReleaseSigning by tasks.registering {
+    doLast {
+        for (name in listOf("ANDROID_KEYSTORE_PATH", "ANDROID_KEYSTORE_PASSWORD", "ANDROID_KEY_ALIAS", "ANDROID_KEY_PASSWORD")) {
+            check(!System.getenv(name).isNullOrBlank()) { "Release signing requires $name" }
+        }
+        check(file(System.getenv("ANDROID_KEYSTORE_PATH")).isFile) { "Android signing keystore does not exist" }
+    }
+}
+tasks.configureEach {
+    if (name == "preReleaseBuild") dependsOn(checkReleaseSigning)
+}

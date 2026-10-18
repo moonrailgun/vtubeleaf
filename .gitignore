@@ -11,6 +11,8 @@ playwright-report/
 *.log
 __pycache__/
 .env
+*.jks
+*.keystore
 .env.*
 !.env.example
 .vercel/

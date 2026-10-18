@@ -63,6 +63,8 @@ Windows 的 MSVC、WebView2、PowerShell 命令与 `.exe` 安装包构建见 [Wi
 
 ## 发布版本（维护者）
 
+以下命令发布桌面端。Android 手机端使用独立的 `npm run release:mobile:patch`，签名与完整流程见[手机端发布说明](docs/RELEASE-MOBILE.md)。
+
 使用 [release-it](https://github.com/release-it/release-it)，配置集中在根目录 `package.json` 的 `release-it` 字段。以根目录 `package.json` 为版本来源；Tauri 直接读取它，`after:bump` 钩子同步 `src-tauri/Cargo.toml`、`Cargo.lock`，把 `CHANGELOG.md`（英文）和 `CHANGELOG.zh-CN.md`（中文）的「未发布」改为新版本号，并重新生成许可证清单。首次使用需按[第三方许可文档](docs/THIRD_PARTY.md)安装 `cargo-about 0.9.2`，并运行 `npm ci`。
 
 ```sh
