@@ -54,7 +54,7 @@ jobs:
           VERSION: ${{ steps.version.outputs.version }}
           VERSION_CODE: ${{ steps.version.outputs.version-code }}
         run: |
-          sdkmanager 'build-tools;36.0.0' > /dev/null
+          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" 'build-tools;36.0.0' > /dev/null
           apk=mobile/android/app/build/outputs/apk/release/app-release.apk
           "$ANDROID_HOME/build-tools/36.0.0/apksigner" verify --verbose --print-certs "$apk" > "$RUNNER_TEMP/apk-signature.txt"
           cat "$RUNNER_TEMP/apk-signature.txt"
