@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## v1.3.0 · 2026-10-18
+
 ### Added
 
 - "Tracking engine" adds "Phone companion · Same Wi-Fi": after "Start tracking", a QR code appears; scan it with the VTubeLeaf phone app and the phone tracks your face and sends only motion values to the computer, so the computer no longer runs face tracking itself. The panel shows the connected phone, its engine, received frame rate and network round trip, and "Disconnect phone" ends that phone's session and shows a fresh code. Only one phone can be paired at a time; a second phone is told the computer is busy. A phone that drops off the network can come back within 30 seconds without scanning again, and connecting a different phone or engine asks you to calibrate your neutral pose again.
