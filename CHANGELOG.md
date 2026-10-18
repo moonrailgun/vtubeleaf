@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+## v1.3.1 · 2026-10-19
+
+- Maintenance release.
+
 ## v1.3.0 · 2026-10-18
 
 ### Added
