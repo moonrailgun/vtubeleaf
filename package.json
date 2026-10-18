@@ -19,6 +19,9 @@
     "release": "release-it --ci",
     "release:patch": "npm run release -- patch",
     "release:minor": "npm run release -- minor",
+    "release:mobile": "cd mobile && release-it --ci",
+    "release:mobile:patch": "npm run release:mobile -- patch",
+    "release:mobile:minor": "npm run release:mobile -- minor",
     "setup:assets": "node scripts/setup-assets.mjs",
     "setup:openseeface": "node scripts/setup-openseeface.mjs",
     "bundle:openseeface": "node scripts/setup-openseeface.mjs --bundle"

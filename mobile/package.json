@@ -1,0 +1,21 @@
+{
+  "name": "vtubeleaf-phone",
+  "version": "0.1.0",
+  "versionCode": 1,
+  "private": true,
+  "release-it": {
+    "git": {
+      "commitMessage": "chore(mobile): release ${version}",
+      "tagName": "mobile-v${version}",
+      "tagMatch": "mobile-v*"
+    },
+    "npm": {
+      "publish": false
+    },
+    "hooks": {
+      "after:git:init": "node ../scripts/check-release-sync.mjs",
+      "before:bump": "node ../scripts/check-mobile-version.mjs ${version}",
+      "after:bump": "node ../scripts/check-mobile-version.mjs --bump-code"
+    }
+  }
+}

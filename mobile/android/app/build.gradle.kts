@@ -1,5 +1,6 @@
 import java.net.URI
 import java.security.MessageDigest
+import groovy.json.JsonSlurper
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 
 plugins {
@@ -7,6 +8,15 @@ plugins {
     id("org.jetbrains.kotlin.android")
     id("org.jetbrains.kotlin.plugin.compose")
 }
+
+val mobilePackage = JsonSlurper().parse(rootProject.file("../package.json")) as Map<*, *>
+val mobileVersion = mobilePackage["version"] as String
+check(Regex("(0|[1-9]\\d*)\\.(0|[1-9]\\d*)\\.(0|[1-9]\\d*)").matches(mobileVersion)) {
+    "Expected a stable mobile version"
+}
+val mobileVersionCode = mobilePackage["versionCode"] as? Int
+    ?: error("Android versionCode must be an integer")
+check(mobileVersionCode in 1..2_100_000_000) { "Android versionCode is out of range" }
 
 android {
     namespace = "com.moonrailgun.vtubeleaf.phone"
@@ -16,8 +26,8 @@ android {
         applicationId = "com.moonrailgun.vtubeleaf.phone"
         minSdk = 26
         targetSdk = 36
-        versionCode = 1
-        versionName = "0.1.0"
+        versionCode = mobileVersionCode
+        versionName = mobileVersion
     }
 
     buildTypes {
