@@ -77,7 +77,7 @@ npm run release -- patch --dry-run  # 仅预览，不改文件、提交或推送
 
 ### 发布前检查
 
-运行前先提交现有改动（包括 `CHANGELOG.md` 和 `CHANGELOG.zh-CN.md` 中「未发布」的更新说明，任一份为空时会直接终止），并确保当前分支已设置 upstream、能够推送。release-it 会检查工作区是否干净并执行 `git fetch`；`after:git:init` 前置检查若发现远程分支存在本地未同步的提交（本地落后或双方分叉），会在修改版本号前终止并提示先同步，与远端一致或仅本地领先可以继续。拉取远程失败也会终止；`--dry-run` 会跳过 fetch 和 hook。
+运行前先提交现有改动（包括 `CHANGELOG.md` 和 `CHANGELOG.zh-CN.md` 中「未发布」的更新说明），并确保当前分支已设置 upstream、能够推送。两份更新说明可以同时留空，发版时会自动写入英文「Maintenance release.」和中文「维护更新。」；只有一份为空时会直接终止，避免漏翻译。release-it 会检查工作区是否干净并执行 `git fetch`；`after:git:init` 前置检查若发现远程分支存在本地未同步的提交（本地落后或双方分叉），会在修改版本号前终止并提示先同步，与远端一致或仅本地领先可以继续。拉取远程失败也会终止；`--dry-run` 会跳过 fetch 和 hook。
 
 ### 版本提交与打包
 

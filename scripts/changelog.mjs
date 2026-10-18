@@ -12,20 +12,21 @@ const sections = (text) => text.split(/^(?=## )/m);
 const heading = (section) => section.match(/^.*/)[0].trim();
 const body = (section) => section.replace(/^.*/, '');
 
-// Runs before the version bump, so it can only check that notes were written.
+// Runs before the version bump; maintenance releases can leave the notes empty.
 export function checkUnreleased(text, unreleased) {
   const all = sections(text);
   const index = all.findIndex((section) => heading(section) === unreleased);
   assert.ok(index > 0, `缺少「${unreleased}」一节`);
-  assert.ok(body(all[index]).trim(), `「${unreleased}」为空，请先写好更新说明再发版`);
-  return { all, index };
+  return { all, index, notes: body(all[index]).trim() };
 }
 
 // Turns the unreleased section into the tag's section and opens a new empty one above it.
 export function releaseChangelog(text, unreleased, tag, date) {
-  const { all, index } = checkUnreleased(text, unreleased);
+  const { all, index, notes } = checkUnreleased(text, unreleased);
   assert.ok(!all.some((section) => heading(section).split(' ')[1] === tag), `已有 ${tag}`);
-  all[index] = `${unreleased}\n\n## ${tag} · ${date}${body(all[index])}`;
+  const maintenance = unreleased === '## Unreleased' ? 'Maintenance release.' : '维护更新。';
+  all[index] =
+    `${unreleased}\n\n## ${tag} · ${date}${notes ? body(all[index]) : `\n\n- ${maintenance}\n\n`}`;
   return all.join('');
 }
 
@@ -57,16 +58,23 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
       const file = new URL(`../${name}`, import.meta.url);
       try {
         const text = readFileSync(file, 'utf8');
-        if (command === 'check') return checkUnreleased(text, unreleased);
-        if (command === 'notes') return changelogNotes(text, tag);
-        return [file, releaseChangelog(text, unreleased, `v${version}`, date)];
+        const notes =
+          command === 'notes' ? changelogNotes(text, tag) : checkUnreleased(text, unreleased).notes;
+        return {
+          file,
+          notes,
+          text:
+            command === 'release' ? releaseChangelog(text, unreleased, `v${version}`, date) : text,
+        };
       } catch (error) {
         throw new Error(`${name}：${error instanceof Error ? error.message : error}`);
       }
     });
-    if (command === 'notes') process.stdout.write(`${bilingualNotes(...results)}\n`);
+    const [en, zh] = results.map(({ notes }) => notes);
+    assert.equal(Boolean(en), Boolean(zh), '中英文更新说明必须同时填写或同时留空');
+    if (command === 'notes') process.stdout.write(`${bilingualNotes(en, zh)}\n`);
     // Written only after both pass, so a failure never releases just one of them.
-    if (command === 'release') for (const [file, text] of results) writeFileSync(file, text);
+    if (command === 'release') for (const { file, text } of results) writeFileSync(file, text);
   } catch (error) {
     console.error(error instanceof Error ? error.message : String(error));
     process.exit(1);
