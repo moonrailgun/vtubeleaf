@@ -7,7 +7,8 @@
     "git": {
       "commitMessage": "chore(mobile): release ${version}",
       "tagName": "mobile-v${version}",
-      "tagMatch": "mobile-v*"
+      "tagMatch": "mobile-v*",
+      "changelog": "git log --pretty=format:\"* %s (%h)\" ${from ? from + '..' : ''}${to} -- android package.json RELEASE_NOTES.md ../scripts/check-mobile-version.mjs ../.github/workflows/check-mobile.yml ../.github/workflows/release-mobile.yml"
     },
     "npm": {
       "publish": false

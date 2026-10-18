@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
 import { copyFileSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { test } from 'node:test';
 import { checkAndroidVersionCode } from '../scripts/check-mobile-version.mjs';
@@ -81,6 +81,12 @@ test('mobile release-it bumps and tags only mobile, and rejects invalid versions
     assert.equal(result.status, 0, result.stderr);
     return result.stdout.trim();
   };
+  const change = (path: string, subject: string) => {
+    mkdirSync(dirname(join(local, path)), { recursive: true });
+    writeFileSync(join(local, path), subject);
+    git(local, 'add', path);
+    git(local, 'commit', '-m', subject);
+  };
   const release = (...args: string[]) =>
     spawnSync(
       process.execPath,
@@ -114,9 +120,15 @@ test('mobile release-it bumps and tags only mobile, and rejects invalid versions
     writeFileSync(mobilePath, JSON.stringify(mobileConfig));
     const desktop = '{"version":"9.9.9"}\n';
     writeFileSync(join(local, 'package.json'), desktop);
-    git(local, 'add', '.');
-    git(local, 'commit', '-m', 'initial');
+    git(local, 'add', 'package.json');
+    git(local, 'commit', '-m', 'feat(desktop): desktop history');
     git(local, 'tag', 'v9.9.9');
+    git(local, 'add', 'mobile', 'scripts');
+    git(local, 'commit', '-m', 'build(mobile): configure Android releases');
+    change('mobile/android/tracking.kt', 'feat(phone): Android tracking');
+    change('mobile/ios/tracking.swift', 'feat(ios): iOS tracking');
+    change('src/desktop.ts', 'fix(ui): desktop tracking');
+    change('website/index.html', 'feat(website): website downloads');
     git(local, 'push', '-u', 'origin', 'main');
     const before = readFileSync(join(local, 'mobile/package.json'), 'utf8');
     const bad = release('0.2.0-beta.1');
@@ -131,8 +143,34 @@ test('mobile release-it bumps and tags only mobile, and rejects invalid versions
       ['major', '1.0.0', 4],
       ['1.2.1000', '1.2.1000', 5],
     ] as const) {
+      if (increment === 'minor') {
+        change('mobile/android/tracking.kt', 'fix(phone): Android reconnect');
+        change('mobile/ios/tracking.swift', 'fix(ios): iOS reconnect');
+        change('src/desktop.ts', 'fix(ui): desktop reconnect');
+        git(local, 'tag', 'v9.9.10');
+        change('.github/workflows/release-mobile.yml', 'ci(android): signed APK release');
+        change('mobile/RELEASE_NOTES.md', 'docs(mobile): Android release notes');
+      }
       const result = release(increment);
       assert.equal(result.status, 0, result.stdout + result.stderr);
+      assert.doesNotMatch(
+        result.stdout,
+        /desktop history|desktop tracking|iOS tracking|website downloads|desktop reconnect|iOS reconnect/,
+      );
+      if (increment === 'patch') {
+        assert.match(result.stdout, /Android tracking/);
+        assert.match(result.stdout, /configure Android releases/);
+      } else if (increment === 'minor') {
+        assert.match(result.stdout, /Android reconnect/);
+        assert.match(result.stdout, /signed APK release/);
+        assert.match(result.stdout, /Android release notes/);
+        assert.doesNotMatch(result.stdout, /Android tracking|configure Android releases/);
+      } else {
+        assert.doesNotMatch(
+          result.stdout,
+          /Android tracking|Android reconnect|signed APK release|Android release notes/,
+        );
+      }
       assert.equal(
         JSON.parse(readFileSync(join(local, 'mobile/package.json'), 'utf8')).version,
         expected,

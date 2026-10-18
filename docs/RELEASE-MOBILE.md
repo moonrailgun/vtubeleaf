@@ -39,6 +39,8 @@ npm run release:mobile -- patch --dry-run  # 只预览，不改文件、提交�
 
 release-it 检查工作区、拉取并检查远程提交，递增手机端版本，创建版本提交和 `mobile-v*` 标签，再推送。Android `versionName` 使用 `mobile/package.json` 中的 `version`，仅支持正式三段版本；`versionCode` 是同一文件中独立保存的整数，从 1 开始。每次发版无论选择补丁、小版本、大版本还是指定版本，`versionCode` 都只加 1，并与版本号一同提交；编号必须在 1–2100000000 内。普通构建、`--dry-run` 和重跑同一标签的 CI 都不会增加编号。
 
+终端的 Changelog 按改动路径筛选，只列出 Android 代码、手机端版本与发布说明、Android 版本检查脚本及手机端 CI 的相关提交；范围从上一个 `mobile-v*` 标签开始，首次发布则筛选全部历史。纯桌面、iOS 或官网改动不会列入。GitHub Release 正文仍使用 `mobile/RELEASE_NOTES.md`。
+
 3. 查看 [Release mobile 工作流](../.github/workflows/release-mobile.yml)。它校验标签、构建和测试正式 APK，核对签名、包名和版本，生成 `SHA256SUMS.txt`，上传后公开 GitHub Release。命令完成只代表标签已推送，不代表打包成功。
 
 手机端 Release 明确设置为 `latest=false`，因此桌面更新器的 `releases/latest/download/latest.json` 仍指向桌面版本。若构建失败，修复问题后重新运行工作流；手动运行时必须选择与版本匹配的 `mobile-v*` 标签。若上传后留下草稿，应先检查并清理该草稿再重新发布，避免同标签冲突。
