@@ -168,6 +168,12 @@ jobs:
           executable=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleExecutable' "$APP_PATH/Contents/Info.plist")
           lipo "$APP_PATH/Contents/MacOS/$executable" -verify_arch arm64 x86_64
           lipo "$APP_PATH/Contents/Library/SystemExtensions/com.moonrailgun.vtubeleaf.camera.systemextension/Contents/MacOS/VTubeLeafCamera" -verify_arch arm64 x86_64
+      - name: Use TCP for Apple ticket delivery
+        # shortcut: disable HTTP/3 on this disposable runner until the upstream network issue is fixed.
+        # https://github.com/actions/runner-images/issues/14924#issuecomment-6188826956
+        run: |
+          echo 'block return out quick proto udp from any to any port 443' | sudo pfctl -f -
+          sudo pfctl -E
       - name: Notarize, staple and create distributable DMG and ZIP
         env:
           APPLE_API_KEY_P8_BASE64: ${{ secrets.APPLE_API_KEY_P8_BASE64 }}
