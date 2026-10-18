@@ -1,1 +1,5 @@
-null
+{
+  "version": "0.1.2",
+  "url": "https://github.com/moonrailgun/vtubeleaf/releases/tag/mobile-v0.1.2",
+  "android": "https://github.com/moonrailgun/vtubeleaf/releases/download/mobile-v0.1.2/VTubeLeaf-Phone-0.1.2-android.apk"
+}
