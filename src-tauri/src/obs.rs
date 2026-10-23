@@ -1,5 +1,6 @@
 use crate::locale;
-use http_body_util::Full;
+use crate::texture;
+use http_body_util::{BodyExt, Full, Limited};
 use hyper::{body::Bytes, server::conn::http1, service::service_fn, Request, Response, StatusCode};
 use hyper_util::rt::{TokioIo, TokioTimer};
 use std::{
@@ -11,7 +12,7 @@ use std::{
 use tauri::{ipc::InvokeBody, State, WebviewWindow};
 
 const ADDRESS: &str = "127.0.0.1:18765";
-const URL: &str = "http://127.0.0.1:18765/";
+pub const URL: &str = "http://127.0.0.1:18765/";
 const STALE: Duration = Duration::from_secs(2);
 
 const OUTPUT_UNAVAILABLE: [&str; 5] = [
@@ -37,60 +38,73 @@ pub struct Output {
 }
 
 impl Output {
-    fn start(&mut self) -> Result<(), String> {
-        if self.server.is_none() {
-            let listener = TcpListener::bind(ADDRESS).map_err(|error| {
-                locale::text([
-                    "Could not start the OBS transparent output ({address}): {error}",
-                    "无法启动 OBS 透明输出（{address}）：{error}",
-                    "OBS 透過出力を開始できません（{address}）：{error}",
-                    "No se pudo iniciar la salida transparente para OBS ({address}): {error}",
-                    "Impossible de démarrer la sortie transparente OBS ({address}) : {error}",
-                ])
-                .replace("{address}", ADDRESS)
-                .replace("{error}", &error.to_string())
-            })?;
-            listener
-                .set_nonblocking(true)
-                .map_err(|error| error.to_string())?;
-            let frame = self.frame.clone();
-            self.server = Some(tauri::async_runtime::spawn(async move {
-                let Ok(listener) = tokio::net::TcpListener::from_std(listener) else {
-                    return;
-                };
-                let slots = Arc::new(tokio::sync::Semaphore::new(16));
-                loop {
-                    // A transient failure (e.g. out of file descriptors) must not end the server.
-                    let Ok((socket, _)) = listener.accept().await else {
-                        tokio::time::sleep(Duration::from_millis(100)).await;
-                        continue;
-                    };
-                    let Ok(permit) = slots.clone().try_acquire_owned() else {
-                        continue;
-                    };
-                    let frame = frame.clone();
-                    tauri::async_runtime::spawn(async move {
-                        let _permit = permit;
-                        let service = service_fn(move |request| {
-                            let response = respond(&request, &frame);
-                            async move { Ok::<_, Infallible>(response) }
-                        });
-                        let _ = http1::Builder::new()
-                            .timer(TokioTimer::new())
-                            .header_read_timeout(Duration::from_secs(5))
-                            .max_buf_size(8192)
-                            .serve_connection(TokioIo::new(socket), service)
-                            .await;
-                    });
-                }
-            }));
-        }
+    fn start(&mut self, texture: Arc<Mutex<texture::Output>>) -> Result<(), String> {
+        self.serve(texture)?;
         let mut frame = self
             .frame
             .lock()
             .map_err(|_| locale::text(OUTPUT_UNAVAILABLE))?;
         frame.latest = None;
         frame.active = true;
+        Ok(())
+    }
+
+    /// Boots the local HTTP server. Frames can then arrive over `POST /frame` instead of the Tauri
+    /// IPC channel, whose fixed round trip measured ~96 ms against ~0 ms here.
+    pub fn serve(&mut self, texture: Arc<Mutex<texture::Output>>) -> Result<(), String> {
+        if self.server.is_some() {
+            return Ok(());
+        }
+        let listener = TcpListener::bind(ADDRESS).map_err(|error| {
+            locale::text([
+                "Could not start the OBS transparent output ({address}): {error}",
+                "无法启动 OBS 透明输出（{address}）：{error}",
+                "OBS 透過出力を開始できません（{address}）：{error}",
+                "No se pudo iniciar la salida transparente para OBS ({address}): {error}",
+                "Impossible de démarrer la sortie transparente OBS ({address}) : {error}",
+            ])
+            .replace("{address}", ADDRESS)
+            .replace("{error}", &error.to_string())
+        })?;
+        listener
+            .set_nonblocking(true)
+            .map_err(|error| error.to_string())?;
+        let frame = self.frame.clone();
+        self.server = Some(tauri::async_runtime::spawn(async move {
+            let Ok(listener) = tokio::net::TcpListener::from_std(listener) else {
+                return;
+            };
+            let slots = Arc::new(tokio::sync::Semaphore::new(16));
+            loop {
+                // A transient failure (e.g. out of file descriptors) must not end the server.
+                let Ok((socket, _)) = listener.accept().await else {
+                    tokio::time::sleep(Duration::from_millis(100)).await;
+                    continue;
+                };
+                // Without this the socket coalesces small writes and waits for an ACK, which adds
+                // up to 40 ms to a request/response pair even on loopback.
+                let _ = socket.set_nodelay(true);
+                let Ok(permit) = slots.clone().try_acquire_owned() else {
+                    continue;
+                };
+                let frame = frame.clone();
+                let texture = texture.clone();
+                tauri::async_runtime::spawn(async move {
+                    let _permit = permit;
+                    let service = service_fn(move |request| {
+                        let frame = frame.clone();
+                        let texture = texture.clone();
+                        async move { Ok::<_, Infallible>(respond(request, &frame, &texture).await) }
+                    });
+                    let _ = http1::Builder::new()
+                        .timer(TokioTimer::new())
+                        .header_read_timeout(Duration::from_secs(5))
+                        .max_buf_size(8192)
+                        .serve_connection(TokioIo::new(socket), service)
+                        .await;
+                });
+            }
+        }));
         Ok(())
     }
 
@@ -152,22 +166,102 @@ impl Drop for Output {
     }
 }
 
-fn respond<B>(request: &Request<B>, frame: &Mutex<Frame>) -> Response<Full<Bytes>> {
+fn reply(status: StatusCode, mime: &str, body: Bytes) -> Response<Full<Bytes>> {
+    Response::builder()
+        .status(status)
+        .header("Content-Type", mime)
+        .header("Cache-Control", "no-store")
+        .header("X-Content-Type-Options", "nosniff")
+        .header("Cross-Origin-Resource-Policy", "same-origin")
+        .header("Content-Security-Policy", "default-src 'none'; script-src 'self'; connect-src 'self'; style-src 'unsafe-inline'; frame-ancestors 'none'")
+        .body(Full::new(body))
+        .unwrap()
+}
+
+async fn respond<B>(
+    request: Request<B>,
+    frame: &Mutex<Frame>,
+    texture: &Arc<Mutex<texture::Output>>,
+) -> Response<Full<Bytes>>
+where
+    B: hyper::body::Body + Unpin,
+    B::Error: std::error::Error + Send + Sync + 'static,
+{
     let header = |name| {
         request
             .headers()
             .get(name)
             .and_then(|value| value.to_str().ok())
     };
-    let allowed = header("host") == Some(ADDRESS)
-        && header("origin").is_none_or(|origin| origin == URL.trim_end_matches('/'))
+    // Read before any branch consumes the request: `into_body` moves it.
+    let origin = header("origin").map(str::to_owned);
+    // OBS's browser source is same-origin; the app itself fetches from its own webview origin,
+    // which is cross-site, so it needs its own rule rather than a looser same-origin check.
+    let same_origin = header("host") == Some(ADDRESS)
+        && origin.as_deref().is_none_or(|origin| origin == URL.trim_end_matches('/'))
         && header("sec-fetch-site").is_none_or(|site| matches!(site, "same-origin" | "none"));
+    let from_app = header("host") == Some(ADDRESS)
+        && matches!(
+            origin.as_deref(),
+            Some("http://tauri.localhost") | Some("tauri://localhost")
+        );
+    let allowed = same_origin || from_app;
+    let method = request.method().clone();
+    let path = request.uri().path().to_owned();
     let (status, mime, body) = if !allowed {
         (StatusCode::FORBIDDEN, "text/plain", Bytes::new())
-    } else if request.method() != hyper::Method::GET {
+    } else if method == hyper::Method::OPTIONS && path == "/frame" {
+        // A binary POST is not a simple request, so the browser sends a preflight first.
+        (StatusCode::NO_CONTENT, "text/plain", Bytes::new())
+    } else if method == hyper::Method::POST && path == "/frame" {
+        // A 1080p RGBA frame is 8.3 MB. The browser always sends `Content-Length` for an
+        // `ArrayBuffer` body, so the declared size is checked first and `collect` can then reserve
+        // the buffer once; reading frame by frame costs an extra runtime hop per chunk (~70 ms on
+        // a 3.69 MB frame). Chunked uploads, which have no declared size, fall back to `Limited`.
+        const MAX_FRAME: usize = 16 * 1024 * 1024;
+        let body = request.into_body();
+        let declared = body.size_hint().upper();
+        if declared.is_some_and(|size| size as usize > MAX_FRAME) {
+            return reply(StatusCode::PAYLOAD_TOO_LARGE, "text/plain", Bytes::new());
+        }
+        let read_start = Instant::now();
+        let bytes = if declared.is_some() {
+            match body.collect().await {
+                Ok(collected) => collected.to_bytes(),
+                Err(_) => return reply(StatusCode::BAD_REQUEST, "text/plain", Bytes::new()),
+            }
+        } else {
+            match Limited::new(body, MAX_FRAME).collect().await {
+                Ok(collected) => collected.to_bytes(),
+                Err(_) => return reply(StatusCode::PAYLOAD_TOO_LARGE, "text/plain", Bytes::new()),
+            }
+        };
+        let read_ms = read_start.elapsed().as_millis() as u32;
+        match texture.lock() {
+            Ok(output) => match output.submit(&bytes) {
+                // The reply carries `wanted` so the front end keeps the receiver-aware polling it
+                // had over IPC (Syphon reports whether a client is attached).
+                Ok((wanted, send_ms)) => (
+                    StatusCode::OK,
+                    "application/json",
+                    // `sendMs` covers the mutex wait plus the texture upload, so a slow frame can
+                    // be attributed to the sender rather than to transport.
+                    Bytes::from(format!(
+                        "{{\"wanted\":{wanted},\"sendMs\":{send_ms},\"readMs\":{read_ms}}}"
+                    )),
+                ),
+                Err(error) => (StatusCode::BAD_REQUEST, "text/plain", Bytes::from(error)),
+            },
+            Err(_) => (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "text/plain",
+                Bytes::new(),
+            ),
+        }
+    } else if method != hyper::Method::GET {
         (StatusCode::METHOD_NOT_ALLOWED, "text/plain", Bytes::new())
     } else {
-        match request.uri().path() {
+        match path.as_str() {
             "/" => (
                 StatusCode::OK,
                 "text/html; charset=utf-8",
@@ -197,26 +291,49 @@ fn respond<B>(request: &Request<B>, frame: &Mutex<Frame>) -> Response<Full<Bytes
             _ => (StatusCode::NOT_FOUND, "text/plain", Bytes::new()),
         }
     };
-    Response::builder()
-        .status(status)
-        .header("Content-Type", mime)
-        .header("Cache-Control", "no-store")
-        .header("X-Content-Type-Options", "nosniff")
-        .header("Cross-Origin-Resource-Policy", "same-origin")
-        .header("Content-Security-Policy", "default-src 'none'; script-src 'self'; connect-src 'self'; style-src 'unsafe-inline'; frame-ancestors 'none'")
-        .body(Full::new(body)).unwrap()
+    let mut response = reply(status, mime, body);
+    // Without these the browser discards a cross-site response even when the server answered.
+    if let Some(origin) = origin
+        .filter(|origin| matches!(origin.as_str(), "http://tauri.localhost" | "tauri://localhost"))
+    {
+        if let Ok(value) = hyper::header::HeaderValue::from_str(&origin) {
+            let headers = response.headers_mut();
+            // Lets the app read the resource timing, which separates connection setup from the
+            // server's own latency when a round trip looks slow.
+            headers.insert("Timing-Allow-Origin", value.clone());
+            headers.insert(hyper::header::ACCESS_CONTROL_ALLOW_ORIGIN, value);
+            headers.insert(
+                hyper::header::ACCESS_CONTROL_ALLOW_METHODS,
+                hyper::header::HeaderValue::from_static("POST, OPTIONS"),
+            );
+            headers.insert(
+                hyper::header::ACCESS_CONTROL_ALLOW_HEADERS,
+                hyper::header::HeaderValue::from_static("Content-Type"),
+            );
+            headers.insert(
+                hyper::header::VARY,
+                hyper::header::HeaderValue::from_static("Origin"),
+            );
+            headers.insert(
+                "Cross-Origin-Resource-Policy",
+                hyper::header::HeaderValue::from_static("cross-origin"),
+            );
+        }
+    }
+    response
 }
 
 #[tauri::command]
 pub fn obs_start(
     window: WebviewWindow,
     output: State<'_, Mutex<Output>>,
+    texture: State<'_, Arc<Mutex<texture::Output>>>,
 ) -> Result<&'static str, String> {
     super::require_main(&window)?;
     output
         .lock()
         .map_err(|_| locale::text(OUTPUT_UNAVAILABLE))?
-        .start()?;
+        .start(texture.inner().clone())?;
     Ok(URL)
 }
 
@@ -283,8 +400,9 @@ mod tests {
             return;
         }
         let mut output = Output::default();
-        output.start().unwrap();
-        assert!(Output::default().start().is_err());
+        let texture = Arc::new(Mutex::new(texture::Output::default()));
+        output.start(texture.clone()).unwrap();
+        assert!(Output::default().start(texture.clone()).is_err());
         let get = |path| {
             let mut socket = std::net::TcpStream::connect(ADDRESS).unwrap();
             socket
@@ -314,7 +432,7 @@ mod tests {
         output.stop().unwrap();
         output.submit(&png).unwrap();
         assert!(get("/frame").starts_with(b"HTTP/1.1 204"));
-        output.start().unwrap();
+        output.start(texture).unwrap();
         output.submit(&png).unwrap();
         assert!(get("/frame").ends_with(&png));
     }
@@ -322,16 +440,18 @@ mod tests {
     #[test]
     fn frames_expire_and_stop_clears_them_without_exposing_other_routes_or_origins() {
         let output = Output::default();
+        let texture = Arc::new(Mutex::new(texture::Output::default()));
         let get = |path, host, origin| {
-            respond(
-                &Request::builder()
+            tauri::async_runtime::block_on(respond(
+                Request::builder()
                     .uri(path)
                     .header("host", host)
                     .header("origin", origin)
-                    .body(())
+                    .body(Full::new(Bytes::new()))
                     .unwrap(),
                 &output.frame,
-            )
+                &texture,
+            ))
             .status()
         };
         let origin = "http://127.0.0.1:18765";
@@ -362,15 +482,55 @@ mod tests {
     }
 
     #[test]
+    fn preflight_is_allowed_for_the_app_and_denied_for_other_origins() {
+        let output = Output::default();
+        let texture = Arc::new(Mutex::new(texture::Output::default()));
+        let preflight = |origin: &str| {
+            tauri::async_runtime::block_on(respond(
+                Request::builder()
+                    .method(hyper::Method::OPTIONS)
+                    .uri("/frame")
+                    .header("host", ADDRESS)
+                    .header("origin", origin)
+                    .body(Full::new(Bytes::new()))
+                    .unwrap(),
+                &output.frame,
+                &texture,
+            ))
+        };
+        let app = preflight("http://tauri.localhost");
+        assert_eq!(app.status(), StatusCode::NO_CONTENT);
+        assert_eq!(
+            app.headers()
+                .get(hyper::header::ACCESS_CONTROL_ALLOW_ORIGIN)
+                .unwrap(),
+            "http://tauri.localhost"
+        );
+        // A binary POST is not a simple request, so without this header the browser never sends it.
+        assert!(app
+            .headers()
+            .get(hyper::header::ACCESS_CONTROL_ALLOW_METHODS)
+            .unwrap()
+            .to_str()
+            .unwrap()
+            .contains("POST"));
+        assert_eq!(
+            preflight("https://attacker.example").status(),
+            StatusCode::FORBIDDEN
+        );
+    }
+
+    #[test]
     fn frames_are_wanted_only_while_an_obs_page_polls() {
         let output = Output::default();
+        let texture = Arc::new(Mutex::new(texture::Output::default()));
         let poll = |path, host| {
             let request = Request::builder()
                 .uri(path)
                 .header("host", host)
-                .body(())
+                .body(Full::new(Bytes::new()))
                 .unwrap();
-            respond(&request, &output.frame);
+            tauri::async_runtime::block_on(respond(request, &output.frame, &texture));
         };
         assert!(!output.wanted().unwrap());
         poll("/", ADDRESS);

@@ -70,9 +70,11 @@ export function startFrameLoop(
       if (!stopped) {
         const interval = 1000 / fps();
         // A refresh frame re-anchors to its refresh, locking the loop to a whole number of them.
-        // A timer frame keeps the ideal cadence so timer latency never lowers the rate, and a
-        // late one restarts it so slow inference never queues extra frames.
-        due = refresh ? now + interval : Math.max(due + interval, now + interval * 0.75);
+        // A timer frame keeps the ideal cadence so timer latency never lowers the rate. A late one
+        // restarts from now, which drops the missed slot without adding a wait on top of the work
+        // that already overran: `now + interval * 0.75` used to push every frame that took more
+        // than a quarter of the interval, so a 30 FPS loop with 10 ms of work settled at 28.6.
+        due = refresh ? now + interval : Math.max(due + interval, now);
         // While refreshes keep arriving the timer only covers a stall; otherwise it paces.
         arm(due - performance.now() + (painting && steady() ? interval : 0));
         painting = false;

@@ -681,7 +681,9 @@ pub fn run() {
             #[cfg(any(target_os = "linux", windows))]
             media::configure_media(&app.get_webview_window("main").expect("工作台窗口未创建"))?;
             app.manage(Mutex::new(obs::Output::default()));
-            app.manage(Mutex::new(texture::Output::default()));
+            // Shared with the local HTTP server so frames can skip the IPC channel, whose fixed
+            // round-trip cost measured ~96 ms regardless of payload size.
+            app.manage(std::sync::Arc::new(Mutex::new(texture::Output::default())));
             app.manage(AppState {
                 data_dir,
                 models: Registry::default(),
@@ -774,7 +776,8 @@ pub fn run() {
             texture::texture_start,
             texture::texture_stop,
             texture::texture_submit,
-            texture::texture_wanted
+            texture::texture_wanted,
+            texture::texture_ping
         ])
         .on_window_event(|window, event| {
             if window.label() == "main" && matches!(event, tauri::WindowEvent::Destroyed) {
@@ -794,7 +797,7 @@ pub fn run() {
                 }
             }
             // Quitting from the menu skips the window close handler that normally stops the output.
-            if let Some(output) = app.try_state::<Mutex<texture::Output>>() {
+            if let Some(output) = app.try_state::<std::sync::Arc<Mutex<texture::Output>>>() {
                 if let Ok(mut output) = output.lock() {
                     output.stop();
                 }

@@ -63,9 +63,9 @@ test('hidden studio pauses while idle and keeps tracking and output windows runn
         window.sendFace = face => this.receive(face);
         return true;
       };
-      const draw = AvatarStage.prototype.draw;
-      AvatarStage.prototype.draw = function (...args) {
-        draw.apply(this, args);
+      const present = AvatarStage.prototype.present;
+      AvatarStage.prototype.present = function (...args) {
+        present.apply(this, args);
         if (this.passive) window.outputDepth = this.depthScale;
         else {
           window.mainDepth = this.depthScale;

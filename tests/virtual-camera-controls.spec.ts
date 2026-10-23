@@ -8,7 +8,21 @@ test('camera mirror flips output horizontally, switches live, and persists after
     // The real stage renders a quadrant scene background; a square stage letterboxes to
     // x 280..1000 of the 1280×720 camera frame, leaving the scene color in the side bars.
     const bootstrap = `import { mockIPC, mockWindows } from '/node_modules/@tauri-apps/api/mocks.js';
+      import { AvatarStage } from '/src/renderer.ts';
       window.isTauri = true; mockWindows('main');
+      // Sample the preview right after it is drawn: a WebGL drawing buffer is cleared once the
+      // browser composites, so the read has to happen in the same task as the render.
+      const present = AvatarStage.prototype.present;
+      AvatarStage.prototype.present = function (...args) {
+        const result = present.apply(this, args);
+        if (!this.passive && window.cameraTest) {
+          const preview = this.canvas;
+          const probe = document.createElement('canvas').getContext('2d');
+          probe.drawImage(preview, preview.width / 4, preview.height / 4, 1, 1, 0, 0, 1, 1);
+          window.cameraTest.preview = Array.from(probe.getImageData(0, 0, 1, 1).data);
+        }
+        return result;
+      };
       const style = document.createElement('style');
       style.textContent = '#stage { right: auto !important; bottom: auto !important; width: 400px !important; height: 400px !important; }';
       document.head.append(style);
@@ -39,11 +53,6 @@ test('camera mirror flips output horizontally, switches live, and persists after
           camera.pixels = [[400, 180], [880, 180], [400, 540], [880, 540], [0, 0]].map(([x, y]) =>
             Array.from(bytes.slice((y * 1280 + x) * 4, (y * 1280 + x) * 4 + 4)));
           camera.opaque = bytes.length === 1280 * 720 * 4 && bytes.every((value, i) => i % 4 !== 3 || value === 255);
-          // The preview canvas still holds this frame: mirroring the output must not flip it.
-          const preview = document.querySelector('#stage canvas');
-          const probe = document.createElement('canvas').getContext('2d');
-          probe.drawImage(preview, preview.width / 4, preview.height / 4, 1, 1, 0, 0, 1, 1);
-          camera.preview = Array.from(probe.getImageData(0, 0, 1, 1).data);
           return;
         }
         return { ...camera.status };
@@ -93,11 +102,11 @@ test('a failed model render keeps the camera output running', async ({ page }) =
     const response = await route.fetch();
     const bootstrap = `import { mockIPC, mockWindows } from '/node_modules/@tauri-apps/api/mocks.js';
       import { AvatarStage } from '/src/renderer.ts';
-      const draw = AvatarStage.prototype.draw;
+      const present = AvatarStage.prototype.present;
       // A broken model throws whenever the stage renders, in the preview and in camera frames.
-      AvatarStage.prototype.draw = function (...args) {
+      AvatarStage.prototype.present = function (...args) {
         if (window.breakModel) this.app.stage.render = () => { throw new Error('boom'); };
-        return draw.apply(this, args);
+        return present.apply(this, args);
       };
       window.isTauri = true; mockWindows('main');
       const camera = window.cameraTest = { active: false, submits: 0, stops: 0 };

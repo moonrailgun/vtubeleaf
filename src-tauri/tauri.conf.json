@@ -24,8 +24,8 @@
       }
     ],
     "security": {
-      "csp": "default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' blob: data:; media-src 'self' blob:; connect-src 'self' ipc: http://ipc.localhost blob: https://raw.githubusercontent.com/moonrailgun/vtubeleaf/main/website/public/release.json; worker-src 'self' blob:; object-src 'none'; frame-src 'none'; base-uri 'self'",
-      "devCsp": "default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' blob: data:; media-src 'self' blob:; connect-src 'self' ipc: http://ipc.localhost blob: https://raw.githubusercontent.com/moonrailgun/vtubeleaf/main/website/public/release.json ws://localhost:21420; worker-src 'self' blob:; object-src 'none'; frame-src 'none'; base-uri 'self'"
+      "csp": "default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' blob: data:; media-src 'self' blob:; connect-src 'self' ipc: http://ipc.localhost http://127.0.0.1:18765 blob: https://raw.githubusercontent.com/moonrailgun/vtubeleaf/main/website/public/release.json; worker-src 'self' blob:; object-src 'none'; frame-src 'none'; base-uri 'self'",
+      "devCsp": "default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' blob: data:; media-src 'self' blob:; connect-src 'self' ipc: http://ipc.localhost http://127.0.0.1:18765 blob: https://raw.githubusercontent.com/moonrailgun/vtubeleaf/main/website/public/release.json ws://localhost:21420; worker-src 'self' blob:; object-src 'none'; frame-src 'none'; base-uri 'self'"
     }
   },
   "plugins": {

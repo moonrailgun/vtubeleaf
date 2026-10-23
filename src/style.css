@@ -514,6 +514,12 @@ body.about {
 .stage-frame #stage:focus {
   outline: none;
 }
+/* The timing line is meant to be copied into bug reports, so it overrides the
+   inherited `user-select: none` of the surrounding chrome. */
+#render-status {
+  user-select: text;
+  cursor: text;
+}
 .stage-frame #stage[data-draggable='true'] {
   cursor: grab;
   touch-action: none;

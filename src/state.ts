@@ -168,6 +168,10 @@ export type Settings = ModelProfile & {
   autoStartMic: boolean;
   virtualCameraMirror: boolean;
   obsOutput: 'native' | 'browser';
+  /** Frame size sent to OBS; 720p moves 56% less data every frame. */
+  obsOutputSize: '1080p' | '720p';
+  /** Skips the preview redraw while OBS is connected; the stage goes blank to save the cost. */
+  pausePreview: boolean;
   engine: 'mediapipe' | 'openseeface' | 'nvidia' | 'phone';
   trackingDelegate: 'CPU' | 'GPU';
   deviceId: string;
@@ -223,6 +227,8 @@ export const defaults: Settings = {
   autoStartMic: false,
   virtualCameraMirror: false,
   obsOutput: 'native',
+  obsOutputSize: '1080p',
+  pausePreview: false,
   engine: 'mediapipe',
   trackingDelegate: 'GPU',
   deviceId: '',
@@ -572,6 +578,8 @@ export function readSettings(value: unknown): Settings {
   if (typeof v.autoStartMic === 'boolean') s.autoStartMic = v.autoStartMic;
   if (typeof v.virtualCameraMirror === 'boolean') s.virtualCameraMirror = v.virtualCameraMirror;
   if (v.obsOutput === 'browser') s.obsOutput = v.obsOutput;
+  if (v.obsOutputSize === '720p') s.obsOutputSize = v.obsOutputSize;
+  if (v.pausePreview === true) s.pausePreview = true;
   if (OUTPUT_ASPECTS.includes(v.outputAspect as Exclude<OutputAspect, 'auto'>))
     s.outputAspect = v.outputAspect as OutputAspect;
   if (typeof v.skippedUpdateVersion === 'string' && v.skippedUpdateVersion.length <= 128)

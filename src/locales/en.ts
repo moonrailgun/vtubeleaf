@@ -330,6 +330,8 @@ export default {
   'app.obsNativeSelect': 'Select VTubeLeaf in an OBS “{source}” source',
   'app.obsBrowserPaste': 'Paste the address into an OBS “Browser” source',
   'app.outputMethod': 'Output method',
+  'app.obsOutputSize': 'OBS output size',
+  'app.pausePreview': 'Pause preview while outputting',
   'app.browserSource': 'Browser source',
   'app.obsBrowserUrl': 'OBS browser source address',
   'app.copyAddress': 'Copy address',
@@ -616,7 +618,7 @@ export default {
     'You have an unsaved motion recording. Save it in Avatar controls before restarting.',
   'studio.restartBusy': 'An avatar or scene is loading. Try restarting again in a moment.',
   'app.trackingDelegate': 'Tracking processor',
-  'app.trackingDelegateGpu': 'GPU · Default',
+  'app.trackingDelegateGpu': 'GPU',
   'app.trackingDelegateHint': 'Only affects face detection. Switch to CPU if the GPU is unstable.',
   'tracker.gpuFailed':
     'Face tracking failed to start. Switch “Tracking processor” to CPU under “Tracking engine and capture” and try again; if it still fails, check the local tracking resources.',
@@ -804,6 +806,8 @@ export default {
   'studio.phoneLost': 'Lost the connection to {device}. Waiting for it to reconnect…',
   'studio.phoneLeft': 'The phone disconnected. Scan the new code to pair again.',
   'studio.renderStatus': '{render} FPS render · {input} FPS input · {inference} ms inference',
+  'studio.renderStatusOutput':
+    '{render} FPS render · {input} FPS input · {inference} ms inference · output {sent} FPS · {capture} + {transfer} ms (read {read} · sender {send}) · idle {ping} · HTTP {http} ms (connect {connect} · wait {wait})',
   'studio.faceDetected': 'Face detected',
   'studio.faceLostHold': 'No face · holding pose',
   'studio.faceLostNeutral': 'No face · waiting / back to neutral',

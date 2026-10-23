@@ -332,6 +332,8 @@ export default {
   'app.obsNativeSelect': 'Choisissez VTubeLeaf dans une source « {source} » d’OBS',
   'app.obsBrowserPaste': 'Collez l’adresse dans une source « Navigateur » d’OBS',
   'app.outputMethod': 'Méthode de sortie',
+  'app.obsOutputSize': 'Taille de sortie OBS',
+  'app.pausePreview': 'Suspendre l’aperçu pendant la sortie',
   'app.browserSource': 'Source navigateur',
   'app.obsBrowserUrl': 'Adresse de la source navigateur OBS',
   'app.copyAddress': 'Copier l’adresse',
@@ -632,7 +634,7 @@ export default {
   'studio.restartBusy':
     'Un avatar ou une scène est en cours de chargement. Réessayez de redémarrer dans un instant.',
   'app.trackingDelegate': 'Processeur de suivi',
-  'app.trackingDelegateGpu': 'GPU · Par défaut',
+  'app.trackingDelegateGpu': 'GPU',
   'app.trackingDelegateHint':
     'N’affecte que la détection du visage. Passez au CPU si le GPU est instable.',
   'tracker.gpuFailed':
@@ -832,6 +834,8 @@ export default {
   'studio.phoneLeft':
     'Le téléphone s’est déconnecté. Scannez le nouveau code pour l’appairer à nouveau.',
   'studio.renderStatus': '{render} FPS rendu · {input} FPS entrée · {inference} ms inférence',
+  'studio.renderStatusOutput':
+    '{render} FPS rendu · {input} FPS entrée · {inference} ms inférence · sortie {sent} FPS · {capture} + {transfer} ms (lecture {read} · envoi {send}) · inactif {ping} · HTTP {http} ms (connexion {connect} · attente {wait})',
   'studio.faceDetected': 'Visage détecté',
   'studio.faceLostHold': 'Aucun visage · pose maintenue',
   'studio.faceLostNeutral': 'Aucun visage · attente / retour neutre',

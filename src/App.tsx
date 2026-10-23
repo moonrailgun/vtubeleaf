@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore, type ReactNode } from 'react';
+import { gpuName } from './gpu';
 import { flushSync } from 'react-dom';
 import { AlertDialog, ContextMenu, Dialog, DropdownMenu, Tabs, ToggleGroup } from 'radix-ui';
 import {
@@ -198,7 +199,22 @@ const initialView = (): StudioView => ({
   tracking: 'stopped',
   selectedItem: '',
   sceneBusy: false,
-  obsOutput: { supported: false, native: undefined, active: false, pending: false, url: '' },
+  obsOutput: {
+    supported: false,
+    native: undefined,
+    active: false,
+    pending: false,
+    url: '',
+    captureMs: 0,
+    transferMs: 0,
+    pingMs: 0,
+    httpPingMs: 0,
+    httpConnectMs: 0,
+    httpWaitMs: 0,
+    sendMs: 0,
+    readMs: 0,
+    sentFps: 0,
+  },
   virtualCamera: {
     supported: false,
     installed: false,
@@ -352,6 +368,8 @@ export function App() {
       onChange={(value) => set(key, value)}
     />
   );
+  // The browser reports the adapter MediaPipe will use, which is what this option selects.
+  const gpu = useMemo(() => gpuName(), []);
   const toggle = (key: keyof Settings, label: string, disabled = false) => (
     <Toggle
       id={key}
@@ -1187,7 +1205,9 @@ export function App() {
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="GPU">{t('app.trackingDelegateGpu')}</SelectItem>
+                    <SelectItem value="GPU">
+                      {gpu ? `${t('app.trackingDelegateGpu')} · ${gpu}` : t('app.trackingDelegateGpu')}
+                    </SelectItem>
                     <SelectItem value="CPU">CPU</SelectItem>
                   </SelectContent>
                 </Select>
@@ -1599,7 +1619,9 @@ export function App() {
                 <div className="section-title">
                   <h2>{t('app.obsTransparentOutput')}</h2>
                   <span>
-                    {obsNative ? `Alpha · 1920×1080 · ${s.renderFps} FPS` : t('app.obsBrowserSpec')}
+                    {obsNative
+                      ? `Alpha · ${s.obsOutputSize === '720p' ? '1280×720' : '1920×1080'} · ${s.renderFps} FPS`
+                      : t('app.obsBrowserSpec')}
                   </span>
                 </div>
                 <div className={`obs-card${view.obsOutput.active ? ' live' : ''}`}>
@@ -1653,6 +1675,33 @@ export function App() {
                       ))}
                     </ToggleGroup.Root>
                   )}
+                  {obsNative && (
+                    <ToggleGroup.Root
+                      type="single"
+                      aria-label={t('app.obsOutputSize')}
+                      className="grid grid-cols-2 gap-1 rounded-lg bg-secondary p-1"
+                      value={s.obsOutputSize}
+                      disabled={view.obsOutput.active || view.obsOutput.pending}
+                      onValueChange={(value) =>
+                        value && set('obsOutputSize', value as Settings['obsOutputSize'])
+                      }
+                    >
+                      {[
+                        ['1080p', '1920×1080'],
+                        ['720p', '1280×720'],
+                      ].map(([value, label]) => (
+                        <ToggleGroup.Item key={value} value={value} asChild>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="data-[state=on]:bg-background data-[state=on]:text-accent-foreground data-[state=on]:shadow-sm"
+                          >
+                            {label}
+                          </Button>
+                        </ToggleGroup.Item>
+                      ))}
+                    </ToggleGroup.Root>
+                  )}
                   {!obsNative && view.obsOutput.url && (
                     <div className="flex items-center gap-2">
                       <Input
@@ -1672,6 +1721,7 @@ export function App() {
                       </Button>
                     </div>
                   )}
+                  {toggle('pausePreview', t('app.pausePreview'))}
                   <Button
                     variant={view.obsOutput.active ? 'outline' : 'default'}
                     className="w-full"

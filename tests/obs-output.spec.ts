@@ -69,12 +69,17 @@ test('transparent output preserves prop alpha, excludes backgrounds, and clears 
     const previewBefore = pixels(stage.canvas);
     const output = pixels(stage.transparentCanvas());
     const raw = stage.transparentPixels(1920, 1080);
-    const native = [
-      [15, 15],
-      [495, 285],
-      [495, 555],
-      [1455, 285],
-    ].map(([x, y]) => Array.from(raw.slice((y * 1920 + x) * 4, (y * 1920 + x) * 4 + 4)));
+    const sample = (buffer: Uint8Array) =>
+      [
+        [15, 15],
+        [495, 285],
+        [495, 555],
+        [1455, 285],
+      ].map(([x, y]) => Array.from(buffer.slice((y * 1920 + x) * 4, (y * 1920 + x) * 4 + 4)));
+    const native = sample(raw);
+    // A second read must still return the same top-down premultiplied frame rather than a stale
+    // or empty buffer.
+    const deferred = sample(stage.transparentPixels(1920, 1080));
     stage.draw({}, 16);
     const previewAfter = pixels(stage.canvas);
     settings.composition.items[0].visible = false;
@@ -83,7 +88,7 @@ test('transparent output preserves prop alpha, excludes backgrounds, and clears 
     const cssBackground = container.style.backgroundColor;
     stage.destroy();
     container.remove();
-    return { output, native, previewBefore, previewAfter, cleared, cssBackground };
+    return { output, native, deferred, previewBefore, previewAfter, cleared, cssBackground };
   });
   expect(result.output).toEqual([
     [0, 0, 0, 0],
@@ -98,6 +103,7 @@ test('transparent output preserves prop alpha, excludes backgrounds, and clears 
     [0, 128, 0, 128],
     [0, 0, 0, 0],
   ]);
+  expect(result.deferred).toEqual(result.native);
   expect(result.previewBefore).toEqual(result.previewAfter);
   expect(result.previewAfter[0]).toEqual([255, 255, 255, 255]);
   expect(result.cleared.every((pixel) => pixel[3] === 0)).toBe(true);
@@ -181,9 +187,11 @@ test('desktop OBS controls publish PNG frames and stop without late submissions'
         if (cmd === 'load_settings') return { autoCheckUpdates: false };
         if (cmd === 'list_models') return { models: [], directory: '/test', errors: [] };
         if (cmd === 'plugin:virtual-camera|status') return { supported: true, installed: false, active: false, message: '' };
+        if (cmd.startsWith('texture_ping')) return args.byteLength;
         if (cmd.startsWith('texture_')) {
           output.texture.push(cmd === 'texture_submit' ? args.byteLength : cmd);
-          return cmd === 'texture_submit' || cmd === 'texture_wanted' ? output.wanted : undefined;
+          if (cmd === 'texture_submit') return output.wanted;
+          return cmd === 'texture_wanted' ? output.wanted : undefined;
         }
         if (cmd === 'obs_start') { output.active = true; return 'http://127.0.0.1:18765/'; }
         if (cmd === 'obs_stop') { output.active = false; return; }

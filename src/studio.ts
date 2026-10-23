@@ -38,6 +38,12 @@ import { AppUpdater } from './updater';
 import { version } from '../package.json';
 import { lang, t } from './i18n';
 
+/** Frame sizes OBS receives; keep in sync with FRAME_SIZES in src-tauri/src/texture.rs. */
+const OBS_OUTPUT_SIZES = {
+  '1080p': [1920, 1080],
+  '720p': [1280, 720],
+} as const;
+
 export function createStudio(
   container: HTMLElement,
   video: HTMLVideoElement,
@@ -914,6 +920,8 @@ export function createStudio(
         stage.destroy();
         stage = candidate;
         candidate = undefined;
+        // The new stage has already painted, so a pending blanking no longer applies.
+        previewPaused = false;
         model = nextModel;
         modelRevision++;
         profileRevision++;
@@ -1651,6 +1659,8 @@ export function createStudio(
     since = before,
     lastMicSample = before;
   let failedRevision = -1;
+  // Whether the preview is currently blanked because output is paused on purpose.
+  let previewPaused = false;
   function tick() {
     if (disposed) return;
     if (outputStale)
@@ -1673,26 +1683,50 @@ export function createStudio(
         ...audio.read(settings.micGain, settings.micNoiseGate, settings.voiceTemplates),
       };
     if (stage && failedRevision !== modelRevision) {
+      let updated = false;
       try {
         stage.trackingLost =
           tracking === 'running' && now - lastDetectedFaceAt >= settings.lostDelay * 1000;
-        stage.draw(
+        stage.update(
           mapper.map(face, stage.parameters, settings, dt / 1000, trackingFace),
           dt,
           {},
           undefined,
           mapper.depthScale,
         );
+        updated = true;
+        // Captured before the preview is drawn: the outputs' blocking readPixels then waits for
+        // their own 1080p render instead of the larger preview that follows it.
+        // Camera frames re-render the stage, so a failed model would also fail and stop the camera.
+        virtualCamera.submit(stage, settings.background, settings.virtualCameraMirror);
+        const [obsWidth, obsHeight] = OBS_OUTPUT_SIZES[settings.obsOutputSize];
+        obsOutput.submit(stage, obsWidth, obsHeight);
       } catch (error) {
         failedRevision = modelRevision;
         if (obsOutput.state.active) void obsOutput.setEnabled(false).catch(report);
         report(error instanceof Error ? t('studio.renderFailed', { error: error.message }) : error);
       }
-    }
-    // Camera frames re-render the stage, so a failed model would also fail and stop the camera.
-    if (stage && failedRevision !== modelRevision) {
-      virtualCamera.submit(stage, settings.background, settings.virtualCameraMirror);
-      obsOutput.submit(stage);
+      if (updated)
+        try {
+          // Skipping the preview redraw saves the largest draw of every frame; the canvas is
+          // emptied once so the stage looks blank instead of frozen on the last frame.
+          if (settings.pausePreview && obsOutput.state.active) {
+            if (!previewPaused) {
+              stage.clearPreview();
+              previewPaused = true;
+            }
+          } else {
+            previewPaused = false;
+            stage.present();
+          }
+        } catch (error) {
+          // The output renderers draw the same stage, so a preview failure means the frames would
+          // fail too. Retrying every tick would also stop the camera, which must stay up.
+          failedRevision = modelRevision;
+          report(
+            error instanceof Error ? t('studio.renderFailed', { error: error.message }) : error,
+          );
+        }
     }
     if (recording.active) recording.capture(stage?.frame ?? {}, now);
     if (native && outputOpen && !frameSending) {
@@ -1715,11 +1749,26 @@ export function createStudio(
     frames++;
     if (now - since > 1000) {
       inputFps = Math.round((inputFrames * 1000) / (now - since));
-      renderStatus = t('studio.renderStatus', {
-        render: Math.round((frames * 1000) / (now - since)),
-        input: inputFps,
-        inference: tracker.inferenceMs.toFixed(0),
-      });
+      renderStatus = obsOutput.state.active
+        ? t('studio.renderStatusOutput', {
+            render: Math.round((frames * 1000) / (now - since)),
+            input: inputFps,
+            inference: tracker.inferenceMs.toFixed(0),
+            sent: obsOutput.state.sentFps,
+            capture: Math.round(obsOutput.state.captureMs),
+            transfer: Math.round(obsOutput.state.transferMs),
+            ping: obsOutput.state.pingMs,
+            http: obsOutput.state.httpPingMs,
+            send: obsOutput.state.sendMs,
+            read: obsOutput.state.readMs,
+            connect: obsOutput.state.httpConnectMs,
+            wait: obsOutput.state.httpWaitMs,
+          })
+        : t('studio.renderStatus', {
+            render: Math.round((frames * 1000) / (now - since)),
+            input: inputFps,
+            inference: tracker.inferenceMs.toFixed(0),
+          });
       faceStatus =
         tracking === 'running'
           ? now - lastFaceAt < settings.lostDelay * 1000 && isFace(lastFace)

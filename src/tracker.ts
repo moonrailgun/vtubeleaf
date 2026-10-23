@@ -384,7 +384,9 @@ export class Tracker {
         PoseLandmarker.createFromOptions(fileset, {
           baseOptions: {
             modelAssetPath: '/runtime/mediapipe/pose_landmarker_lite.task',
-            delegate: 'CPU',
+            // Follows the same choice as the face model; it used to be pinned to CPU, which made
+            // upper-body tracking the slowest part of a tick whenever it ran.
+            delegate: s.trackingDelegate,
           },
           runningMode: 'VIDEO',
           numPoses: 1,
@@ -404,7 +406,7 @@ export class Tracker {
         HandLandmarker.createFromOptions(fileset, {
           baseOptions: {
             modelAssetPath: '/runtime/mediapipe/hand_landmarker.task',
-            delegate: 'CPU',
+            delegate: s.trackingDelegate,
           },
           runningMode: 'VIDEO',
           numHands: 2,

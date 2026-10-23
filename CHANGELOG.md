@@ -11,10 +11,14 @@
 ### Added
 
 - "Tracking engine" adds "Phone companion · Same Wi-Fi": after "Start tracking", a QR code appears; scan it with the VTubeLeaf phone app and the phone tracks your face and sends only motion values to the computer, so the computer no longer runs face tracking itself. The panel shows the connected phone, its engine, received frame rate and network round trip, and "Disconnect phone" ends that phone's session and shows a fresh code. Only one phone can be paired at a time; a second phone is told the computer is busy. A phone that drops off the network can come back within 30 seconds without scanning again, and connecting a different phone or engine asks you to calibrate your neutral pose again.
+- "OBS" adds "Pause preview while outputting": while OBS is connected the main window stops drawing the model, which skips the largest redraw of every frame. The stage goes blank until you turn it off.
+- "OBS" adds "OBS output size": pick 1920×1080 or 1280×720. 720p sends 56% less data to OBS every frame, which shortens the delay between your movement and the picture in OBS.
 - "Appearance" adds "Output aspect ratio": pick 16:9, 9:16, 4:3 or 3:4 and an outline on the stage marks exactly what the virtual camera and OBS receive, so the shape of the window no longer decides how the output is framed. "Default (follow window)" keeps the previous behavior.
 
 ### Improved
 
+- "Tracking engine" now applies your "Compute device" choice to upper-body and hand tracking too; before, those two always ran on the CPU even when the GPU was selected.
+- "OBS transparent output" and the "Output window" run smoother: frames now reach OBS over a local connection instead of the app's internal channel (about 96 ms less waiting per frame), the output no longer waits for the preview to finish drawing, and neither redraws at twice the resolution for a sharpness gain that mostly cost frame rate.
 - The release notes shown after an update now use a wider dialog, so longer entries are easier to read.
 - The main window can no longer be resized below 1280×720, leaving enough room for the stage and settings.
 - "Stop output when tracking stops" and "Mirror output" are now shown directly under "Built-in virtual camera", with the extra options heading and setup note removed.

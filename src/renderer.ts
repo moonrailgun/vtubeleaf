@@ -195,6 +195,9 @@ export class AvatarStage {
     private onContextLost: () => void,
     private passive = false,
     private sharedApp?: PIXI.Application,
+    // The standalone output window is captured and scaled by OBS anyway, so its own 2× buffer
+    // only quadruples fill rate for no visible gain.
+    private allowSupersample = true,
   ) {
     this.app =
       sharedApp ??
@@ -562,6 +565,8 @@ export class AvatarStage {
       document.createElement('div'),
       this.onContextLost,
       this.passive,
+      undefined,
+      this.allowSupersample,
     );
     candidate.onWarning = this.onWarning;
     try {
@@ -677,7 +682,15 @@ export class AvatarStage {
     return target.output;
   }
 
-  private readOutput(target: OutputTarget, texture: PIXI.RenderTexture) {
+  /**
+   * Copies the texture into `target.pixels` (top-down RGBA).
+   *
+   * This blocks until the GPU has finished the copy. That is affordable only because `update` and
+   * `present` are split: callers capture outputs between them, so the wait covers the 1080p output
+   * render alone instead of the much larger preview that follows. Reading after `present` (or
+   * deferring the read by a frame) adds tens of milliseconds of end-to-end latency.
+   */
+  private readOutput(target: OutputTarget, texture: PIXI.RenderTexture): Uint8Array {
     const renderer = this.app.renderer as PIXI.Renderer;
     const { width, height } = texture;
     renderer.renderTexture.bind(texture);
@@ -689,8 +702,10 @@ export class AvatarStage {
   }
 
   transparentCanvas(): HTMLCanvasElement {
+    // Outputs skip the preview's supersampling: the frame is already downsampled to 1280×720, so
+    // the extra pass only costs fill rate on every frame OBS asks for.
     return this.app.renderer.plugins.extract.canvas(
-      this.renderOutput(this.transparent, 1280, 720, !!this.settings?.supersample),
+      this.renderOutput(this.transparent, 1280, 720, false),
     );
   }
 
@@ -698,7 +713,7 @@ export class AvatarStage {
   transparentPixels(width: number, height: number): Uint8Array {
     return this.readOutput(
       this.transparent,
-      this.renderOutput(this.transparent, width, height, !!this.settings?.supersample),
+      this.renderOutput(this.transparent, width, height, false),
     );
   }
 
@@ -832,9 +847,10 @@ export class AvatarStage {
     const native = Math.min(devicePixelRatio, 2);
     // Extra samples keep line art and edges sharp where trilinear mipmapping alone blurs them.
     // Cap them at a 4K drawing buffer so a large window cannot exhaust the GPU.
-    const resolution = this.settings?.supersample
-      ? Math.max(native, Math.min(2, Math.sqrt((3840 * 2160) / (width * height))))
-      : native;
+    const resolution =
+      this.allowSupersample && this.settings?.supersample
+        ? Math.max(native, Math.min(2, Math.sqrt((3840 * 2160) / (width * height))))
+        : native;
     const renderer = this.app.renderer;
     // Layout runs on every settings change, and a resize reallocates the drawing buffer even
     // when nothing changed. Unchanged buffer size and resolution also mean an unchanged screen.
@@ -1012,6 +1028,21 @@ export class AvatarStage {
     sceneFrames?: SceneFrames,
     depthScale = 1,
   ) {
+    this.update(values, dt, parts, sceneFrames, depthScale);
+    this.present();
+  }
+
+  /**
+   * Advances the model and scene without touching the preview canvas, so outputs can be captured
+   * first. Their `readPixels` then only waits for the 1080p output render, not the preview.
+   */
+  update(
+    values: Record<string, number>,
+    dt: number,
+    parts: Record<string, number> = {},
+    sceneFrames?: SceneFrames,
+    depthScale = 1,
+  ) {
     this.depthScale = Number.isFinite(depthScale) ? Math.min(1.5, Math.max(0.5, depthScale)) : 1;
     if (!this.sharedApp) this.model?.scale.set(this.modelScale * this.depthScale);
     for (const [id, expiry] of this.expressionExpiry)
@@ -1035,7 +1066,28 @@ export class AvatarStage {
         sceneFrames,
         this.depthScale,
       );
+  }
+
+  /** Draws the state prepared by `update` to the preview canvas. */
+  present() {
     if (!this.sharedApp) this.app.render();
+  }
+
+  /**
+   * Empties the preview canvas without drawing the model, so the stage looks blank rather than
+   * frozen. Used while OBS is connected and the preview redraw is skipped.
+   */
+  clearPreview() {
+    if (this.sharedApp) return;
+    const { renderer } = this.app;
+    const alpha = renderer.backgroundAlpha;
+    const visible = this.app.stage.visible;
+    // A transparent clear exposes the page background instead of painting a black rectangle.
+    renderer.backgroundAlpha = 0;
+    this.app.stage.visible = false;
+    this.app.render();
+    this.app.stage.visible = visible;
+    renderer.backgroundAlpha = alpha;
   }
 
   clear() {

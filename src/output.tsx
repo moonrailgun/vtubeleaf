@@ -68,7 +68,7 @@ export function Output() {
       },
     );
     try {
-      stage = new AvatarStage(container.current!, report, true);
+      stage = new AvatarStage(container.current!, report, true, undefined, false);
       // Until the studio state arrives, show the window's own background instead of the default.
       stage.display(native ? { ...defaults, background: 'transparent' } : defaults);
     } catch {
